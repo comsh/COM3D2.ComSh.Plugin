@@ -90,6 +90,8 @@ public static class Command {
         cmdTbl.Add("quat",new Cmd(CmdQuat));
         cmdTbl.Add("inside",new Cmd(CmdInside));
         cmdTbl.Add("substr",new Cmd(CmdSubstr));
+        cmdTbl.Add("repeat",new Cmd(CmdRepeat));
+        cmdTbl.Add("ref",new Cmd(CmdRefer));
 
         cmdTbl.Add("__res",new Cmd(Cmd__Resource));
         cmdTbl.Add("__files",new Cmd(Cmd__Files));
@@ -169,7 +171,7 @@ public static class Command {
         if(args.Count==1) foreach(string name in ComShBg.cron.LsJob("timer/")) sh.io.PrintLn(name);
         if(args.Count!=3) return sh.io.Error("使い方: timer 待機時間(ms) 待機後に実行するコマンド");
         if(!float.TryParse(args[1],out float ms)||ms<=0) return sh.io.Error("数値の指定が不正です");
-        var psr=new ComShParser();
+        var psr=new ComShParser(sh.lastParser.lineno);
         int r=psr.Parse(args[2]);
         if(r<0) return sh.io.Error(psr.error);
         if(r==0) return sh.io.Error("コマンドが空です");   
@@ -240,7 +242,9 @@ public static class Command {
         return 0;
 	}
     private static int CmdEnv(ComShInterpreter sh,List<string> args){
-        foreach(string key in sh.env.Keys) sh.io.Print($"{key}={sh.env[key]}\n");
+        foreach(var kv in sh.env) sh.io.Print($"{kv.Key}={kv.Value.Get()}\n");
+        foreach(var kv in Variables.g) sh.io.Print($"{kv.Key}={kv.Value}\n");
+        if(sh.runningScript!=null) foreach(var kv in sh.runningScript.svars) sh.io.Print($"{kv.Key}={kv.Value}\n");
         return 0;
     }
     private static int CmdCut(ComShInterpreter sh,List<string> args){
@@ -339,7 +343,7 @@ public static class Command {
 	}
     private static int CmdEval(ComShInterpreter sh,List<string> args){
         if(args.Count!=2) return sh.io.Error("使い方: eval コマンド文字列");
-        var p=new ComShParser();
+        var p=new ComShParser(sh.lastParser.lineno);
         if(p.Parse(args[1])<0) return sh.io.Error(p.error);
         return sh.InterpretParser(p);
     }
@@ -354,11 +358,11 @@ public static class Command {
         int cmp=CmdCmpSub(args[1],args[2],args[3]);
         if(cmp<0) return sh.io.Error(usage);
         if(cmp==1){
-            var p=new ComShParser();
+            var p=new ComShParser(sh.lastParser.lineno);
             if(p.Parse(args[4])<0) sh.io.Error(p.error);
             return sh.InterpretParser(p);
         }else if(args.Count==6){
-            var p=new ComShParser();
+            var p=new ComShParser(sh.lastParser.lineno);
             if(p.Parse(args[5])<0) sh.io.Error(p.error);
             return sh.InterpretParser(p);
         }
@@ -493,7 +497,7 @@ public static class Command {
             if(j==null) return sh.io.Error("その識別名の定期処理は存在しません");
             if(args[2]=="ondestroy"){
                 var subsh=j.sh;
-                var psr=new ComShParser();
+                var psr=new ComShParser(sh.lastParser.lineno);
                 int r=psr.Parse(args[3]);
                 if(r<0) return sh.io.Error(psr.error);
                 if(r==0) return sh.io.Error("コマンドが空です");
@@ -518,7 +522,7 @@ public static class Command {
     private static int CutLoop(ComShInterpreter sh,string txt,string dlmt,string cmd){
         if(txt=="") return 0;
         if(dlmt=="") return sh.io.Error("区切り文字が空です");
-        var psr=new ComShParser();
+        var psr=new ComShParser(sh.lastParser.lineno);
         int r=psr.Parse(cmd);
         if(r<0) return sh.io.Error(psr.error);
         if(r==0) return sh.io.Error("コマンドが空です");
@@ -846,8 +850,8 @@ public static class Command {
         if(sh.runningScript!=null) sh.runningScript.toSleep(t);
         return -1;  // マルチステートメントの後続を処理しないためエラーにする
     }
-    private static Dictionary<string,string> kvs=new Dictionary<string,string>();
     private static int CmdKvs(ComShInterpreter sh,List<string> args){
+        var kvs=Variables.g;
         if(args.Count==1){ // 一覧
             foreach(var kv in kvs) sh.io.PrintLn(kv.Key+"="+kv.Value);
         }else if(args.Count==2){ // 参照
@@ -1009,8 +1013,15 @@ public static class Command {
     }
     private static int CmdUnset(ComShInterpreter sh,List<string> args){
         if(args.Count==1) sh.io.Error("使い方: unset 変数名1 [変数名2 ...]");
-        for(int i=1; i<args.Count; i++) sh.env.Remove(args[i]);
-        sh.envChanged=true;
+        bool changed=false;
+        for(int i=1; i<args.Count; i++){
+            if(args[i].Length==0) continue;
+            if(args[i][0]=='/') Variables.g.Remove(args[i]);
+            else if(args[i][0]=='.') {
+                if(sh.runningScript!=null) sh.runningScript.svars.Remove(args[i]);
+            }else {sh.env.Remove(args[i]); changed=true; }
+        }
+        if(changed) sh.envChanged=true;
         return 0;
     }
     private static int CmdSed(ComShInterpreter sh,List<string> args){
@@ -1055,6 +1066,45 @@ public static class Command {
         if(!int.TryParse(cnt,out n)||n<=0) return sh.io.Error("数値の指定が不正です");
         if(s+n>val.Length) sh.io.PrintLn(val.Substring(s));
         else sh.io.PrintLn(val.Substring(s,n));
+        return 0;
+    }
+    private static int CmdRepeat(ComShInterpreter sh,List<string> args){
+        if(args.Count!=3) return sh.io.Error("使い方: repeat 回数 コマンド");
+        if(!int.TryParse(args[1],out int n)||n<=0) return sh.io.Error("数値の指定が不正です");
+        var psr=new ComShParser(sh.lastParser.lineno);
+        int r=psr.Parse(args[2]);
+        if(r<0) return sh.io.Error(psr.error);
+        if(r==0) return sh.io.Error("コマンドが空です");
+
+        // 現シェルでの実行だが、出力だけはサブシェル実行と同じ形にする
+        ComShInterpreter.Output orig=sh.io.output;
+        var subout=new ComShInterpreter.SubShOutput();
+        sh.io.output=new ComShInterpreter.Output(subout.Output);
+        int ret=0;
+        for(int i=0; i<n; i++){
+            sh.env["_1"]=i.ToString();
+            psr.Reset();
+            ret=sh.InterpretParser(psr);
+            if(ret<0 || sh.exitq){ ret=sh.io.exitStatus; sh.exitq=false; break; }
+        }
+        sh.io.output=orig;
+        sh.io.Print(subout.GetSubShResult());
+        return ret;
+
+    }
+    private static int CmdRefer(ComShInterpreter sh,List<string> args){
+        const string usage="使い方: ref 変数 参照される変数";
+        if(args.Count!=3 || !ParseUtil.IsLVarName(args[1]) || ParseUtil.IsVar1Name(args[1]))
+            return sh.io.Error(usage);
+        bool g=ParseUtil.IsGVarName(args[2]);
+        bool l=ParseUtil.IsLVarName(args[2]) &&  !ParseUtil.IsVar1Name(args[2]);
+
+        if(g){
+            sh.env.SetRef(args[1],args[2]);
+        }else if(l){
+            if(sh.env.IsRef(args[2])) return sh.io.Error("ref変数をさらにrefする事はできません");
+            sh.env.SetRef(args[1],args[2]);
+        }else return sh.io.Error("その変数はrefの対象にできません");
         return 0;
     }
 
@@ -1135,8 +1185,8 @@ public static class Command {
         return true;
     }
     private static int GetSearchMax(ComShInterpreter sh){
-        if(sh.env.TryGetValue(ComShInterpreter.SEARCH_RESULT_MAX,out string srm)
-         && int.TryParse(srm,out int ret) && ret>0 ) return ret;
+        string srm=sh.env[ComShInterpreter.SEARCH_RESULT_MAX];
+        if(srm!="" && int.TryParse(srm,out int ret) && ret>0 ) return ret;
         return 20;
     }
 

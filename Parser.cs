@@ -22,8 +22,10 @@ public class ComShParser {
     private byte[] qm;
     public int nextHead;
 
-    public int lineno;
+    public int lineno=0;
 
+    public ComShParser(){}
+    public ComShParser(int l){ lineno=l; }
 
     public int Parse(string text){
         error=null;
@@ -39,7 +41,7 @@ public class ComShParser {
         nextHead=head;
     }
     // escapedでない'|'/';'で区切られた複数の行を１行ずつ取り出す
-    public List<string> Next(Dictionary<string,string> vars){
+    public List<string> Next(VarDic lvars, Dictionary<string,string> svars){
         envChanged=false;
         if(nextHead>tail) return null;
 		int i,start=nextHead,curhead;
@@ -51,9 +53,9 @@ public class ComShParser {
             if (i>start){
                 if(prevEoL=='>'){
                     bool appendq=(curhead-2>=0 && cha[curhead-2]=='>');
-                    return Redirect(start,i-1,vars,appendq);
+                    return Redirect(start,i-1,lvars,svars,appendq);
                 }
-                return SingleLine(start, i-1,vars);
+                return SingleLine(start, i-1,lvars,svars);
             }
             start=nextHead;
 		}
@@ -64,9 +66,9 @@ public class ComShParser {
         if(i>start){
             if(prevEoL=='>'){
                 bool appendq=(curhead-2>=0 && cha[curhead-2]=='>');
-                return Redirect(start,i-1,vars,appendq);
+                return Redirect(start,i-1,lvars,svars,appendq);
             }
-            return SingleLine(start,i-1,vars);            
+            return SingleLine(start,i-1,lvars,svars);
         }
         return null;
     }
@@ -131,12 +133,12 @@ public class ComShParser {
             if(cha[j]=='{'){ // ${\(w+)}
                 qm[i]=trash; qm[j]|=trash;        // '{'が来た時点で'$'は変数置換用と確定
                 if(j++==tail) { error="${～}が閉じられていません"; return -1; }
-                if(ParseUtil.IsVar1Char(cha[j])) qm[j++]|=varname; else j=GetWord(cha,qm,j,tail);
+                if(ParseUtil.IsVar1Char(cha[j])) qm[j++]|=varname; else j=MarkWord(cha,qm,j,tail);
                 if(j>tail) { error="${～}が閉じられていません"; return -1; }
                 if(cha[j]!='}' || j==i+2){ error="${～}の書式が不正です"; return -1; }
                 qm[j]|=trash; i=j;
             }else{                            // $(\w+)
-                if(ParseUtil.IsVar1Char(cha[j])) qm[j++]|=varname; else j=GetWord(cha,qm,j,tail);
+                if(ParseUtil.IsVar1Char(cha[j])) qm[j++]|=varname; else j=MarkWord(cha,qm,j,tail);
                 if(j>i+1){ qm[i]|=trash; i=j-1; } // 変数名があれば'$'は変数置換用と確定
             }
         }
@@ -146,7 +148,7 @@ public class ComShParser {
             for(; i<=tail; i++) if(cha[i]!=' ') break;
             if(i>tail){ error="リダイレクトの書式が不正です";return -1; }
             int start=i;
-            i=GetWord(cha,qm,i,tail);
+            i=MarkWord(cha,qm,i,tail);
             if(start==i){ error="リダイレクトの書式が不正です";return -1; }
             for(; i<=tail; i++) if((cha[i]==';') && (qm[i]&escaped)==0) break; else{
                 if((qm[i]&escaped)!=0||cha[i]!=' '){ error="リダイレクトの書式が不正です";return -1; }
@@ -155,63 +157,75 @@ public class ComShParser {
         return 1;
 	}
     private bool IsSeam(char c){ return (c==' '||c==';'||c=='|'||c=='?'); }
-    private int GetWord(char[] cha,byte[] qm,int i0,int tail){
+    private int GetWord(char[] cha,int i0,int tail){
         int i;
-        for(i=i0; i<=tail; i++) if(ParseUtil.IsWordChar(cha[i])) qm[i]|=varname; else break;
-        return i;
+        if(cha[i0]=='.'){   // \.\w+
+            for(i=i0+1; i<=tail; i++) if(!ParseUtil.IsWordChar(cha[i])) break;
+            if(i==i0+1) return i0; else return i;
+        }else if(cha[i0]=='/'){  // /[\w/]*\w+
+            int w=i0;
+            for(i=i0+1; i<=tail; i++) if(ParseUtil.IsWordChar(cha[i])) w=i; else if(cha[i]!='/') break;
+            if(w==i0) return i0; else return w+1;
+        }else{
+            for(i=i0; i<=tail; i++) if(!ParseUtil.IsWordChar(cha[i])) break;
+            return i;
+        }
+    }
+    private int MarkWord(char[] cha,byte[] qm,int i0,int tail){
+        int e=GetWord(cha,i0,tail);
+        for(int i=i0; i<e; i++) qm[i]|=varname;
+        return e;
     }
 
     // escapedでない空白文字で区切られたトークン達を得る
-	private List<string> SingleLine(int from, int to,Dictionary<string,string> vars) {
+	private List<string> SingleLine(int from, int to,VarDic lvars,Dictionary<string,string> svars) {
 		List<string> tokens=new List<string>();
         bool kvq=true;              // key-value形式は、行頭から連続する限りは有効
 		int i, start = from;
 		for (i=from; i<=to; i++) if(cha[i]==' ' && (qm[i]&escaped)==0) {
-            if (i>start) if(!kvq||!(kvq=Keyval(start,i-1,vars))) tokens.Add(Unquote(start,i-1,vars));
+            if (i>start) if(!kvq||!(kvq=Keyval(start,i-1,lvars,svars))) tokens.Add(Unquote(start,i-1,lvars,svars));
 			start=i+1;
 		}
-		if (i>start) if(!kvq||!Keyval(start,i-1,vars)) tokens.Add(Unquote(start,i-1,vars));
+		if (i>start) if(!kvq||!Keyval(start,i-1,lvars,svars)) tokens.Add(Unquote(start,i-1,lvars,svars));
 		return tokens;
 	}
     private List<string> emptyList=new List<string>();
-	private List<string> Redirect(int from, int to,Dictionary<string,string> vars,bool appendq) {
-        if(vars==null) return emptyList;
+	private List<string> Redirect(int from, int to,VarDic lvars,Dictionary<string,string> svars,bool appendq) {
+        if(lvars==null) return emptyList;
 		int i;  // Analyzeで処理してるので細かい考慮は要らない
 		for (i=from; i<=to; i++) if((qm[i]&varname)>0) break;
         int start=i;
 		for (; i<=to; i++) if((qm[i]&varname)==0) break;
         string key=new string(cha,start,i-start);
-        if(appendq && vars.ContainsKey(key)) vars[key]=vars[key]+vars["`"]; else vars[key]=vars["`"];
-        vars["`"]="";
-        envChanged=true;
+        string val=(string)lvars["`"];
+        if(appendq) Variables.Append(key,val,lvars,svars); else Variables.Set(key,val,lvars,svars);
+        lvars["`"]="";
+        if(cha[start]!='/'&&cha[start]!='.') envChanged=true;
         return emptyList;
     }
     // 変数代入文の処理　
-    private bool Keyval(int from,int to,Dictionary<string,string> vars){
-        int i;
-        for(i=from; i<to; i++) if(!(ParseUtil.IsWordChar(cha[i]))) break; // ここはIsWordChar。$#や$`は参照専用
-        if(i==from) return false;
+    private bool Keyval(int from,int to, VarDic lvars,Dictionary<string,string> svars){
+        int i=GetWord(cha,from,to);
+        if(i==from||i>to) return false;
         if(cha[i]=='=' && qm[i]==0){
-            if(vars==null) return true;
+            if(lvars==null) return true;
             string key=new string(cha,from,i-from);
-            vars[key]=(i+1>to)?"":Unquote(i+1,to,vars);
-            envChanged=true;
+            Variables.Set(key,(i+1>to)?"":Unquote(i+1,to,lvars,svars),lvars,svars);
+            if(cha[from]!='/'&&cha[from]!='.') envChanged=true;
             return true;
         }
         if(i<to && cha[i]=='+' && qm[i]==0 && cha[i+1]=='=' && qm[i+1]==0){
-            if(vars==null) return true;
+            if(lvars==null) return true;
             string key=new string(cha,from,i-from);
-            string val=(i+2>to)?"":Unquote(i+2,to,vars);
-            bool existq=vars.ContainsKey(key);
-            if(val=="" &&existq) return true; // 空文字追加ならなにもしない
-            if(!existq) vars[key]=val; else vars[key]=vars[key]+val;
-            envChanged=true;
+            string val=(i+2>to)?"":Unquote(i+2,to,lvars,svars);
+            Variables.Append(key,val,lvars,svars);
+            if(cha[from]!='/'&&cha[from]!='.') envChanged=true;
             return true;
         }
         return false;
     }
     // 変数置換 ＆ エスケープ文字消去 ＆ 引用符消去
-    private string Unquote(int from, int to,Dictionary<string,string> vars){
+    private string Unquote(int from, int to,VarDic lvars, Dictionary<string,string> svars){
         StringBuilder sb=new StringBuilder();
         char[] buf=new char[to-from+1];
         int bi=0, i=from;
@@ -220,9 +234,19 @@ public class ComShParser {
                 int start=i;
                 if (bi>0){ sb.Append(buf,0,bi); bi=0; }
                 for(i++; i<=to; i++) if((qm[i]&varname)==0) break;
-                if(vars==null) continue;
+
+                if(lvars==null) continue;
+                if(cha[start]=='.' && svars==null) continue;
+
                 string key=new string(cha,start,i-start);
-                if(vars.ContainsKey(key)) sb.Append(vars[key]);
+                if(cha[start]=='/'){
+                    if(Variables.g.TryGetValue(key,out string s)) sb.Append(s);
+                }else if(cha[start]=='.'){
+                    if(svars.TryGetValue(key,out string s)) sb.Append(s);
+                }else{
+                    if(lvars.TryGetValue(key,out ReferredVal rv)) sb.Append(rv.Get());
+                }
+
                 continue;
             }else if((qm[i]&trash)==0) buf[bi++]=cha[i];
             i++;
@@ -245,13 +269,47 @@ public static class ParseUtil {
         return true;
     }
     public static bool IsVarName(string s,int from=0,int len=0){
-        if(len==0){
-            if(s.Length==1 && (IsVar1Char(s[from])||IsWordChar(s[from]))) return true;
-            for(int i=from; i<s.Length; i++) if(!IsWordChar(s[i])) return false;
-        }else{
-            if(len==1 && (IsVar1Char(s[from])||IsWordChar(s[from]))) return true;
-            for(int i=from; i<from+len; i++) if(!IsWordChar(s[i])) return false;
-        }
+        int l=(len==0)?s.Length-from:len;
+        if(l==0) return false;
+        if(l==1 && (IsVar1Char(s[from])||IsWordChar(s[from]))) return true;
+        int i;
+        if(s[from]=='/'){  // /[\w/]*\w+
+            for(i=from+1; i<from+l; i++) if(!IsWordChar(s[i])&&s[i]!='/') return false;
+            if(s[from+l-1]=='/') return false;
+        }else if(s[from]=='.'){ // \.\w+
+            for(i=from+1; i<from+l; i++) if(!IsWordChar(s[i])) return false;
+        }else for(i=from; i<from+l; i++) if(!IsWordChar(s[i])) return false;
+        return true;
+    }
+    public static bool IsVar1Name(string s,int from=0,int len=0){
+        int l=(len==0)?s.Length-from:len;
+        if(l!=1) return false;
+        return IsVar1Char(s[from]);
+    }
+    public static bool IsLVarName(string s,int from=0,int len=0){
+        int l=(len==0)?s.Length-from:len;
+        if(l==0) return false;
+        if(l==1 && (IsVar1Char(s[from])||IsWordChar(s[from]))) return true;
+        int i;
+        if(s[from]=='/' || s[from]=='.') return false;
+        for(i=from; i<from+l; i++) if(!IsWordChar(s[i])) return false;
+        return true;
+    }
+    public static bool IsSVarName(string s,int from=0,int len=0){
+        int l=(len==0)?s.Length-from:len;
+        if(l==0) return false;
+        int i;
+        if(s[from]!='.') return false;
+        for(i=from+1; i<from+l; i++) if(!IsWordChar(s[i])) return false;
+        return true;
+    }
+    public static bool IsGVarName(string s,int from=0,int len=0){
+        int l=(len==0)?s.Length-from:len;
+        if(l==0) return false;
+        int i;
+        if(s[from]!='/') return false;
+        for(i=from+1; i<from+l; i++) if(!IsWordChar(s[i])&&s[i]!='/') return false;
+        if(s[from+l-1]=='/') return false;
         return true;
     }
 

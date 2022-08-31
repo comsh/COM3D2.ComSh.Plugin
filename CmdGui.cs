@@ -62,7 +62,7 @@ public static class CmdGui {
         if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
         int[] xywh;
         if(args.Count==7 && (xywh=XYWH(sh.panel,args,1))!=null){
-            var psr=new ComShParser();
+            var psr=new ComShParser(sh.lastParser.lineno);
             int r=psr.Parse(args[6]);
             if(r<0) return sh.io.Error(psr.error);
             if(r==0) return sh.io.Error("コマンドが空です");
@@ -74,7 +74,7 @@ public static class CmdGui {
         if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
         int[] xywh;
         if(args.Count==7 && (xywh=XYWH(sh.panel,args,1))!=null){
-            var psr=new ComShParser();
+            var psr=new ComShParser(sh.lastParser.lineno);
             int r=psr.Parse(args[6]);
             if(r<0) return sh.io.Error(psr.error);
             if(r==0) return sh.io.Error("コマンドが空です");
@@ -86,7 +86,7 @@ public static class CmdGui {
         if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
         int[] xywh;
         if(args.Count==9 && (xywh=XYWH(sh.panel,args,1))!=null){
-            var psr=new ComShParser();
+            var psr=new ComShParser(sh.lastParser.lineno);
             int r=psr.Parse(args[6]);
             if(r<0) return sh.io.Error(psr.error);
             if(r==0) psr=null;
@@ -99,7 +99,7 @@ public static class CmdGui {
         if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
         int[] xywh;
         if(args.Count==8 && (xywh=XYWH(sh.panel,args,1))!=null){
-            var psr=new ComShParser();
+            var psr=new ComShParser(sh.lastParser.lineno);
             int r=psr.Parse(args[5]);
             if(r<0) return sh.io.Error(psr.error);
             if(r==0) psr=null;
@@ -111,7 +111,7 @@ public static class CmdGui {
         if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
         int[] xywh;
         if(args.Count>=8 && (xywh=XYWH(sh.panel,args,1))!=null){
-            var psr=new ComShParser();
+            var psr=new ComShParser(sh.lastParser.lineno);
             int r=psr.Parse(args[5]);
             if(r<0) return sh.io.Error(psr.error);
             if(r==0) psr=null;
@@ -129,12 +129,12 @@ public static class CmdGui {
         if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
         int[] xywh;
         if(args.Count==9 && (xywh=XYWH(sh.panel,args,1))!=null){
-            var psr=new ComShParser();
+            var psr=new ComShParser(sh.lastParser.lineno);
             int r=psr.Parse(args[5]);
             if(r<0) return sh.io.Error(psr.error);
             if(r==0) psr=null;
 
-            var lstpsr=new ComShParser();
+            var lstpsr=new ComShParser(sh.lastParser.lineno);
             r=lstpsr.Parse(args[8]);
             if(r<0) return sh.io.Error(lstpsr.error);
 
@@ -150,7 +150,7 @@ public static class CmdGui {
             &&float.TryParse(args[7],out v)&&float.TryParse(args[8],out min)&&float.TryParse(args[9],out max)
             &&max>min){
             if(v<min) v=min; else if(v>max) v=max;
-            var psr=new ComShParser();
+            var psr=new ComShParser(sh.lastParser.lineno);
             int r=psr.Parse(args[5]);
             if(r<0) return sh.io.Error(psr.error);
             if(r==0) psr=null;
@@ -166,7 +166,7 @@ public static class CmdGui {
             &&float.TryParse(args[7],out v)&&float.TryParse(args[8],out min)&&float.TryParse(args[9],out max)
             &&max>min){
             if(v<min) v=min; else if(v>max) v=max;
-            var psr=new ComShParser();
+            var psr=new ComShParser(sh.lastParser.lineno);
             int r=psr.Parse(args[5]);
             if(r<0) return sh.io.Error(psr.error);
             if(r==0) psr=null;
@@ -177,7 +177,7 @@ public static class CmdGui {
     private static int CmdOnClose(ComShInterpreter sh,List<string> args){
         if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
         if(args.Count==2){
-            var psr=new ComShParser();
+            var psr=new ComShParser(sh.lastParser.lineno);
             int r=psr.Parse(args[1]);
             if(r<=0) return sh.io.Error(psr.error);
             sh.panel.SetOnClose(psr);
@@ -194,7 +194,7 @@ public static class CmdGui {
         if(args.Count<2||args.Count>3) return sh.io.Error("使い方: panel.update コマンド [実行間隔(ms)]");
         float ms=0;
         if(args.Count==3 && (!float.TryParse(args[2],out ms) || ms<0)) return sh.io.Error("実行間隔の値が不正です");
-        var psr=new ComShParser();
+        var psr=new ComShParser(sh.lastParser.lineno);
         int r=psr.Parse(args[1]);
         if(r<0) return sh.io.Error(psr.error);
         if(r==0) return sh.io.Error("コマンドが空です");
@@ -203,8 +203,7 @@ public static class CmdGui {
             if(sh.panel==null) return -1;
             sh.env["_1"]=((t-stime)/TimeSpan.TicksPerMillisecond).ToString();
             psr.Reset();
-            string ee;
-            if(!sh.env.TryGetValue(ComShInterpreter.SCRIPT_ERR_ON,out ee)) ee="";
+            string ee=sh.env[ComShInterpreter.SCRIPT_ERR_ON];
             sh.env[ComShInterpreter.SCRIPT_ERR_ON]="1";
             int ret=sh.InterpretParser(psr);
             sh.env[ComShInterpreter.SCRIPT_ERR_ON]=ee;

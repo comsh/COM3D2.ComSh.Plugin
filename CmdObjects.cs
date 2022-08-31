@@ -412,7 +412,11 @@ public static class CmdObjects {
         if(p[0]=='_'){
             if(op.render==null || op.render.sharedMaterial==null) return 0;
             string err;
-            if(v.IndexOf(',')>=0){
+            if(v=="on"){
+                op.render.sharedMaterial.EnableKeyword(p);
+            }else if(v=="off"){
+                op.render.sharedMaterial.DisableKeyword(p);
+            }else if(v.IndexOf(',')>=0){
                 if((err=SetColorProp(op.render.sharedMaterial,p,v))!="") return sh.io.Error(err);
             }else{
                 if((err=SetFloatProp(op.render.sharedMaterial,p,v))!="") return sh.io.Error(err);
@@ -498,6 +502,18 @@ public static class CmdObjects {
             else if(d==1) op.emit.useWorldSpace=true;
             else return sh.io.Error("値の範囲が不正です");
             break;
+        case "loop":
+            return sh.io.Error("パーティクルが旧形式のため設定できません");
+        case "scale":
+            return sh.io.Error("パーティクルが旧形式のため設定できません");
+        case "duration":
+            return sh.io.Error("パーティクルが旧形式のため設定できません");
+        case "delay":
+            return sh.io.Error("パーティクルが旧形式のため設定できません");
+        case "simspeed":
+            return sh.io.Error("パーティクルが旧形式のため設定できません");
+        case "shape":
+            return sh.io.Error("パーティクルが旧形式のため設定できません");
         default:
             return sh.io.Error("パラメータ名が不正です");
         }
@@ -547,12 +563,17 @@ public static class CmdObjects {
         var emit=par.sys.emission;
         var vot=par.sys.limitVelocityOverLifetime;
         var sot=par.sys.sizeOverLifetime;
+        var shape=par.sys.shape;
         int d; float[] fa; float f;
         if(p.Length==0) return sh.io.Error("書式が不正です");
         if(p[0]=='_'){
             if(par.render==null || par.render.sharedMaterial==null) return 0;
             string err;
-            if(v.IndexOf(',')>=0){
+            if(v=="on"){
+                par.render.sharedMaterial.EnableKeyword(p);
+            }else if(v=="off"){
+                par.render.sharedMaterial.DisableKeyword(p);
+            }else if(v.IndexOf(',')>=0){
                 if((err=SetColorProp(par.render.sharedMaterial,p,v))!="") return sh.io.Error(err);
             }else{
                 if((err=SetFloatProp(par.render.sharedMaterial,p,v))!="") return sh.io.Error(err);
@@ -632,6 +653,61 @@ public static class CmdObjects {
             else if(d==1) main.simulationSpace=ParticleSystemSimulationSpace.World;
             else return sh.io.Error("値の範囲が不正です");
             break;
+        case "loop":
+            d=ParseUtil.ParseInt(v,-1);
+            if(d!=0&&d!=1) return sh.io.Error("値の範囲が不正です");
+            main.loop=d==1;
+            par.sys.Stop();
+            par.sys.Play();
+            break;
+        case "scale":
+            d=ParseUtil.ParseInt(v,-1);
+            if(d!=0&&d!=1) return sh.io.Error("値の範囲が不正です");
+            if(d==1) main.scalingMode=ParticleSystemScalingMode.Hierarchy;
+            else main.scalingMode=ParticleSystemScalingMode.Local;
+            break;
+        case "duration":
+            if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
+            par.sys.Stop();
+            main.duration=f;
+            par.sys.Play();
+            break;
+        case "delay":
+            fa=ParseUtil.MinMax(v);
+            if(fa==null||fa[0]<0||fa[1]<0) return sh.io.Error("数値の形式が不正です");
+            main.startDelay=new ParticleSystem.MinMaxCurve(fa[0],fa[1]);
+            break;
+        case "simspeed":
+            if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
+            main.simulationSpeed=f;
+            break;
+        case "shape":
+            if(!shape.enabled) shape.enabled=true;
+            var sa=v.Split(ParseUtil.comma);
+            if(sa.Length==1){
+                if(sa[0]=="box") shape.shapeType=ParticleSystemShapeType.Box;
+                else if(sa[0]=="boxshell") shape.shapeType=ParticleSystemShapeType.BoxShell;
+                else return sh.io.Error("shapeの指定が不正です");
+            }else if(sa.Length==2){
+                if(sa[0]=="hemisphere") shape.shapeType=ParticleSystemShapeType.Hemisphere;
+                else if(sa[0]=="hemisphereshell") shape.shapeType=ParticleSystemShapeType.HemisphereShell;
+                else if(sa[0]=="sphere") shape.shapeType=ParticleSystemShapeType.Sphere;
+                else if(sa[0]=="sphereshell") shape.shapeType=ParticleSystemShapeType.SphereShell;
+                else return sh.io.Error("shapeの指定が不正です");
+                if(!float.TryParse(sa[1],out f)||f<0) return sh.io.Error("数値の指定が不正です");
+                shape.radius=f;
+                shape.arc=Mathf.PI*2;
+            }else if(sa.Length==3){
+                if(sa[0]=="cone"){
+                    if(!float.TryParse(sa[1],out f)||f<0) return sh.io.Error("数値の指定が不正です");
+                    shape.radius=f;
+                    shape.arc=Mathf.PI*2;
+                    shape.shapeType=ParticleSystemShapeType.Cone;
+                    if(!float.TryParse(sa[2],out f)||f<0||f>90) return sh.io.Error("数値の指定が不正です");
+                    shape.angle=f;
+                }else return sh.io.Error("shapeの指定が不正です");
+            }else return sh.io.Error("shapeの指定が不正です");
+            break;
         default:
             return sh.io.Error("パラメータ名が不正です");
         }
@@ -683,7 +759,11 @@ public static class CmdObjects {
         if(kv[0]=="" || kv[1]=="") return sh.io.Error("書式が不正です");
         if(kv[0][0]=='_'){
             string err;
-            if(kv[1].IndexOf(',')>=0){
+            if(kv[1]=="on"){
+                ma[n].EnableKeyword(kv[0]);
+            }else if(kv[1]=="off"){
+                ma[n].DisableKeyword(kv[0]);
+            }else if(kv[1].IndexOf(',')>=0){
                 if((err=SetColorProp(ma[n],kv[0],kv[1]))!="") return sh.io.Error(err);
             }else{
                 if((err=SetFloatProp(ma[n],kv[0],kv[1]))!="") return sh.io.Error(err);

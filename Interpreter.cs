@@ -15,7 +15,7 @@ public partial class ComShInterpreter {
     public const string SCRIPT_ERR_ON="_enable_script_error";
     public const string SEARCH_RESULT_MAX="_search_result_max";
 
-	public Dictionary<string, string> env;  // 環境変数
+	public VarDic env;        // 環境変数
     public Dictionary<string,ScriptStatus> func; // function
     public ComShParser parser=new ComShParser();
     public bool exitq=false;
@@ -25,8 +25,8 @@ public partial class ComShInterpreter {
     public ComShPanel panel=null;
     public string ofs=" ";
 
-	public ComShInterpreter(Output op=null, Dictionary<string,string> parentEnv=null,Dictionary<string,ScriptStatus> parentFunc=null) {
-        env=(parentEnv!=null)?new Dictionary<string, string>(parentEnv):new Dictionary<string, string>();
+	public ComShInterpreter(Output op=null, VarDic parentEnv=null,Dictionary<string,ScriptStatus> parentFunc=null) {
+        env=(parentEnv!=null)?new VarDic(parentEnv):new VarDic();
         env["`"]=string.Empty;
         func=(parentFunc!=null)?new Dictionary<string,ScriptStatus>(parentFunc):new Dictionary<string,ScriptStatus>();
         io=new IO(this,op);
@@ -45,13 +45,15 @@ public partial class ComShInterpreter {
         return 1;
     }
     public bool envChanged=false;
+    public ComShParser lastParser;
     public int InterpretParser(){ return InterpretParser(this.parser); }
     public int InterpretParser(ComShParser parser,bool canSleep=false){
         List<string> tokens;
-        while((tokens=parser.Next(env))!=null){
+        while((tokens=parser.Next(env,(runningScript!=null)?runningScript.svars:null))!=null){
             if(parser.envChanged) envChanged=true;
             if (tokens.Count==0) continue;
             if(envChanged) { OnEnvChanged(); envChanged=false; } // 変数変更後最初のコマンド実行時
+            lastParser=parser;
             int ret=InterpretTokens(tokens,parser.prevEoL,parser.currentEoL,canSleep);
             if(ret<0) return ret;
             if(exitq) return io.OK(io.exitStatus);
@@ -124,14 +126,10 @@ public partial class ComShInterpreter {
         ComShProperties.Update(env);
     }
     public void OnEnvChanged(){
-        ofs=GetEnv("OFS"," ");
+        ofs=Variables.Value(env,"OFS"," ");
         fmt.Update(env);
         UpdateObjBase(env);
         UpdateLightBase(env);
-    }
-    public string GetEnv(string key,string dflt=""){
-        if(env.TryGetValue(key,out string ret)) return ret;
-        return dflt;
     }
 
     private int Source(string scriptName) { // 今はもう_comshrc専用
@@ -178,6 +176,7 @@ public partial class ComShInterpreter {
         public bool enableSleep=false;
         public int line0=0;
         public List<ComShParser> lines=new List<ComShParser>();
+    	public Dictionary<string, string> svars=new Dictionary<string,string>(); // static変数
         public ScriptStatus(bool funcq=false,bool scriptq=false){
             isFunc=funcq; isSource=scriptq;
             enableSleep=(!funcq && !scriptq);
@@ -208,13 +207,12 @@ public partial class ComShInterpreter {
                     int lno=line0;
                     while (sr.Peek()>-1){
                         string line=sr.ReadLine();
-                        var p=new ComShParser();
-                        p.lineno=++lno;
+                        var p=new ComShParser(++lno);
                         int ret=p.Parse(line);
                         if(ret<0) return sh.io.Error(p.error);
                         if(ret==0) continue;
                         // functionを探す
-                        List<string> tokens=p.Next(null);
+                        List<string> tokens=p.Next(null,null);
                         if(tokens!=null && tokens.Count>0){
                             if(tokens[0]=="func"){
                                 if(target.isFunc) return sh.io.Error("func内でfuncは使用できません");
@@ -260,7 +258,7 @@ public partial class ComShInterpreter {
         }
 
         public int Run(ComShInterpreter sh){
-            sh.env.TryGetValue(SCRIPT_ERR_ON,out string seo);
+            string seo=sh.env[SCRIPT_ERR_ON];
             bool erron=(seo=="1");
             while(hasNext()){
                 int ret=next(sh);
@@ -315,7 +313,7 @@ public partial class ComShInterpreter {
 
     public class IO {
         private ComShInterpreter sh;
-        private Dictionary<string, string> env;
+        private VarDic env;
         public Output output;
         public IO(ComShInterpreter sh,Output output){
             this.sh=sh;
@@ -378,8 +376,8 @@ public partial class ComShInterpreter {
             exitStatus=code;
             env["?"]=code.ToString();
             ScriptStatus script=sh.runningScript;
-            if(script!=null && script.name!=""){
-                int lno=script.lines[script.current].lineno;
+            if(script!=null && script.name!="" && sh.lastParser!=null && sh.lastParser.lineno>0){
+                int lno=sh.lastParser.lineno;
                 output($"{script.name}:{lno}行: {msg}",-1);
             }else output(msg,-1);
             return code;
@@ -390,16 +388,16 @@ public partial class ComShInterpreter {
         private string fmt_01="F4";
         private string fmt_int="F3";
         private string fmt_val="F8";
-        public void Update(Dictionary<string,string> e){
+        public void Update(VarDic e){
             string s;
             if((s=GetFromEnv("_format_0to1",e))!=string.Empty) fmt_01=s;
             if((s=GetFromEnv("_format_intlike",e))!=string.Empty) fmt_int=s;
             if((s=GetFromEnv("_format_normal",e))!=string.Empty) fmt_val=s;
         }
-        private string GetFromEnv(string key,Dictionary<string,string> e){
-            if(!e.ContainsKey(key)) return string.Empty;
-            if(!int.TryParse(e[key],out int n)||n<0||n>50) return string.Empty;
-            return "F"+e[key];
+        private string GetFromEnv(string key,VarDic e){
+            string v=Variables.Value(e,key);
+            if(!int.TryParse(v,out int n)||n<0||n>50) return string.Empty;
+            return "F"+v;
         }
         public string F0to1(float f){ return f.ToString(fmt_01); } // 0.0～1.0の値
         public string FInt(float f){ return f.ToString(fmt_int); } // 倍率や角度など整数1-3桁がメインの値
@@ -425,9 +423,9 @@ public partial class ComShInterpreter {
     private const string OBJ_ROOT_STUDIO="PhotoPrefab";
     public string objBase=OBJ_ROOT_COMSH;
     public string objRef=OBJ_ROOT_STUDIO;
-    private void UpdateObjBase(Dictionary<string,string> env){
-       if(!env.ContainsKey(OBJROOT)) return;
+    private void UpdateObjBase(VarDic env){
         string val=env[OBJROOT];
+        if(val=="") return;
         if(val=="bg") objBase=OBJ_ROOT_BG; else objBase=OBJ_ROOT_COMSH;
         if(val=="studio") objRef=OBJ_ROOT_STUDIO; else objRef="";
     } 
@@ -438,15 +436,15 @@ public partial class ComShInterpreter {
     private const string LIGHT_ROOT_STUDIO="LightObject";
     public string lightBase=LIGHT_ROOT_COMSH;
     public string lightRef=LIGHT_ROOT_STUDIO;
-    private void UpdateLightBase(Dictionary<string,string> env){
-        if(!env.ContainsKey(LIGHTROOT)) return;
+    private void UpdateLightBase(VarDic env){
         string val=env[LIGHTROOT];
+        if(val=="") return;
         if(val=="bg") lightBase=LIGHT_ROOT_BG; else lightBase=LIGHT_ROOT_COMSH;
         if(val=="studio") lightRef=LIGHT_ROOT_STUDIO; else lightRef="";
     }
 
     public const string SAFEMODE="_safe_mode";
-    public bool IsSafeMode(){ return (env.ContainsKey(SAFEMODE)&&env[SAFEMODE]=="1"); }
+    public bool IsSafeMode(){ return (env[SAFEMODE]=="1"); }
 
 }
 

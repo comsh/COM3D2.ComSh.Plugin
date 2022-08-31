@@ -456,26 +456,26 @@ namespace COM3D2.ComSh.Plugin {
 		private static int wakemodifier=3; // 4:alt 2:shift 1:ctrl
 
 		// 今のところ_bashrc読込後にだけ呼ばれる。動的変更しなさそうだしね
-		public static void Update(Dictionary<string, string> dic) {
+		public static void Update(VarDic dic) {
 			string s;
 
 			// windowID。誰かがGUI.BringWindowToFront(windowID)みたいな事をやっていない限り、重複してても実害なし
-			s= Validate(Consult(dic,"_window_id"), @"^\d+$","173205071");
+			s= Validate(dic["_window_id"], @"^\d+$","173205071");
 			windowID=int.Parse(s);      // \d+が保証されてるから例外は出ない
 
 			// 起動キー(特殊キー)
-			s = Validate(Consult(dic,"_wake_modifier").ToLower(),@"^(?:alt|shift|ctrl)(?:\+(?:alt|shift|ctrl))*$","ctrl+shift");
+			s = Validate(dic["_wake_modifier"].ToLower(),@"^(?:alt|shift|ctrl)(?:\+(?:alt|shift|ctrl))*$","ctrl+shift");
 			string[] sa=s.Split('+');
             wakemodifier=0;
             for(int i=0; i<sa.Length; i++)
                 if(sa[i]=="alt") wakemodifier+=4; else if(sa[i]=="shift") wakemodifier+=2; else if(sa[i]=="ctrl") wakemodifier+=1;
 
 			// 起動キー(文字キー)
-            wakekey=Validate(Consult(dic,"_wake_char").ToLower(),"^[a-z0-9]$","4");
+            wakekey=Validate(dic["_wake_char"].ToLower(),"^[a-z0-9]$","4");
             MkGUIWakeupEvent();
 
 			// プロンプト
-			prompt=Consult(dic,"_prompt","$ ");
+			prompt=Variables.Value(dic,"_prompt","$ ");
 		}
         // 起動キー判定(Update()用)
 		public static bool Wakeupq() {
@@ -501,10 +501,6 @@ namespace COM3D2.ComSh.Plugin {
             Event.current.Use();
 			return true;
         }
-        // Dictionaryを引く。なければデフォルト値を返す
-	    private static string Consult(Dictionary<string, string> dic, string key, string dflt = "") {
-		    if (dic.ContainsKey(key)) return dic[key]; else return dflt;		    
-	    }
         // 正規表現によるバリデーション。違反時はデフォルト値を返す
 	    private static string Validate(string str, string regexp, string dflt = "") {
 		    return (Regex.IsMatch(str, regexp) ? str : dflt);

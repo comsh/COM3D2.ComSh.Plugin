@@ -59,6 +59,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AnmCnv.cs" />
+    <Compile Include="Variables.cs" />
     <Compile Include="ObjInfo.cs" />
     <Compile Include="ComShHandle.cs" />
     <Compile Include="MiniSed.cs" />

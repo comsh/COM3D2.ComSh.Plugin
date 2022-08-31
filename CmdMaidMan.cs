@@ -4,6 +4,7 @@ using UnityEngine;
 using static System.StringComparison;
 using static COM3D2.ComSh.Plugin.Command;
 using System;
+using System.Text.RegularExpressions;
 
 namespace COM3D2.ComSh.Plugin {
 
@@ -72,6 +73,7 @@ public static class CmdMaidMan {
         maidParamDic.Add("ap",new CmdParam<Maid>(MaidParamAttachPoint));
         maidParamDic.Add("handle",new CmdParam<Maid>(MaidParamHandle));
         maidParamDic.Add("describe",new CmdParam<Maid>(MaidParamDesc));
+        maidParamDic.Add("node",new CmdParam<Maid>(MaidParamNode));
 
         maidParamDic.Add("l2w",new CmdParam<Maid>(MaidParamL2W));
         maidParamDic.Add("w2l",new CmdParam<Maid>(MaidParamW2L));
@@ -974,6 +976,24 @@ public static class CmdMaidMan {
         }
         return 1;
     }
+    private static int MaidParamNode(ComShInterpreter sh,Maid m,string val){
+        if(val==null){ return 0; }
+
+        string[] sa=val.Split(ParseUtil.comma);
+        for(int i=0; i<sa.Length; i++){
+            var t=sa[i];
+            if(t.Length==0) continue;
+            var p=t.Substring(t.Length-1,1);
+            if(p!="+" && p!="-"){ p="+"; } else t=t.Substring(0,t.Length-1);
+            string[] lr=ParseUtil.LeftAndRight(t,'.');
+            if(lr[1]=="") m.body0.SetVisibleNodeSlot("body",p[0]=='+',lr[0]);
+            else m.body0.SetVisibleNodeSlot(lr[0],p[0]=='+',ParseUtil.CompleteBoneName(lr[1],false,false));
+        }
+        m.body0.FixMaskFlag();
+        m.body0.FixVisibleFlag();
+        m.AllProcProp();
+        return 1;
+    }
     private static int MaidParamFaceset(ComShInterpreter sh,Maid m,string val){
         if(val==null){
             sh.io.PrintLn(m.ActiveFace);
@@ -1068,6 +1088,7 @@ public static class CmdMaidMan {
         }
         return new String(ca,0,ci);
     }
+
     private static int MaidParamIid(ComShInterpreter sh,Maid m,string val){
         sh.io.PrintLn(m.GetInstanceID().ToString());
         return 0;

@@ -67,7 +67,7 @@ public static class CmdBones {
             return 0;
         }else if(args[1]=="unalias"){
             if(args.Count<3) return sh.io.Error("使い方: bone unalias 別名");
-            BoneUtil.boneCache.Remove(args[2]);
+            for(int i=2; i<args.Count; i++) BoneUtil.boneCache.Remove(args[i]);
             BoneUtil.CleanBoneCache();
             return 0;
         }
