@@ -2,7 +2,7 @@
 
 namespace COM3D2.ComSh.Plugin {
 
-public class Variables {
+public static class Variables {
     public static Dictionary<string,string> g=new Dictionary<string,string>();
     public static string Get(string key,VarDic ldic,Dictionary<string,string> sdic){
         if(key[0]=='/'){

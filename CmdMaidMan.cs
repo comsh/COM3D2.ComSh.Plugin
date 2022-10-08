@@ -1020,12 +1020,22 @@ public static class CmdMaidMan {
         return 1;
     }
     private static int MaidParamFace(ComShInterpreter sh,Maid m,string val){
+        string suffix="";
+        TBodySkin face=m.body0.Face;
+        if (face==null || face.morph==null) return sh.io.Error("処理に失敗しました");
+        if(face.morph.bodyskin.PartsVersion>=120) suffix=TMorph.crcFaceTypesStr[(int)face.morph.GetFaceTypeGP01FB()];
         if(val==null){
             var dic=new SortedDictionary<string,float>();  // ソート
-            TBodySkin face=m.body0.Face;
             if(face!=null&&face.morph!=null){
                 foreach (string dk in face.morph.hash.Keys)
                     dic[dk]=face.morph.GetBlendValues((int)face.morph.hash[dk]);
+                if(suffix!=""){
+                    for(int i=1; i<=8; i++){
+                        string oldkey="eyeclose"+(i==1?"":i.ToString());
+                        string fbkey="eyeclose"+i.ToString()+suffix;
+                        if(dic.ContainsKey(fbkey) && !dic.ContainsKey(oldkey)) dic[oldkey]=dic[fbkey];
+                    }
+                }
                 foreach(string dk in dic.Keys) sh.io.PrintLn2($"{dk}:",sh.fmt.F0to1(dic[dk]));
             }
             return 0;
@@ -1033,19 +1043,15 @@ public static class CmdMaidMan {
         if(m.FaceName3=="") m.FaceBlend("オリジナル");
         var kvs=ParseUtil.GetKVFloat(val);
         if(kvs==null) return sh.io.Error(ParseUtil.error);
-        TBodySkin skin=m.body0.Face;
-        if (skin==null || skin.morph==null) return sh.io.Error("処理に失敗しました");
-        var hash=skin.morph.hash;
-        string suffix="";
-        if(skin.morph.bodyskin.PartsVersion>=120) suffix=TMorph.crcFaceTypesStr[(int)skin.morph.GetFaceTypeGP01FB()];
+        var hash=face.morph.hash;
         foreach(string dk in kvs.Keys){
             if(hash.ContainsKey(dk)){
-                if(MaidUtil.origBSKeySet.Contains(dk)) skin.morph.dicBlendSet["オリジナル"][(int)hash[dk]]=kvs[dk];
-                else skin.morph.SetValueBlendSet(m.ActiveFace,dk,kvs[dk]*100);
+                if(MaidUtil.origBSKeySet.Contains(dk)) face.morph.dicBlendSet["オリジナル"][(int)hash[dk]]=kvs[dk];
+                else face.morph.SetValueBlendSet(m.ActiveFace,dk,kvs[dk]*100);
             }else if(dk.StartsWith("eyeclose",Ordinal) && suffix!=""){
                 string dk2=(dk.Length==8)?(dk+"1"+suffix):(dk+suffix);
                 if(hash.ContainsKey(dk2))
-                    skin.morph.SetValueBlendSet(m.ActiveFace,dk2,kvs[dk]*100);
+                    face.morph.SetValueBlendSet(m.ActiveFace,dk2,kvs[dk]*100);
             }
         }
         return 1;

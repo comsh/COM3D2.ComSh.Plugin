@@ -92,6 +92,7 @@ public static class Command {
         cmdTbl.Add("substr",new Cmd(CmdSubstr));
         cmdTbl.Add("repeat",new Cmd(CmdRepeat));
         cmdTbl.Add("ref",new Cmd(CmdRefer));
+        cmdTbl.Add("anmlist",new Cmd(CmdAnmList));
 
         cmdTbl.Add("__res",new Cmd(Cmd__Resource));
         cmdTbl.Add("__files",new Cmd(Cmd__Files));
@@ -130,6 +131,20 @@ public static class Command {
             for(int i=0; i<fa.Length; i++) if(fa[i].EndsWith(".anm",Ordinal)) files.Add(fa[i]);
             fa=GameUty.FileSystemOld.GetList("motion",AFileSystemBase.ListType.AllFile);
             for(int i=0; i<fa.Length; i++) if(fa[i].EndsWith(".anm",Ordinal)) files.Add(fa[i]);
+        }else if(args[1]=="menu"){
+            string[] fa=GameUty.FileSystem.GetList("parts",AFileSystemBase.ListType.AllFile);
+            for(int i=0; i<fa.Length; i++) if(fa[i].EndsWith(".menu",Ordinal)) files.Add(fa[i]);
+            fa=GameUty.FileSystemOld.GetList("parts",AFileSystemBase.ListType.AllFile);
+            for(int i=0; i<fa.Length; i++) if(fa[i].EndsWith(".menu",Ordinal)) files.Add(fa[i]);
+        }else if(args[1]=="ks"){
+            string[] fa=GameUty.FileSystem.GetList("script/motion/m_sex",AFileSystemBase.ListType.AllFile);
+            for(int i=0; i<fa.Length; i++) if(fa[i].EndsWith(".ks",Ordinal)) files.Add(fa[i]);
+            fa=GameUty.FileSystemOld.GetList("script/motion/m_sex",AFileSystemBase.ListType.AllFile);
+            for(int i=0; i<fa.Length; i++) if(fa[i].EndsWith(".ks",Ordinal)) files.Add(fa[i]);
+            fa=GameUty.FileSystem.GetList("script/motion/m_common",AFileSystemBase.ListType.AllFile);
+            for(int i=0; i<fa.Length; i++) if(fa[i].EndsWith(".ks",Ordinal)) files.Add(fa[i]);
+            fa=GameUty.FileSystemOld.GetList("script/motion/m_common",AFileSystemBase.ListType.AllFile);
+            for(int i=0; i<fa.Length; i++) if(fa[i].EndsWith(".ks",Ordinal)) files.Add(fa[i]);
         }else{
             string[] fa=GameUty.FileSystem.GetFileListAtExtension(args[1]);
             files.AddRange(fa);
@@ -142,6 +157,80 @@ public static class Command {
         foreach(string fn in files) if(fn!=prev){ Debug.Log(fn); prev=fn; }
         System.GC.Collect();
         return 0;
+    }
+    private static int CmdAnmList(ComShInterpreter sh,List<string> args){
+        var files_sex=new List<string>();
+        var files_dance=new List<string>();
+        var files_common=new List<string>();
+        string[] fa=GameUty.FileSystem.GetList("motion",AFileSystemBase.ListType.AllFile);
+        string name;
+        for(int i=0; i<fa.Length; i++) if(fa[i].EndsWith(".anm",Ordinal)){
+            name=Last2(fa[i],'\\');
+            if(name==null) continue;
+            if(name.Contains("\\crc_")) continue;
+            if(name.Contains("\\cbl_")) continue;
+            if(fa[i].Contains("\\sex\\")) files_sex.Add(name);
+            else if(fa[i].Contains("\\dance\\")) files_dance.Add(Path.GetFileNameWithoutExtension(name));
+            else if(fa[i].Contains("\\common\\") || fa[i].Contains("\\dance_mc\\") || fa[i].Contains("\\evnet") || fa[i].Contains("\\hanyo"))
+                files_common.Add(Path.GetFileNameWithoutExtension(name));
+        }
+        fa=GameUty.FileSystemOld.GetList("motion",AFileSystemBase.ListType.AllFile);
+        for(int i=0; i<fa.Length; i++) if(fa[i].EndsWith(".anm",Ordinal)){
+            name=Last2(fa[i],'\\');
+            if(name==null) continue;
+            if(name.Contains("\\crc_")) continue;
+            if(name.Contains("\\cbl_")) continue;
+            if(fa[i].Contains("\\sex\\")) files_sex.Add(name);
+            else if(fa[i].Contains("\\dance\\")) files_dance.Add(Path.GetFileNameWithoutExtension(name));
+            else if(fa[i].Contains("\\common\\") || fa[i].Contains("\\dance_mc\\") || fa[i].Contains("\\evnet") || fa[i].Contains("\\hanyo"))
+                files_common.Add(Path.GetFileNameWithoutExtension(name));
+        }
+
+        if(files_sex.Count>0){
+            files_sex.Sort();
+            if(WriteFileList("anmlist_sex",files_sex)<0) return sh.io.Error("ファイルが作成できません");
+        }
+        if(files_dance.Count>0){
+            files_dance.Sort();
+            if(WriteFileList("anmlist_dance",files_dance)<0) return sh.io.Error("ファイルが作成できません");
+        }
+        if(files_common.Count>0){
+            files_common.Sort();
+            if(WriteFileList("anmlist_common",files_common)<0) return sh.io.Error("ファイルが作成できません");
+        }
+        return 0;
+    }
+    private static int WriteFileList(string filename,List<string> files){
+        try{
+            string datadir=ComShInterpreter.scriptFolder+"export\\";
+            Directory.CreateDirectory(datadir);
+            using(StreamWriter sw=new StreamWriter(datadir+filename,false,Encoding.UTF8)){
+                string prev="";
+                foreach(string fn in files) if(fn!=prev){
+                    string[] sa=fn.Split('\\');
+                    prev=fn;
+                    if(sa.Length==1) sw.WriteLine(sa[0]);
+                    else sw.WriteLine($"{sa[0]}\\{sa[1]}");
+                }
+            }
+        }catch{
+            System.GC.Collect();
+            return -1;
+        }
+        System.GC.Collect();
+        return 0;
+    }
+    private static string Last1(string s,char c){
+        int i=s.LastIndexOf(c);
+        if(i<=0||i==s.Length-1) return null;
+        return s.Substring(i+1);
+    }
+    private static string Last2(string s,char c){
+        int i=s.LastIndexOf(c);
+        if(i<=0||i==s.Length-1) return null;
+        i=s.LastIndexOf(c,i-1);
+        if(i<=0||i>=s.Length-1) return null;
+        return s.Substring(i+1);
     }
 
 	private static int CmdExit(ComShInterpreter sh,List<string> args){
@@ -587,11 +676,11 @@ public static class Command {
         const string usage="使い方: expr 値1 演算子(+|-|*|/|%) 値2 [演算子 値3...]";
         if(args.Count<4 || args.Count%2==1) return sh.io.Error(usage);
         float[] v1=ParseUtil.FloatArr(args[1]);
-        if(v1==null) return sh.io.Error(ParseUtil.error);
+        if(v1==null||v1.Length==0) return sh.io.Error("数値の形式が不正です");
         for(int i=2; i<args.Count; i+=2){
             if(args[i].Length!=1) return sh.io.Error("演算子が不正です");
             float[] v2=ParseUtil.FloatArr(args[i+1]);
-            if(v2==null) return sh.io.Error(ParseUtil.error);
+            if(v2==null||v2.Length==0) return sh.io.Error("数値の形式が不正です");
             v1=Calc(args[i][0],v1,v2);
             if(v1==null) return sh.io.Error(exprErr);
         }
@@ -911,14 +1000,14 @@ public static class Command {
             val=sh.io.pipedText; dlmt=" ";
             vars=args[1].Split(ParseUtil.comma);
         }else return sh.io.Error(usage);
-
         int i;
         for(i=0; i<vars.Length; i++)
-            if(!UTIL.ValidName(vars[i])) return sh.io.Error("変数名が不正です");
+            if(!ParseUtil.IsVarName(vars[i]) || ParseUtil.IsVar1Name(vars[i])) return sh.io.Error("変数名が不正です");
         string[] sa=val.Split(dlmt.ToCharArray());
         int n=(sa.Length>vars.Length)?vars.Length:sa.Length;
-        for(i=0; i<n; i++) sh.env[vars[i]]=sa[i];
-        for(; i<vars.Length; i++) sh.env[vars[i]]="";
+        var svar=sh.runningScript!=null?sh.runningScript.svars:null;
+        for(i=0; i<n; i++) Variables.Set(vars[i],sa[i],sh.env,svar);
+        for(; i<vars.Length; i++) Variables.Set(vars[i],"",sh.env,svar);
         return 0;
     }
     private static int CmdSuffix(ComShInterpreter sh,List<string> args){

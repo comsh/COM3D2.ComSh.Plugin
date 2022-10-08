@@ -115,31 +115,40 @@ public static class CmdGui {
             int r=psr.Parse(args[5]);
             if(r<0) return sh.io.Error(psr.error);
             if(r==0) psr=null;
-            if(args.Count==9 && args[8].IndexOf('\n')>=0){ // １行１選択肢のタイプ
-                sh.panel.AddCombo(xywh[0],xywh[1],xywh[2],xywh[3],psr,args[6],args[7],args[8].Split(ParseUtil.crlf));
+            if((args.Count==9 ||args.Count==10) && args[8].IndexOf('\n')>=0){ // １行１選択肢のタイプ
+                string[] items=ParseUtil.Chomp(args[8]).Split(ParseUtil.lf);
+                char c='\0';
+                if(args.Count==10){
+                    if(args[9]==""||args[9].Length!=1) return sh.io.Error("区切り文字の指定が不正です");
+                    c=args[9][0];
+                }
+                sh.panel.AddCombo(xywh[0],xywh[1],xywh[2],xywh[3],psr,args[6],args[7],items,c);
             }else{
                 int i; for(i=8; i<args.Count; i++) if(args[i]==args[7]) break;
                 var items=(i==args.Count)?args.GetRange(7,args.Count-7):args.GetRange(8,args.Count-8);
-                sh.panel.AddCombo(xywh[0],xywh[1],xywh[2],xywh[3],psr,args[6],args[7],items.ToArray());
+                sh.panel.AddCombo(xywh[0],xywh[1],xywh[2],xywh[3],psr,args[6],args[7],items.ToArray(),'\0');
             }
-        }else return sh.io.Error("使い方: combo x y 幅 高さ コマンド 変数名 初期値 選択肢1 ...");
+        }else return sh.io.Error("使い方 : combo x y 幅 高さ コマンド 変数名 初期値 選択肢1 ...\n使い方2: combo x y 幅 高さ コマンド 変数名 初期値 選択肢(1行1項目) [区切り文字]");
         return 0;
     }
     private static int CmdCombo2(ComShInterpreter sh,List<string> args){
         if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
         int[] xywh;
-        if(args.Count==9 && (xywh=XYWH(sh.panel,args,1))!=null){
+        if((args.Count==9 ||args.Count==10)&& (xywh=XYWH(sh.panel,args,1))!=null){
             var psr=new ComShParser(sh.lastParser.lineno);
             int r=psr.Parse(args[5]);
             if(r<0) return sh.io.Error(psr.error);
             if(r==0) psr=null;
-
             var lstpsr=new ComShParser(sh.lastParser.lineno);
             r=lstpsr.Parse(args[8]);
             if(r<0) return sh.io.Error(lstpsr.error);
-
-            sh.panel.AddCombo2(xywh[0],xywh[1],xywh[2],xywh[3],psr,args[6],args[7],lstpsr);
-        }else return sh.io.Error("使い方: combo2 x y 幅 高さ コマンド 変数名 初期値 選択肢生成用コマンド");
+            char c='\0';
+            if(args.Count==10){
+                if(args[9]==""||args[9].Length!=1) return sh.io.Error("区切り文字の指定が不正です");
+                c=args[9][0];
+            }
+            sh.panel.AddCombo2(xywh[0],xywh[1],xywh[2],xywh[3],psr,args[6],args[7],lstpsr,c);
+        }else return sh.io.Error("使い方: combo2 x y 幅 高さ コマンド 変数名 初期値 選択肢生成用コマンド [区切り文字]");
         return 0;
     }
     private static int CmdSlider(ComShInterpreter sh,List<string> args){

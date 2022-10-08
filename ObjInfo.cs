@@ -35,9 +35,15 @@ public class ObjInfo : MonoBehaviour{
         for(int i=0; i<bones.Count; i++) if((c=bones[i].GetComponent<T>())!=null) ret.Add(c);
         return ret;
     }
+    public T[] FindComponentsArray<T>(){ return FindComponents<T>().ToArray(); }
     public List<Transform> GetBones(){ return bones; }
     public TMorph morph; // シェイプキー用
-    public Mesh mesh;
+    public MeshList mesh;
+
+    public void CopyMesh(MeshList m){
+        this.mesh=new MeshList();
+        for(int i=0; i<m.Count; i++) this.mesh.Add(new MeshList.Entry{no=m[i].no,count=m[i].count,mesh=UnityEngine.Object.Instantiate(m[i].mesh)});
+    }
     public void OnDestroy(){
         ObjUtil.objDic.Remove(name);
     }
@@ -58,6 +64,31 @@ public class ObjInfo : MonoBehaviour{
         var oi=tr.GetComponentInParent<ObjInfo>();          // 親方向で最初に見つかるもの
         if(oi!=null && oi.FindBone(tr)==null) return null;  // 子に自分が含まれてなければ無関係
         return oi;
+    }
+    public class MeshList : List<MeshList.Entry> {
+        public struct Entry{ public int no; public int count; public Mesh mesh; }
+        private static int[] triangle_empty=new int[0];
+        private int FindMesh(int meshno){
+            int i;
+            for(i=0; i<this.Count; i++) if(meshno<this[i].no) break;
+            //if(i==0) return -1;
+            return i-1;
+        }
+        public void SetIndices(int[] ia,MeshTopology mt,int no){
+            int n=FindMesh(no);
+            if(n<0) return;
+            this[n].mesh.SetIndices(ia,mt,no-this[n].no);
+        }
+        public int[] GetIndices(int no){
+            int n=FindMesh(no);
+            if(n<0) return triangle_empty;
+            return this[n].mesh.GetIndices(no-this[n].no);
+        }
+        public MeshTopology GetTopology(int no){
+            int n=FindMesh(no);
+            if(n<0) return MeshTopology.Triangles;
+            return this[n].mesh.GetTopology(no-this[n].no);
+        }
     }
 }
 }

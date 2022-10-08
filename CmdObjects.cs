@@ -368,23 +368,23 @@ public static class CmdObjects {
 
     #pragma warning disable CS0618 // 型またはメンバーが旧型式です
     private struct OldParticle {
-        public ParticleAnimator main;
+        public ParticleAnimator anim;
         public ParticleEmitter emit;
         public ParticleRenderer render;
     }   
     private static int ObjParamOldParticle(ComShInterpreter sh,Transform tr,string val){
-        var pa=tr.gameObject.GetComponentsInChildren<ParticleAnimator>();
-        if(pa==null||pa.Length==0) return sh.io.Error("パーティクルが存在しません");
-        OldParticle[] op=new OldParticle[pa.Length];
-        for(int i=0; i<pa.Length; i++){
-            op[i].main=pa[i];
-            op[i].emit=pa[i].gameObject.GetComponent<ParticleEmitter>();
-            op[i].render=pa[i].gameObject.GetComponent<ParticleRenderer>();
+        var emit=tr.gameObject.GetComponentsInChildren<ParticleEmitter>();
+        if(emit==null||emit.Length==0) return sh.io.Error("パーティクルが存在しません");
+        OldParticle[] op=new OldParticle[emit.Length];
+        for(int i=0; i<emit.Length; i++){
+            op[i].anim=emit[i].gameObject.GetComponent<ParticleAnimator>();
+            op[i].emit=emit[i];
+            op[i].render=emit[i].gameObject.GetComponent<ParticleRenderer>();
         }
         if(val==null){
-            if(pa!=null) for(int i=0; i<pa.Length; i++) if(pa[i]!=null){
+            if(emit!=null) for(int i=0; i<emit.Length; i++) if(emit[i]!=null){
                 string shname=op[i].render==null?"":op[i].render.sharedMaterial.shader.name;
-                sh.io.PrintLn(pa[i].name+sh.ofs+shname);
+                sh.io.PrintLn(emit[i].name+sh.ofs+shname);
             }
             return 0;
         }
@@ -395,7 +395,7 @@ public static class CmdObjects {
         int ret;
         if(n!=""){
             bool found=false;
-            for(int i=0; i<op.Length; i++) if(op[i].main.name==n){
+            for(int i=0; i<op.Length; i++) if(op[i].emit.name==n){
                 found=true;
                 if((ret=OldParticleSub(sh,op[i],p,v))<0) return ret;
             }
@@ -431,26 +431,29 @@ public static class CmdObjects {
         case "speedlimit":
             return sh.io.Error("パーティクルが旧形式のため設定できません");
         case "damping":
+            if(op.anim==null) return 0;
             if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
-            op.main.damping=f;
+            op.anim.damping=f;
             break;
         case "grow":
+            if(op.anim==null) return 0;
             if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
-            op.main.sizeGrow=f;
+            op.anim.sizeGrow=f;
             break;
         case "gravity":
             return sh.io.Error("パーティクルが旧形式のため設定できません");
         case "color":
+            if(op.anim==null) return 0;
             float[] rgba=ParseUtil.Rgb(v);
             if(rgba==null) return sh.io.Error(ParseUtil.error);
             Color c=new Color(rgba[0],rgba[1],rgba[2]);
-            Color[] ca=op.main.colorAnimation;
+            Color[] ca=op.anim.colorAnimation;
             if(ca==null){
                 ca=new Color[] {c,c,c,c,c};
                 ca[3].a=ca[0].a/2; ca[4].a=ca[0].a/4;
             }else for(int i=0; i<ca.Length; i++){ ca[i].r=c.r; ca[i].g=c.g; ca[i].b=c.b; }
-            op.main.colorAnimation=ca;
-            op.main.doesAnimateColor=true;
+            op.anim.colorAnimation=ca;
+            op.anim.doesAnimateColor=true;
             break;
         case "max":
             return sh.io.Error("パーティクルが旧形式のため設定できません");
@@ -507,7 +510,10 @@ public static class CmdObjects {
         case "scale":
             return sh.io.Error("パーティクルが旧形式のため設定できません");
         case "duration":
-            return sh.io.Error("パーティクルが旧形式のため設定できません");
+            if(op.emit==null) return 0;
+            if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
+            op.emit.maxEnergy=f;
+            break;
         case "delay":
             return sh.io.Error("パーティクルが旧形式のため設定できません");
         case "simspeed":
@@ -726,78 +732,96 @@ public static class CmdObjects {
         }
         return 0;
     }
-    private static int ObjParamMesh(ComShInterpreter sh,Transform tr,string val){
-        Renderer r=null;
-        Mesh mesh;
-        MeshFilter mf=null;
-        var oi=ObjInfo.GetObjInfo(tr);
-        r=(oi!=null)?oi.FindComponent<Renderer>():tr.GetComponentInChildren<Renderer>();
-        if(r==null) return sh.io.Error("レンダラが見つかりません");
-
-        Transform t=r.transform;
-        bool skinned=(ReferenceEquals(r.GetType(),typeof(SkinnedMeshRenderer)));
-        if(skinned){
-            mesh=((SkinnedMeshRenderer)r).sharedMesh;
-        }else{
-            mf=t.GetComponentInChildren<MeshFilter>();
-            if(mf==null) return sh.io.Error("メッシュが見つかりません");
-            mesh=mf.mesh;
+    public class MeshInfo {
+        public int count=0;
+        public ObjInfo.MeshList mesh=new ObjInfo.MeshList();
+        public List<Material> material=new List<Material>();
+        public MeshInfo(Renderer[] ra){
+            int meshno=0;
+            for(int i=0; i<ra.Length; i++){
+                if(ReferenceEquals(ra[i].GetType(),typeof(SkinnedMeshRenderer))){
+                    var smr=(SkinnedMeshRenderer)ra[i];
+                    mesh.Add(new ObjInfo.MeshList.Entry{no=meshno,count=smr.sharedMesh.subMeshCount,mesh=smr.sharedMesh});
+                    Material[] mate=smr.sharedMaterials;
+                    for(int j=0; j<mate.Length; j++) material.Add(mate[j]);
+                    meshno+=smr.sharedMesh.subMeshCount;
+                }else{
+                    MeshFilter mf=ra[i].transform.GetComponent<MeshFilter>();
+                    if(mf==null) continue;
+                    mesh.Add(new ObjInfo.MeshList.Entry{no=meshno,count=mf.sharedMesh.subMeshCount,mesh=mf.sharedMesh});
+                    Material[] mate=ra[i].sharedMaterials;
+                    for(int j=0; j<mate.Length; j++) material.Add(mate[j]);
+                    meshno+=mf.sharedMesh.subMeshCount;
+                }
+            }
+            count=meshno;
         }
-        Material[] ma=r.sharedMaterials;
+    }
+
+    private static int ObjParamMesh(ComShInterpreter sh,Transform tr,string val){
+        var oi=ObjInfo.GetObjInfo(tr);
+        Renderer[] r=(oi!=null)?oi.FindComponentsArray<Renderer>():tr.GetComponentsInChildren<Renderer>();
+        if(r==null&&r.Length==0) return sh.io.Error("メッシュが見つかりません");
+
+        var mi=new MeshInfo(r);
 
         if(val==null){
-            for(int i=0; i<mesh.subMeshCount; i++){
-                sh.io.Print($"{i}{sh.ofs}count={mesh.GetTriangles(i).Length/3}");
-                if(ma.Length>i) sh.io.Print($"{sh.ofs}mate={ma[i].name}{sh.ofs}shader={ma[i].shader.name}");
+            ObjInfo.MeshList ml=(oi!=null && oi.mesh!=null)?oi.mesh:mi.mesh;
+            for(int i=0; i<mi.count; i++){
+                sh.io.Print($"{i}{sh.ofs}count={ml.GetIndices(i).Length/3}");
+                if(mi.material.Count>i) sh.io.Print($"{sh.ofs}mate={mi.material[i].name}{sh.ofs}shader={mi.material[i].shader.name}");
                 sh.io.PrintLn("");
             }
             return 0;
         }
         string[] sa=ParseUtil.LeftAndRight(val,':');
-        if(!int.TryParse(sa[0],out int n)||n<0||n>=mesh.subMeshCount) return sh.io.Error("サブメッシュ番号が不正です");
+        if(!int.TryParse(sa[0],out int n)||n<0||n>=mi.count) return sh.io.Error("メッシュ番号が不正です");
+
         string[] kv=ParseUtil.LeftAndRight(sa[1],'=');
+        float[] fa;
         if(kv[0]=="" || kv[1]=="") return sh.io.Error("書式が不正です");
         if(kv[0][0]=='_'){
             string err;
             if(kv[1]=="on"){
-                ma[n].EnableKeyword(kv[0]);
+                mi.material[n].EnableKeyword(kv[0]);
             }else if(kv[1]=="off"){
-                ma[n].DisableKeyword(kv[0]);
+                mi.material[n].DisableKeyword(kv[0]);
             }else if(kv[1].IndexOf(',')>=0){
-                if((err=SetColorProp(ma[n],kv[0],kv[1]))!="") return sh.io.Error(err);
+                if((err=SetColorProp(mi.material[n],kv[0],kv[1]))!="") return sh.io.Error(err);
             }else{
-                if((err=SetFloatProp(ma[n],kv[0],kv[1]))!="") return sh.io.Error(err);
+                if((err=SetFloatProp(mi.material[n],kv[0],kv[1]))!="") return sh.io.Error(err);
             }
         } else switch(kv[0]){
         case "color":
-            float[] fa=ParseUtil.Rgba(kv[1]);
+            fa=ParseUtil.Rgba(kv[1]);
             if(fa==null) return sh.io.Error(ParseUtil.error);
-            ma[n].color=new Color(fa[0],fa[1],fa[2],fa[3]);
+            mi.material[n].color=new Color(fa[0],fa[1],fa[2],fa[3]);
             break;
         case "shader":
             Shader shader=Shader.Find(kv[1]);
             if(shader==null) return sh.io.Error("指定されたシェーダは見つかりません");
-            ma[n].shader=shader;
+            mi.material[n].shader=shader;
             break;
         case "blend":
-            if(ChgBlendMode(ma[n],kv[1])<0) return sh.io.Error("blendにはopaque|cutout|fade|transparentのいずれかを指定して下さい");
+            if(ChgBlendMode(mi.material[n],kv[1])<0) return sh.io.Error("blendにはopaque|cutout|fade|transparentのいずれかを指定して下さい");
             break;
         case "topology":
             if(oi==null) oi=ObjInfo.AddObjInfo(tr.gameObject,"");
-            if(oi.mesh==null){
-                oi.mesh=mesh;
-                mesh=CloneMesh(mesh);
-                if(skinned) ((SkinnedMeshRenderer)r).sharedMesh=mesh;
-                else mf.sharedMesh=mesh;
-            }
-            if(kv[1]=="1"){
+            if(oi.mesh==null) oi.CopyMesh(mi.mesh);
+            if(kv[1]=="0"){
+                mi.mesh.SetIndices(new int[0],MeshTopology.Points,n);
+            }else if(kv[1]=="1"){
+                if(mi.mesh.GetTopology(n)==MeshTopology.Points) break;
                 int[] ia=oi.mesh.GetIndices(n);
                 var hs=new HashSet<int>();
                 for(int i=0; i<ia.Length; i++) hs.Add(ia[i]);
                 int[] ia2=new int[hs.Count];
                 hs.CopyTo(ia2);
-                mesh.SetIndices(ia2,MeshTopology.Points,n);
+                mi.mesh.SetIndices(ia2,MeshTopology.Points,n);
             }else if(kv[1]=="2"){
+                if(mi.mesh.GetTopology(n)==MeshTopology.Lines) break;
+                MeshTopology mt=oi.mesh.GetTopology(n);
+                if(mt!=MeshTopology.Triangles) return sh.io.Error($"未対応の形式です(topology={mt.ToString()})");
                 int[] ia=oi.mesh.GetIndices(n);
                 var hs=new HashSet<uint>();
                 for(int i=0; i<ia.Length; i+=3){
@@ -808,11 +832,10 @@ public static class CmdObjects {
                 int[] ia2=new int[hs.Count*2];
                 int cnt=0;
                 foreach(var u in hs){ ia2[cnt++]=(int)(u>>16); ia2[cnt++]=(int)(u&0xffff); }
-                mesh.SetIndices(ia2,MeshTopology.Lines,n);
+                mi.mesh.SetIndices(ia2,MeshTopology.Lines,n);
             }else if(kv[1]=="3"){
-                // mesh.SetIndices(oi.mesh.GetIndices(n),MeshTopology.Triangles,n);
-                if(skinned) ((SkinnedMeshRenderer)r).sharedMesh=oi.mesh;
-                else mf.sharedMesh=oi.mesh;
+                if(mi.mesh.GetTopology(n)==MeshTopology.Triangles) break;
+                mi.mesh.SetIndices(oi.mesh.GetIndices(n),oi.mesh.GetTopology(n),n);
             }
             break;
         }
@@ -864,21 +887,6 @@ public static class CmdObjects {
             return -1;
         }
         return 0;
-    }
-    private static Mesh CloneMesh(Mesh m){
-        Mesh ret=new Mesh();
-        ret.vertices=m.vertices;
-        ret.normals=m.normals;
-        ret.tangents=m.tangents;
-        ret.triangles=m.triangles;
-        ret.uv=m.uv; ret.uv2=m.uv2; ret.uv3=m.uv3; ret.uv4=m.uv4;
-        ret.bindposes=m.bindposes;
-        ret.boneWeights=m.boneWeights;
-        ret.subMeshCount=m.subMeshCount;
-        ret.bounds=m.bounds;
-        ret.colors=m.colors;
-        ret.colors32=m.colors32;
-        return ret;
     }
     private static string SetColorProp(Material m, string key, string val){
         if(!m.HasProperty(key)) return "指定されたプロパティは現在のシェーダでは無効です";
@@ -1001,6 +1009,7 @@ public static class ObjUtil {
                     m.InitGameObject(o);
                     morph=m;
                 }
+                tbs.listDEL.Clear();
             }
         }
         if(o==null) return null;

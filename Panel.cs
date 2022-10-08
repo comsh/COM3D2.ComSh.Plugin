@@ -163,20 +163,21 @@ public class ComShPanel {
             };
         }
     }
-    public void AddCombo(int x,int y,int w,int h,ComShParser p,string name,string v0,string[] items){
+    public void AddCombo(int x,int y,int w,int h,ComShParser p,string name,string v0,string[] items,char dlmt){
         int ty=y+TITLEHEIGHT;
         var r=new Rect(x,ty,w,h);
         var rb=new Rect(x+w,ty,h,h);
         const int maxh=200;
+        var ci=new ComboItems(items,dlmt);
         shell.env[name]=v0;
         if(p==null){
             ComboWin.OnSelect onselect=(string val)=>{ shell.env[name]=val; };
             draw+=()=>{
-                string txt=shell.env[name];
+                string txt=ci.GetLabel(shell.env[name]);
                 string t=GUI.TextField(r,txt,style.text);
-                if(t!=txt) shell.env[name]=t;
+                if(t!=txt) shell.env[name]=ci.GetValue(t);
                 if(GUI.Button(rb,"▼",style.comboBtn)){
-                    ComboWin.SetItems(this,items,onselect,x,ty+h,w,maxh);
+                    ComboWin.SetItems(this,ci,onselect,x,ty+h,w,maxh);
                     ComboWin.Position(windowrect);
                     ComboWin.Toggle();
                 }
@@ -189,37 +190,38 @@ public class ComShPanel {
                 shell.exitq=false;
             };
             draw+=()=>{
-                string txt=shell.env[name];
+                string txt=ci.GetLabel(shell.env[name]);
                 string t=GUI.TextField(r,txt,style.text);
                 if(t!=txt){
-                    shell.env[name]=t;
+                    shell.env[name]=ci.GetValue(t);
                     p.Reset();
                     shell.InterpretParser(p);
                     shell.exitq=false;
                 }
                 if(GUI.Button(rb,"▼",style.comboBtn)){
-                    ComboWin.SetItems(this,items,onselect,x,ty+h,w,maxh);
+                    ComboWin.SetItems(this,ci,onselect,x,ty+h,w,maxh);
                     ComboWin.Position(windowrect);
                     ComboWin.Toggle();
                 }
             };
         }
     }
-    public void AddCombo2(int x,int y,int w,int h,ComShParser p,string name,string v0,ComShParser lst){
+    public void AddCombo2(int x,int y,int w,int h,ComShParser p,string name,string v0,ComShParser lst,char dlmt){
         int ty=y+TITLEHEIGHT;
         var r=new Rect(x,ty,w,h);
         var rb=new Rect(x+w,ty,h,h);
         const int maxh=200;
         shell.env[name]=v0;
+        var ci=MakeItems(shell,lst,dlmt);
         if(p==null){
             ComboWin.OnSelect onselect=(string val)=>{ shell.env[name]=val; };
             draw+=()=>{
-                string txt=shell.env[name];
+                string txt=ci.GetLabel(shell.env[name]);
                 string t=GUI.TextField(r,txt,style.text);
-                if(t!=txt) shell.env[name]=t;
+                if(t!=txt) shell.env[name]=ci.GetValue(t);
                 if(GUI.Button(rb,"▼",style.comboBtn)){
-                    string[] items=MakeItems(shell,lst);
-                    ComboWin.SetItems(this,items,onselect,x,ty+h,w,maxh);
+                    ci=MakeItems(shell,lst,dlmt);
+                    ComboWin.SetItems(this,ci,onselect,x,ty+h,w,maxh);
                     ComboWin.Position(windowrect);
                     ComboWin.Toggle();
                 }
@@ -232,30 +234,31 @@ public class ComShPanel {
                 shell.exitq=false;
             };
             draw+=()=>{
-                string txt=shell.env[name];
+                string txt=ci.GetLabel(shell.env[name]);
                 string t=GUI.TextField(r,txt,style.text);
                 if(t!=txt){
-                    shell.env[name]=t;
+                    shell.env[name]=ci.GetValue(t);
                     p.Reset();
                     shell.InterpretParser(p);
                     shell.exitq=false;
                 }
                 if(GUI.Button(rb,"▼",style.comboBtn)){
-                    string[] items=MakeItems(shell,lst);
-                    ComboWin.SetItems(this,items,onselect,x,ty+h,w,maxh);
+                    ci=MakeItems(shell,lst,dlmt);
+                    ComboWin.SetItems(this,ci,onselect,x,ty+h,w,maxh);
                     ComboWin.Position(windowrect);
                     ComboWin.Toggle();
                 }
             };
         }
     }
-    private static string[] MakeItems(ComShInterpreter sh,ComShParser plst){
+    private static string[] items0={""};
+    private static ComboItems MakeItems(ComShInterpreter sh,ComShParser plst,char dlmt){
         var sbo=new ComShInterpreter.SubShOutput();
         ComShInterpreter child = new ComShInterpreter(new ComShInterpreter.Output(sbo.Output),sh.env,sh.func);
         plst.Reset();
         int ret=child.InterpretParser(plst);
-        if(ret<0) return new string[]{""};
-        return sbo.GetSubShResult().Split(ParseUtil.crlf);
+        if(ret<0) return new ComboItems(items0,items0);
+        return new ComboItems(ParseUtil.Chomp(sbo.GetSubShResult()).Split(ParseUtil.lf),dlmt);
     }
     public void AddSlider(int x,int y,int w,int h,ComShParser p,string name,float v0,float min,float max){
         var r=new Rect(x,y+TITLEHEIGHT,w,h);
@@ -320,6 +323,29 @@ public class ComShPanel {
         draw+=()=>{ GUI.Label(r,l,style.label); };
     }
 }
+public class ComboItems {
+    public string[] labels;
+    public string[] values;
+    public ComboItems(string[] la,string[] va){ labels=la; values=va; }
+    public ComboItems(string[] items,char dlmt){
+        if(dlmt==0) labels=values=items; else {
+            labels=new string[items.Length];
+            values=new string[items.Length];
+            for(int i=0; i<items.Length; i++){
+                string[] sa=ParseUtil.LeftAndRight(items[i],dlmt);
+                labels[i]=sa[0]; values[i]=sa[1];
+            }
+        }
+    }
+    public string GetLabel(string value){
+        for(int i=0; i<values.Length; i++) if(values[i]==value) return labels[i];
+        return "";
+    }
+    public string GetValue(string label){
+        for(int i=0; i<labels.Length; i++) if(labels[i]==label) return values[i];
+        return "";
+    }
+}
 // コンボボックスのポップアップ
 public static class ComboWin {
     public static int wid=ComShProperties.windowID+2;
@@ -329,20 +355,21 @@ public static class ComboWin {
     public static Rect contentRect=new Rect(0,0,100,100);
     public static bool visible=false;
 
-    private static string[] items;
+    private static ComboItems items;
     public delegate void OnSelect(string val);
     public static OnSelect callback;
     public static ComShPanel panel;
 
-    public static void SetItems(ComShPanel p,string[] it,OnSelect cb,int x,int y,int w,int h){
+    public static void SetItems(ComShPanel p,ComboItems it,OnSelect cb,int x,int y,int w,int h){
         panel=p;
-        items=it; callback=cb; selIdx=-1; 
+        items=it;
+        callback=cb; selIdx=-1; 
         int wb=(int)panel.style.button.CalcSize(new GUIContent("▼")).x;
         offset.x=x; offset.y=y;
         viewRect.width=windowrect.width=w+wb;
         contentRect.width=w;
         int lh=(int)panel.style.comboItem.CalcSize(new GUIContent("漢")).y;
-        contentRect.height=items.Length*lh;
+        contentRect.height=items.labels.Length*lh;
         viewRect.height=windowrect.height=Math.Min(contentRect.height,h);
     }
     public static void Position(Rect r){
@@ -357,9 +384,9 @@ public static class ComboWin {
     private static Vector2 scr=new Vector2(0,0);
     public static void Select(int wid){
         scr=GUI.BeginScrollView(viewRect,scr,contentRect);
-        int si=GUI.SelectionGrid(contentRect,selIdx,items,1,panel.style.comboItem);
+        int si=GUI.SelectionGrid(contentRect,selIdx,items.labels,1,panel.style.comboItem);
         if(si!=selIdx){
-            if(callback!=null) callback.Invoke(items[si]);
+            if(callback!=null) callback.Invoke(items.values[si]);
             visible=false;
         }
         GUI.EndScrollView();

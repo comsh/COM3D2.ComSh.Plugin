@@ -717,5 +717,12 @@ public static class ParseUtil {
         if(minus) ret*=-1;
         return ok?ret:dflt;
     }
+    public static string Chomp(string s,bool crq=false){
+        int l=s.Length;
+        if(l>0 && s[l-1]=='\n') l--;
+        if(l>0 && crq && s[l-1]=='\r') l--;
+        if(l!=s.Length) return s.Substring(0,l);
+        return s;
+    }
 }
 }
