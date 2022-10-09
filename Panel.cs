@@ -124,13 +124,13 @@ public class ComShPanel {
         shell.env[name]=v0?"1":"0";
         if(p==null){
             draw+=()=>{
-                bool chk=shell.env[name]=="1";
+                bool chk=ParseUtil.ParseFloat(shell.env[name],0)==1f;
                 bool c=GUI.Toggle(r,chk,l,style.toggle);
                 if(c!=chk) shell.env[name]=c?"1":"0";
             };
         }else{
             draw+=()=>{
-                bool chk=shell.env[name]=="1";
+                bool chk=ParseUtil.ParseFloat(shell.env[name],0)==1f;
                 bool c=GUI.Toggle(r,chk,l,style.toggle);
                 if(c!=chk){
                     shell.env[name]=c?"1":"0";
