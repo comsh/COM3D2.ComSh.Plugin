@@ -8,7 +8,8 @@ public class ComShHandle:GizmoRender {
     public Maid maid;
     public int type=0; // 0:global / 1:local / 2:object
 
-    // ターゲットの子ではないが、常時追従するオブジェクトにハンドルを付ける
+    // オブジェクトにハンドルを付ける
+    // 子にはせず、常時追従させる
 
     public override void OnRenderObject(){
         if(target==null || (maid!=null && maid.body0.m_trBones==null)){  // ちゃんと後片付けできる子になーれ
@@ -24,11 +25,18 @@ public class ComShHandle:GizmoRender {
  
         base.OnRenderObject();
 
-        target.position=transform.position;
-        target.localScale=transform.localScale;
-        if(type==0) target.rotation=transform.rotation * target.rotation;
-        else if(type==1) target.rotation=transform.rotation * Quaternion.Inverse(target.parent.rotation) * target.rotation;
-        else target.rotation=transform.rotation;
+        if(target.position!=transform.position) target.position=transform.position;
+        if(target.localScale!=transform.localScale) target.localScale=transform.localScale;
+
+        if(type==0){
+            var q=transform.rotation * target.rotation;
+            if(target.rotation!=q) target.rotation=q;
+        }else if(type==1){
+            var q=transform.rotation * Quaternion.Inverse(target.parent.rotation) * target.rotation;
+            if(target.rotation!=q) target.rotation=q;
+        }else{
+            if(target.rotation!=transform.rotation) target.rotation=transform.rotation;
+        }
     }
     public void SetHandleType(int t,int p,int r,int s){
         type=t; eAxis=(p!=0); eRotate=(r!=0); eScal=(s!=0);
