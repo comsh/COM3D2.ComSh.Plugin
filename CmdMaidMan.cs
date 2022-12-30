@@ -906,13 +906,14 @@ public static class CmdMaidMan {
         }
         if(am==null) return sh.io.Error("そのメイドさんは発声できません(読込中など)");
         string[] sa=val.Split(ParseUtil.comma);
-        if(sa.Length>2) return sh.io.Error("パラメータの書式が不正です");
-        int n=0;
-        if(sa.Length==2&&!int.TryParse(sa[1],out n)) return sh.io.Error("数値の指定が不正です");
+        if(sa.Length>3) return sh.io.Error("パラメータの書式が不正です");
+        int n=0,ls=1;
+        if(sa.Length>=2&&!int.TryParse(sa[1],out n)) return sh.io.Error("数値の指定が不正です");
+        if(sa.Length==3&&!int.TryParse(sa[2],out ls)) return sh.io.Error("数値の指定が不正です");
         m.LipSyncEnabled(false);
         am.Stop();
         if(sa[0]!=string.Empty){
-            m.LipSyncEnabled(true);
+            m.LipSyncEnabled(ls==1);
             am.LoadPlay(UTIL.Suffix(sa[0],".ogg"),0,false,n==1);
         }
         return 1;
@@ -1071,10 +1072,19 @@ public static class CmdMaidMan {
         m.StopKuchipakuPattern();
         ComShBg.cron.KillJob("maidsing/"+m.status.guid);
         if(val==string.Empty) return 1;
-        TextAsset ta=Resources.Load("SceneDance/"+val) as TextAsset;
-        if(ta==null && ta.text=="") return sh.io.Error("口パクデータが取得できません");
+
+        string ptn;
+        byte[] ba=UTIL.AReadAll(val);
+        if(ba!=null){
+            ptn=System.Text.Encoding.ASCII.GetString(ba);
+        }else{
+            TextAsset ta=Resources.Load("SceneDance/"+val) as TextAsset;
+            if(ta==null || ta.text=="") return sh.io.Error("口パクデータが取得できません");
+            ptn=ta.text;
+        }
+
         m.LipSyncEnabled(true);
-        m.StartKuchipakuPattern(0,weat(ta.text),true);
+        m.StartKuchipakuPattern(0,weat(ptn),true);
         // BGMを時間基準にして口パク更新
         ComShBg.cron.AddJob("maidsing/"+m.GetInstanceID().ToString(),0,0,(t)=>{
             if(m.body0.m_Bones==null) return -1; // メイドさんが削除された

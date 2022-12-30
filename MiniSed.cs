@@ -7,7 +7,7 @@ namespace COM3D2.ComSh.Plugin {
 
 public class MiniSed {
     // address
-    public int start=int.MinValue;
+    public int start=0;
     public int end=int.MaxValue;
     public string rex="";
     public bool reverse=false;
@@ -56,6 +56,11 @@ public class MiniSed {
                 act(l, rrex.Match(l.TextLn).Success!=reverse);
         }else{
             var iter=EoL(txt).GetEnumerator();
+            if(start==-1){
+                start=0;
+                while(iter.MoveNext()){start++;}
+                iter=EoL(txt).GetEnumerator();
+            }
             int lno=0;
             while(iter.MoveNext()){
                 lno++;
@@ -80,15 +85,15 @@ public class MiniSed {
                     int head=i+1;
                     i=GetAdrNum(cmd,head,out end);
                     if(i<0 || i==head){ error="アドレスが不正です"; return;}
+                    if(start<0 || (end>=0 && start>end)){ int t=start; start=end; end=t; }
                 }else end=start;
+                if(end<0) end=int.MaxValue;
             }
         }
         if(i>=cmd.Length){ error="アドレスが不正です"; return;}
         if(cmd[i]=='!'){reverse=true; i++;}
         if(i>=cmd.Length){ error="アドレスが不正です"; return;}
 
-        if(start==int.MinValue){ start=0; end=int.MaxValue; }
-        else if(start>end){ int t=start; start=end; end=t; }
 
         // command
         if(cmd[i]=='d'){this.cmd='d'; i++;}
@@ -113,7 +118,7 @@ public class MiniSed {
         return;
     }
     private static int GetAdrNum(string cmd,int pos,out int value){
-        if(cmd[pos]=='$'){ value=int.MaxValue; return pos+1; }
+        if(cmd[pos]=='$'){ value=-1; return pos+1; }
         return GetNum(cmd,pos,out value);
     }
     private static int GetNum(string cmd,int pos,out int value){
@@ -131,15 +136,21 @@ public class MiniSed {
     private static int GetPattern(string cmd,int pos,out string pattern){
         pattern="";
         if(cmd[pos]!='/') return -1;
-        int i;
+        int i,bi=0;
+        char[] buf=new char[cmd.Length];
         bool escape=false;
         for(i=pos+1; i<cmd.Length; i++){
-            if(escape){ escape=false; continue; }
-            if(cmd[i]=='\\') escape=true;
-            else if(cmd[i]=='/') break;
+            if(escape){
+                escape=false;
+                if(cmd[i]=='/') buf[bi-1]='/'; else buf[bi++]=cmd[i];
+            }else{
+                if(cmd[i]=='\\') escape=true;
+                if(cmd[i]=='/') break;
+                buf[bi++]=cmd[i];
+            }
         }
         if(i==cmd.Length) return -1;
-        if(i>pos+1) pattern=cmd.Substring(pos+1,i-(pos+1));
+        if(i>pos+1) pattern=new string(buf,0,bi);
         return i;
     }
     private static int GetPtnOpt(string cmd,int pos,out int cnt, out RegexOptions opt){

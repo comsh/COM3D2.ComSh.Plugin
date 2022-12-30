@@ -92,7 +92,11 @@ public static class Command {
         cmdTbl.Add("substr",new Cmd(CmdSubstr));
         cmdTbl.Add("repeat",new Cmd(CmdRepeat));
         cmdTbl.Add("ref",new Cmd(CmdRefer));
-        cmdTbl.Add("anmlist",new Cmd(CmdAnmList));
+        cmdTbl.Add("anmlist", new Cmd(CmdAnmList));
+        cmdTbl.Add("fps",new Cmd(CmdFps));
+        cmdTbl.Add("vsync", new Cmd(CmdVSync));
+        cmdTbl.Add("timescale", new Cmd(CmdTimeScale));
+        cmdTbl.Add("count", new Cmd(CmdCount));
 
         cmdTbl.Add("__res",new Cmd(Cmd__Resource));
         cmdTbl.Add("__files",new Cmd(Cmd__Files));
@@ -319,7 +323,36 @@ public static class Command {
         PanelStyleCache.SetBgColor(bcol);
         return 0;
     }
-	private static int CmdEcho(ComShInterpreter sh,List<string> args) {
+    private static int CmdFps(ComShInterpreter sh, List<string> args){
+        if (args.Count == 1){
+            sh.io.Print($"{Application.targetFrameRate}\n");
+            return 0;
+        }
+        if (args.Count > 2) return sh.io.Error("使い方: fps フレームレート(数値)");
+        if (!int.TryParse(args[1], out int n)) return sh.io.Error("数値の指定が不正です");
+        Application.targetFrameRate=n;
+        return 0;
+    }
+    private static int CmdVSync(ComShInterpreter sh, List<string> args){
+        if (args.Count==1) {
+            sh.io.Print($"{QualitySettings.vSyncCount}\n");
+            return 0;
+        }
+        if (args.Count>2) return sh.io.Error("使い方: vsync 数値(0=off 1=on 2=half)");
+        if (!int.TryParse(args[1], out int n) || n<0) return sh.io.Error("数値の指定が不正です");
+        QualitySettings.vSyncCount=n;
+        return 0;
+    }
+    private static int CmdTimeScale(ComShInterpreter sh, List<string> args){
+        if(args.Count==1){
+            sh.io.PrintLn(sh.fmt.FInt(Time.timeScale));
+        }else{
+            if(!float.TryParse(args[1],out float mul) || mul<0) return sh.io.Error("数値の指定が不正です");
+            Time.timeScale=mul;
+        }
+        return 0;
+    }
+    private static int CmdEcho(ComShInterpreter sh,List<string> args) {
         if(args.Count==1) return 0;
         for(int i=1; i<args.Count-1; i++) sh.io.Print(args[i]+sh.ofs);
         sh.io.PrintLn(args[args.Count-1]);
@@ -420,9 +453,27 @@ public static class Command {
         if(args.Count==3){ txt=args[1]; nth=args[2];}
         else if(args.Count==2 && sh.io.pipedText!=null){ txt=sh.io.pipedText; nth=args[1];}
         else return sh.io.Error(usage);
-        if(!int.TryParse(nth,out int n)||n<=0) return sh.io.Error("行番号を数値(1～)で指定してください");
+        if(!float.TryParse(nth,out float f)||f<=0) return sh.io.Error("行番号を数値(1～)で指定してください");
+        int n=(int)f;
         string ret=ParseUtil.Nth(txt,'\n',n);
         if(ret!=null) sh.io.PrintLn(ret.TrimEnd(ParseUtil.cr));
+        return 0;
+    }
+    private static int CmdCount(ComShInterpreter sh,List<string> args){
+        const string usage="使い方: count {l|c} 対象文字列";
+        string txt;
+        if(args.Count==3) txt=args[2];
+        else if(args.Count==2 && sh.io.pipedText!=null) txt=sh.io.pipedText;
+        else return sh.io.Error(usage);
+        if(args[1].Length!=1) return sh.io.Error(usage);
+        int cnt=0;
+        if(args[1][0]=='l'||args[1][0]=='L'){
+            for(int i=0; i<txt.Length; i++) if(txt[i]=='\n') cnt++;
+            if(txt[txt.Length-1]!='\n') cnt++;
+        } else if(args[1][0]=='c'||args[1][0]=='C'){
+            cnt=txt.Length;
+        } else return sh.io.Error(usage);
+        sh.io.PrintLn(cnt.ToString());
         return 0;
     }
 	private static int CmdSource(ComShInterpreter sh,List<string> args) {
@@ -469,14 +520,14 @@ public static class Command {
         return 0;
     }
     private static int CmdCmpSub(string val1,string op,string val2){
-        float f1=ParseUtil.ParseFloat(val1);
+        double f1=ParseUtil.ParseDouble(val1);
         if(op=="between"){
-            float[] fa=ParseUtil.MinMax(val2);
-            if(float.IsNaN(f1) || fa==null) return -2;
+            double[] fa=ParseUtil.MinMaxW(val2);
+            if(double.IsNaN(f1) || fa==null) return -2;
             return (fa[0]<=f1 && f1<=fa[1])?1:0;
         }
-        float f2=ParseUtil.ParseFloat(val2);
-        bool numq=!float.IsNaN(f1)&&!float.IsNaN(f2);
+        double f2=ParseUtil.ParseDouble(val2);
+        bool numq=!double.IsNaN(f1)&&!double.IsNaN(f2);
         bool cmp;
         if(op=="eq") cmp=numq?(f1==f2):(val1.CompareTo(val2)==0);
         else if(op=="ne") cmp=numq?(f1!=f2):(val1.CompareTo(val2)!=0);
@@ -675,11 +726,11 @@ public static class Command {
     private static int CmdExpr(ComShInterpreter sh,List<string> args){
         const string usage="使い方: expr 値1 演算子(+|-|*|/|%) 値2 [演算子 値3...]";
         if(args.Count<4 || args.Count%2==1) return sh.io.Error(usage);
-        float[] v1=ParseUtil.FloatArr(args[1]);
+        double[] v1=ParseUtil.DoubleArr(args[1]);
         if(v1==null||v1.Length==0) return sh.io.Error("数値の形式が不正です");
         for(int i=2; i<args.Count; i+=2){
             if(args[i].Length!=1) return sh.io.Error("演算子が不正です");
-            float[] v2=ParseUtil.FloatArr(args[i+1]);
+            double[] v2=ParseUtil.DoubleArr(args[i+1]);
             if(v2==null||v2.Length==0) return sh.io.Error("数値の形式が不正です");
             v1=Calc(args[i][0],v1,v2);
             if(v1==null) return sh.io.Error(exprErr);
@@ -688,15 +739,15 @@ public static class Command {
         for(int i=1; i<v1.Length; i++){ sh.io.Print(","); sh.io.Print(sh.fmt.FVal(v1[i])); }
         return 0;
     }
-    private static float[] Calc(char op,float[] v1,float[] v2){
+    private static double[] Calc(char op,double[] v1,double[] v2){
         int max,min;
         if(v1.Length>v2.Length){ max=v1.Length; min=v2.Length; }
         else { max=v2.Length; min=v1.Length; }
         if(max==min){
             if(max==4){
                 if(op!='*'){ exprErr="演算子が不正です"; return null; }
-                var q=new Quaternion(v1[0],v1[1],v1[2],v1[3])*new Quaternion(v2[0],v2[1],v2[2],v2[3]);
-                return new float[]{q.x,q.y,q.z,q.w};
+                var q=new Quaternion((float)v1[0],(float)v1[1],(float)v1[2],(float)v1[3])*new Quaternion((float)v2[0],(float)v2[1],(float)v2[2],(float)v2[3]);
+                return new double[]{q.x,q.y,q.z,q.w};
             }else{
                 if(ExprTwoVal(max,op,v1,v2)<0) return null;
                 return v1;
@@ -704,12 +755,12 @@ public static class Command {
         }else{
             if(min==1){
                 if(v1.Length==1){
-                    var fa=new float[max];
+                    var fa=new double[max];
                     for(int i=0;i<max; i++) fa[i]=v1[0];
                     if(ExprTwoVal(max,op,fa,v2)<0) return null;
                     return fa;
                 }else{
-                    var fa=new float[max];
+                    var fa=new double[max];
                     for(int i=0;i<max; i++) fa[i]=v2[0];
                     if(ExprTwoVal(max,op,v1,fa)<0) return null;
                     return v1;
@@ -717,31 +768,32 @@ public static class Command {
             }else if(min==3 && max==4){
                 if(v1.Length==3){
                     if(op!='*'){ exprErr="演算子が不正です"; return null; }
-                    var v=new Quaternion(v2[0],v2[1],v2[2],v2[3])*new Vector3(v1[0],v1[1],v1[2]);
-                    return new float[]{ v.x, v.y, v.z};
+                    var v=new Quaternion((float)v2[0],(float)v2[1],(float)v2[2],(float)v2[3])*new Vector3((float)v1[0],(float)v1[1],(float)v1[2]);
+                    return new double[]{ v.x, v.y, v.z};
                 }else{
                     if(op!='*'){ exprErr="演算子が不正です"; return null; }
-                    var v=new Quaternion(v1[0],v1[1],v1[2],v1[3])*new Vector3(v2[0],v2[1],v2[2]);
-                    return new float[]{ v.x, v.y, v.z};
+                    var v=new Quaternion((float)v1[0],(float)v1[1],(float)v1[2],(float)v1[3])*new Vector3((float)v2[0],(float)v2[1],(float)v2[2]);
+                    return new double[]{ v.x, v.y, v.z};
                 }
             }else exprErr="その組み合わせの計算はできません";
         }
         return null;
     }
-    private static int ExprTwoVal(int n1,char op,float[] v1,float[] v2){
+    private const double almost0=0.000001;
+    private static int ExprTwoVal(int n1,char op,double[] v1,double[] v2){
         switch(op){
         case '+': for(int i=0; i<n1; i++) v1[i]+=v2[i]; break;
         case '-': for(int i=0; i<n1; i++) v1[i]-=v2[i]; break;
         case '*': for(int i=0; i<n1; i++) v1[i]*=v2[i]; break;
         case '/':
             for(int i=0; i<n1; i++){
-                if(Mathf.Approximately(v2[i],0f)){ exprErr="0で除算しようとしています"; return -1; }
+                if(v2[i]>-almost0 && v2[i]<almost0){ exprErr="0で除算しようとしています"; return -1; }
                 v1[i]/=v2[i];
             }
             break;
         case '%':
             for(int i=0; i<n1; i++){
-                if(Mathf.Approximately(v2[i],0f)){ exprErr="0で除算しようとしています"; return -1; }
+                if(v2[i]>-almost0 && v2[i]<almost0){ exprErr="0で除算しようとしています"; return -1; }
                 v1[i]%=v2[i];
             }
             break;
@@ -1121,6 +1173,7 @@ public static class Command {
         }else if(args.Count==3){
             val=args[1]; cmd=args[2];
         }else return sh.io.Error(usage);
+        if(cmd=="") return sh.io.Error(usage);
         var sed=new MiniSed(cmd);
         if(sed.error!=null) return sh.io.Error(sed.error);
         sh.io.Print(sed.Process(val));
@@ -1146,20 +1199,24 @@ public static class Command {
             val=args[1]; st=args[2]; cnt=args[3];
         }else return sh.io.Error(usage);
         int s,n;
-        if(!int.TryParse(st,out s)) return sh.io.Error("数値の指定が不正です");
+        float f;
+        if(!float.TryParse(st,out f)) return sh.io.Error("数値の指定が不正です");
+        s=(int)f;
         if(s<0) s=val.Length+s;
         if(s<0) return sh.io.Error("数値の指定が不正です");
         if(s>=val.Length) return 0;
         if(cnt=="") { sh.io.PrintLn(val.Substring(s)); return 0;}
 
-        if(!int.TryParse(cnt,out n)||n<=0) return sh.io.Error("数値の指定が不正です");
+        if(!float.TryParse(cnt,out f)||f<=0) return sh.io.Error("数値の指定が不正です");
+        n=(int)f;
         if(s+n>val.Length) sh.io.PrintLn(val.Substring(s));
         else sh.io.PrintLn(val.Substring(s,n));
         return 0;
     }
     private static int CmdRepeat(ComShInterpreter sh,List<string> args){
         if(args.Count!=3) return sh.io.Error("使い方: repeat 回数 コマンド");
-        if(!int.TryParse(args[1],out int n)||n<=0) return sh.io.Error("数値の指定が不正です");
+        if(!float.TryParse(args[1],out float f)||f<=0) return sh.io.Error("数値の指定が不正です");
+        int n=(int)f;
         var psr=new ComShParser(sh.lastParser.lineno);
         int r=psr.Parse(args[2]);
         if(r<0) return sh.io.Error(psr.error);

@@ -57,6 +57,7 @@ public partial class ComShInterpreter {
             int ret=InterpretTokens(tokens,parser.prevEoL,parser.currentEoL,canSleep);
             if(ret<0) return ret;
             if(exitq) return io.OK(io.exitStatus);
+            if (envChanged) { OnEnvChanged(); envChanged = false; } // 変数変更後最初のコマンド実行時
         }
         return io.OK();
     }
@@ -205,9 +206,18 @@ public partial class ComShInterpreter {
                     lines.Clear();
                     ScriptStatus target=this;
                     int lno=line0;
+                    StringBuilder sb=null;
                     while (sr.Peek()>-1){
                         string line=sr.ReadLine();
-                        var p=new ComShParser(++lno);
+                        lno++;
+                        if(line.Length==0) continue;
+                        if(line[line.Length-1]=='\\'){
+                            if(sb!=null) sb.Append(line,0,line.Length-1);
+                            else sb=new StringBuilder(line,0,line.Length-1,line.Length*4);
+                            continue;
+                        }
+                        if(sb!=null){ sb.Append(line); line=sb.ToString(); sb=null; }
+                        var p=new ComShParser(lno);
                         int ret=p.Parse(line);
                         if(ret<0) return sh.io.Error(p.error);
                         if(ret==0) continue;
@@ -400,8 +410,11 @@ public partial class ComShInterpreter {
             return "F"+v;
         }
         public string F0to1(float f){ return f.ToString(fmt_01); } // 0.0～1.0の値
+        public string F0to1(double f){ return f.ToString(fmt_01); } // 0.0～1.0の値
         public string FInt(float f){ return f.ToString(fmt_int); } // 倍率や角度など整数1-3桁がメインの値
+        public string FInt(double f){ return f.ToString(fmt_int); } // 倍率や角度など整数1-3桁がメインの値
         public string FVal(float f){ return f.ToString(fmt_val); }  // 上記以外
+        public string FVal(double f){ return f.ToString(fmt_val); }  // 上記以外
         public string FPos(Vector3 v){ return FVal(v.x)+","+FVal(v.y)+","+FVal(v.z);}
         public string FPos(float x,float y,float z){ return FVal(x)+","+FVal(y)+","+FVal(z);}
         public string FEuler(Vector3 v){ return FInt(v.x)+","+FInt(v.y)+","+FInt(v.z);}
@@ -425,9 +438,21 @@ public partial class ComShInterpreter {
     public string objRef=OBJ_ROOT_STUDIO;
     private void UpdateObjBase(VarDic env){
         string val=env[OBJROOT];
-        if(val=="") return;
-        if(val=="bg") objBase=OBJ_ROOT_BG; else objBase=OBJ_ROOT_COMSH;
-        if(val=="studio") objRef=OBJ_ROOT_STUDIO; else objRef="";
+        switch(val){
+        case "bg":
+            objBase=OBJ_ROOT_BG;
+            objRef=OBJ_ROOT_STUDIO;
+            break;
+        case "comsh":
+            objBase=OBJ_ROOT_COMSH;
+            objRef="";
+            break;
+        case "":
+        case "studio":
+            objBase=OBJ_ROOT_COMSH;
+            objRef=OBJ_ROOT_STUDIO;
+            break;
+        }
     } 
 
     private const string LIGHTROOT="_light_root";

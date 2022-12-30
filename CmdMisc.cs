@@ -109,6 +109,9 @@ public static class CmdMisc {
         }else if(cmd=="dance"){
             if(val==null){ PrintSound(sh,0); return 0;}
             if(val.Length==0) sm.StopBGM(0f); else sm.PlayDanceBGM(UTIL.Suffix(val,".ogg"), 0f,false);
+        }else if(cmd=="dancep"){
+            if(val==null){ PrintSound(sh,0); return 0;}
+            if(val.Length==0) sm.StopBGM(0f); else sm.PlayDanceBGMParallel(UTIL.Suffix(val,".ogg"), 0f,false);
         }else if(cmd=="env"){
             if(val==null){ PrintSound(sh,1); return 0;}
             if(val.Length==0) sm.StopEnv(0f); else sm.PlayEnv(UTIL.Suffix(val,".ogg"),0f);

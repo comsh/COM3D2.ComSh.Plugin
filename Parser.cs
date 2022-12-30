@@ -427,6 +427,16 @@ public static class ParseUtil {
         }else if(n==1){ ret[1]=ret[0]; return ret; }
         else { error="数値の形式が不正です"; return null; }
     }
+    public static double[] MinMaxW(string str){
+        if(str==null||str.Length==0) return null;
+        double[] ret=new double[2];
+        int n=XyzSubW(str,ret);
+        if(n==2){
+            if(ret[0]>ret[1]){ double t=ret[0]; ret[0]=ret[1]; ret[1]=t; }
+            return ret;
+        }else if(n==1){ ret[1]=ret[0]; return ret; }
+        else { error="数値の形式が不正です"; return null; }
+    }
 
     public static float[] Xy(string str){
         if(str==null||str.Length==0) return null;
@@ -466,6 +476,16 @@ public static class ParseUtil {
         }
         return sa.Length;
     }
+    public static int XyzSubW(string str,double[] ret){
+        if(str==null||str.Length==0) return 0;
+        string[] sa=str.Split(comma);
+        if(sa.Length>ret.Length) return -1;
+        for(int i=0; i<sa.Length; i++){
+            ret[i]=ParseDouble(sa[i]);
+            if(double.IsNaN(ret[i])) return -1;
+        }
+        return sa.Length;
+    }
     public static float[] Xyz2(string str){
         float[] ret=new float[3];
         int n=XyzSub(str,ret);
@@ -495,6 +515,29 @@ public static class ParseUtil {
         string[] sa=str.Split(comma);
         if(sa.Length!=4){ error="四元数の形式が不正です"; return null; }
         return Quat(sa);
+    }
+    public static double[] QuatW(string[] str){
+        string s0=str[0];
+        if(s0.Length==0) return null;
+        int i;
+        for(i=0; i<s0.Length; i++) if(s0[i]!='~') break;
+        bool invq=(i%2)==1;
+        if(i>0) s0=s0.Substring(i);
+        double[] ret=new double[4]{
+            ParseDouble(s0),ParseDouble(str[1]),ParseDouble(str[2]),ParseDouble(str[3])
+        };
+        if(double.IsNaN(ret[0])||double.IsNaN(ret[1])||double.IsNaN(ret[2])||double.IsNaN(ret[3])){
+            error="四元数の形式が不正です";
+            return null; 
+        }
+        if(invq){ ret[0]*=-1; ret[1]*=-1; ret[2]*=-1; }
+        return ret;
+    }
+    public static double[] QuatW(string str){
+        if(str==null||str.Length==0) return null;
+        string[] sa=str.Split(comma);
+        if(sa.Length!=4){ error="四元数の形式が不正です"; return null; }
+        return QuatW(sa);
     }
     public static float[] QuatR(string str,out byte relative){
         relative=0;
@@ -528,6 +571,17 @@ public static class ParseUtil {
         for(int i=0; i<sa.Length; i++){
             ret[i]=ParseFloat(sa[i]);
             if(float.IsNaN(ret[i])){ error="数値の形式が不正です"; return null;}
+        }
+        return ret;
+    }
+    public static double[] DoubleArr(string str){
+        if(str==null||str.Length==0) return new double[0];
+        string[] sa=str.Split(comma);
+        if(sa.Length==4 && str[0]=='~') return QuatW(sa);
+        double[] ret= new double[sa.Length];
+        for(int i=0; i<sa.Length; i++){
+            ret[i]=ParseDouble(sa[i]);
+            if(double.IsNaN(ret[i])){ error="数値の形式が不正です"; return null;}
         }
         return ret;
     }
@@ -586,8 +640,10 @@ public static class ParseUtil {
         string[] ra=range.Split(comma);
         if(ra.Length==0){ error="範囲の指定が不正です"; return null; }
         List<string> sa=new List<string>();
+        int n=0;
         for(int i=0; i<ra.Length; i++){
-            if(!int.TryParse(ra[i],out int n)||n==0){ error="数値の指定が不正です"; return null;}
+            if(!float.TryParse(ra[i],out float f)||f==0){ error="数値の指定が不正です"; return null;}
+            n=(int)f;
             if(n<-tl||n>tl){ sa.Add(""); continue; }
             if(n<0) n=tl+n; else n--;
             sa.Add(ta[n]);
@@ -702,6 +758,18 @@ public static class ParseUtil {
         bool minus=(i%2)==1;
         if(i>0) s=s.Substring(i);
         bool ok=float.TryParse(s,out float ret);
+        if(minus) ret*=-1;
+        return ok?ret:dflt;
+    }
+    public static double ParseDouble(string str,double dflt=double.NaN){
+        if(string.IsNullOrEmpty(str)) return dflt;
+        // $xが負でも -$x と書けるように
+        int i;
+        string s=str;
+        for(i=0; i<s.Length; i++) if(s[i]!='-') break;
+        bool minus=(i%2)==1;
+        if(i>0) s=s.Substring(i);
+        bool ok=double.TryParse(s,out double ret);
         if(minus) ret*=-1;
         return ok?ret:dflt;
     }

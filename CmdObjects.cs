@@ -41,6 +41,7 @@ public static class CmdObjects {
         objParamDic.Add("lquat",new CmdParam<Transform>(_CmdParamLQuat));
         objParamDic.Add("wquat",new CmdParam<Transform>(_CmdParamWQuat));
         objParamDic.Add("material",new CmdParam<Transform>(ObjParamMaterial));
+        objParamDic.Add("matecp",new CmdParam<Transform>(ObjParamMaterialCopy));
         objParamDic.Add("shape",new CmdParam<Transform>(ObjParamShape));
         objParamDic.Add("prefix",new CmdParam<Transform>(ObjParamPrefix));
         objParamDic.Add("prot",new CmdParam<Transform>(_CmdParamPRot));
@@ -279,6 +280,32 @@ public static class CmdObjects {
         int ret=ObjUtil.ChgMaterial(tr,idx,sa[1]);
         if(ret==-1) return sh.io.Error("マテリアルの読み込みに失敗しました");
         if(ret==-2) return sh.io.Error("objコマンドで追加されたオブジェクト以外は変更できません");
+        return 1;
+    }
+    private static int ObjParamMaterialCopy(ComShInterpreter sh,Transform tr,string val){
+        if(val==null) return sh.io.Error("コピー元を指定してください");
+
+        string[] sa=ParseUtil.LeftAndRight(val,':');
+        if(sa[1]=="") return sh.io.Error("パラメータの書式が不正です");
+        if(!int.TryParse(sa[0],out int idx)||idx<0) return sh.io.Error("マテリアル番号の指定が不正です");
+
+        string[] sa2=ParseUtil.LeftAndRight(sa[1],'#');
+        if(sa2[1]=="") return sh.io.Error("パラメータの書式が不正です");
+        if(!int.TryParse(sa2[1],out int fromidx)||fromidx<0) return sh.io.Error("マテリアル番号の指定が不正です");
+
+        Transform fromtr=ObjUtil.FindObj(sh,sa2[0].Split(':'));
+        if(fromtr==null) return sh.io.Error("オブジェクトが見つかりません");
+
+        Renderer fromrdr=fromtr.GetComponentInChildren<Renderer>();
+        if (fromrdr==null || fromrdr.sharedMaterial==null || fromidx>=fromrdr.sharedMaterials.Length)
+            return sh.io.Error("マテリアルが見つかりません");
+ 
+        Renderer r=tr.GetComponentInChildren<Renderer>();
+        if (r==null || r.sharedMaterial==null || idx>=r.sharedMaterials.Length)
+            return sh.io.Error("マテリアルが見つかりません");
+
+        r.sharedMaterials[idx].shader=fromrdr.sharedMaterials[fromidx].shader;
+        r.sharedMaterials[idx].CopyPropertiesFromMaterial(fromrdr.sharedMaterials[fromidx]);
         return 1;
     }
     private static int ObjParamShape(ComShInterpreter sh,Transform tr,string val){
@@ -908,6 +935,12 @@ public static class ObjUtil {
     public static Transform FindObj(ComShInterpreter sh,string name){
         if(name=="") return null;
         Transform tr=null;
+
+        if(name[0]=='/'){
+            tr=GameMain.Instance.gameObject.transform;
+            if(name.Length>1) return tr.Find(name.Substring(1));
+            return tr;
+        }
 
         string[] sa=ParseUtil.LeftAndRight(name,'/');
         if(objDic.ContainsKey(sa[0])){  // objコマンドで作ったオブジェクト

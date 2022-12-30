@@ -8,9 +8,11 @@ public static class CmdGui {
         Command.AddCmd("panel",new Cmd(CmdPanel));
         Command.AddCmd("grid",new Cmd(CmdGrid));
         Command.AddCmd("label",new Cmd(CmdLabel));
+        Command.AddCmd("label2",new Cmd(CmdLabel2));
         Command.AddCmd("button",new Cmd(CmdButton));
         Command.AddCmd("rbutton",new Cmd(CmdRbutton));
         Command.AddCmd("toggle",new Cmd(CmdToggle));
+        Command.AddCmd("radio",new Cmd(CmdRadio));
         Command.AddCmd("text",new Cmd(CmdText));
         Command.AddCmd("slider",new Cmd(CmdSlider));
         Command.AddCmd("vslider",new Cmd(CmdVSlider));
@@ -58,6 +60,14 @@ public static class CmdGui {
         }else return sh.io.Error("使い方: label x y 幅 高さ ラベル");
         return 0;
     }
+    private static int CmdLabel2(ComShInterpreter sh,List<string> args){
+        if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
+        int[] xywh;
+        if(args.Count==6 && (xywh=XYWH(sh.panel,args,1))!=null){
+            sh.panel.AddLabel2(xywh[0],xywh[1],xywh[2],xywh[3],args[5]);
+        }else return sh.io.Error("使い方: label2 x y 幅 高さ 変数名");
+        return 0;
+    }
     private static int CmdButton(ComShInterpreter sh,List<string> args){
         if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
         int[] xywh;
@@ -73,13 +83,17 @@ public static class CmdGui {
     private static int CmdRbutton(ComShInterpreter sh,List<string> args){
         if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
         int[] xywh;
-        if(args.Count==7 && (xywh=XYWH(sh.panel,args,1))!=null){
+        if(args.Count>=7 && args.Count<=10 && (xywh=XYWH(sh.panel,args,1))!=null){
             var psr=new ComShParser(sh.lastParser.lineno);
             int r=psr.Parse(args[6]);
             if(r<0) return sh.io.Error(psr.error);
             if(r==0) return sh.io.Error("コマンドが空です");
-            sh.panel.AddRbutton(xywh[0],xywh[1],xywh[2],xywh[3],args[5],psr);
-        }else return sh.io.Error("使い方: rbutton x y 幅 高さ ラベル コマンド");
+            float dt=0,ddt=0,mindt=0;
+            if(args.Count>=8 && (!float.TryParse(args[7],out dt)||dt<0)) sh.io.Error("数値の形式が不正です");
+            if(args.Count>=9 && (!float.TryParse(args[8],out ddt)||ddt<0)) sh.io.Error("数値の形式が不正です");
+            if(args.Count==10 && (!float.TryParse(args[9],out mindt)||mindt<0)) sh.io.Error("数値の形式が不正です");
+            sh.panel.AddRbutton(xywh[0],xywh[1],xywh[2],xywh[3],args[5],psr,dt,ddt,mindt);
+        }else return sh.io.Error("使い方: rbutton x y 幅 高さ ラベル コマンド [初期間隔 間隔減少 最小間隔]");
         return 0;
     }
     private static int CmdToggle(ComShInterpreter sh,List<string> args){
@@ -95,15 +109,29 @@ public static class CmdGui {
         }else return sh.io.Error("使い方: toggle x y 幅 高さ ラベル コマンド 変数名 初期値");
         return 0;
     }
+    private static int CmdRadio(ComShInterpreter sh,List<string> args){
+        if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
+        int[] xywh;
+        if(args.Count==9 && (xywh=XYWH(sh.panel,args,1))!=null){
+            var psr=new ComShParser(sh.lastParser.lineno);
+            int r=psr.Parse(args[6]);
+            if(r<0) return sh.io.Error(psr.error);
+            if(r==0) psr=null;
+            sh.panel.AddRadio(xywh[0],xywh[1],xywh[2],xywh[3],args[5],psr,args[7],args[8]);
+        }else return sh.io.Error("使い方: radio x y 幅 高さ ラベル コマンド 変数名 値");
+        return 0;
+    }
     private static int CmdText(ComShInterpreter sh,List<string> args){
         if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
         int[] xywh;
-        if(args.Count==8 && (xywh=XYWH(sh.panel,args,1))!=null){
+        if((args.Count==8||args.Count==9) && (xywh=XYWH(sh.panel,args,1))!=null){
             var psr=new ComShParser(sh.lastParser.lineno);
             int r=psr.Parse(args[5]);
             if(r<0) return sh.io.Error(psr.error);
             if(r==0) psr=null;
-            sh.panel.AddTextField(xywh[0],xywh[1],xywh[2],xywh[3],psr,args[6],args[7]);
+            float delay=0;
+            if(args.Count==9 && (!float.TryParse(args[8],out delay)||delay<0)) return sh.io.Error("数値の指定が不正です");
+            sh.panel.AddTextField(xywh[0],xywh[1],xywh[2],xywh[3],psr,args[6],args[7],delay);
         }else return sh.io.Error("使い方: text x y 幅 高さ コマンド 変数名 初期値");
         return 0;
     }
@@ -155,7 +183,7 @@ public static class CmdGui {
         if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
         int[] xywh;
         float v,min,max;
-        if(args.Count==10 && (xywh=XYWH(sh.panel,args,1))!=null
+        if((args.Count==10 || args.Count==11) && (xywh=XYWH(sh.panel,args,1))!=null
             &&float.TryParse(args[7],out v)&&float.TryParse(args[8],out min)&&float.TryParse(args[9],out max)
             &&max>min){
             if(v<min) v=min; else if(v>max) v=max;
@@ -163,7 +191,9 @@ public static class CmdGui {
             int r=psr.Parse(args[5]);
             if(r<0) return sh.io.Error(psr.error);
             if(r==0) psr=null;
-            sh.panel.AddSlider(xywh[0],xywh[1],xywh[2],xywh[3],psr,args[6],v,min,max);
+            float delay=0;
+            if(args.Count==11 && (!float.TryParse(args[10],out delay)||delay<0)) return sh.io.Error("数値の指定が不正です");
+            sh.panel.AddSlider(xywh[0],xywh[1],xywh[2],xywh[3],psr,args[6],v,min,max,delay);
         }else return sh.io.Error("使い方: slider x y 幅 高さ コマンド 変数名 初期値 最小値 最大値");
         return 0;
     }
@@ -171,7 +201,7 @@ public static class CmdGui {
         if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
         int[] xywh;
         float v,min,max;
-        if(args.Count==10 && (xywh=XYWH(sh.panel,args,1))!=null
+        if((args.Count==10 || args.Count==11)&&(xywh=XYWH(sh.panel,args,1))!=null
             &&float.TryParse(args[7],out v)&&float.TryParse(args[8],out min)&&float.TryParse(args[9],out max)
             &&max>min){
             if(v<min) v=min; else if(v>max) v=max;
@@ -179,7 +209,9 @@ public static class CmdGui {
             int r=psr.Parse(args[5]);
             if(r<0) return sh.io.Error(psr.error);
             if(r==0) psr=null;
-            sh.panel.AddVSlider(xywh[0],xywh[1],xywh[2],xywh[3],psr,args[6],v,min,max);
+            float delay=0;
+            if(args.Count==11 && (!float.TryParse(args[10],out delay)||delay<0)) return sh.io.Error("数値の指定が不正です");
+            sh.panel.AddVSlider(xywh[0],xywh[1],xywh[2],xywh[3],psr,args[6],v,min,max,delay);
         }else return sh.io.Error("使い方: vslider x y 幅 高さ コマンド 変数名 初期値 最小値 最大値");
         return 0;
     }

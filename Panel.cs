@@ -109,13 +109,26 @@ public class ComShPanel {
             }
         };
     }
-    public void AddRbutton(int x,int y,int w,int h,string l,ComShParser p){
+    public void AddRbutton(int x,int y,int w,int h,string l,ComShParser p,float dt,float ddt,float mindt){
         var r=new Rect(x,y+TITLEHEIGHT,w,h);
+        float delay=dt;
+        long expire=0;
         draw+=()=>{
             if(GUI.RepeatButton(r,l,style.button)){
-                p.Reset();
-                shell.InterpretParser(p);
-                shell.exitq=false;
+                long now=DateTime.UtcNow.Ticks/TimeSpan.TicksPerMillisecond;
+                if(now>expire){
+                    p.Reset();
+                    shell.InterpretParser(p);
+                    shell.exitq=false;
+                    expire=now+(long)delay;
+                    delay-=ddt;
+                    if(delay<mindt) delay=mindt;
+                }
+            }else{
+                var ev=Event.current.type;
+                if(ev!=EventType.Repaint&&ev!=EventType.Layout&&ev!=EventType.MouseDrag){
+                    delay=dt;
+                }
             }
         };
     }
@@ -141,7 +154,28 @@ public class ComShPanel {
             };
         }
     }
-    public void AddTextField(int x,int y,int w,int h,ComShParser p,string name,string v0){
+    public void AddRadio(int x,int y,int w,int h,string l,ComShParser p,string name,string val){
+        var r=new Rect(x,y+TITLEHEIGHT,w,h);
+        if(p==null){
+            draw+=()=>{
+                bool chk=(shell.env[name]==val);
+                bool c=GUI.Toggle(r,chk,l,style.toggle);
+                if(c && !chk) shell.env[name]=val;
+            };
+        }else{
+            draw+=()=>{
+                bool chk=(shell.env[name]==val);
+                bool c=GUI.Toggle(r,chk,l,style.toggle);
+                if(c && !chk){
+                    shell.env[name]=val;
+                    p.Reset();
+                    shell.InterpretParser(p);
+                    shell.exitq=false;
+                }
+            };
+        }
+    }
+    public void AddTextField(int x,int y,int w,int h,ComShParser p,string name,string v0,float delay){
         var r=new Rect(x,y+TITLEHEIGHT,w,h);
         shell.env[name]=v0;
         if(p==null){
@@ -151,16 +185,35 @@ public class ComShPanel {
                 if(t!=txt) shell.env[name]=t;
             };
         }else{
-            draw+=()=>{
-                string txt=shell.env[name];
-                string t=GUI.TextField(r,txt,style.text);
-                if(t!=txt){
-                    shell.env[name]=t;
-                    p.Reset();
-                    shell.InterpretParser(p);
-                    shell.exitq=false;
-                }
-            };
+            if(delay>0){
+                long expire=0;
+                draw+=()=>{
+                    string txt=shell.env[name];
+                    string t=GUI.TextField(r,txt,style.text);
+                    if(t!=txt){
+                        shell.env[name]=t;
+                        expire=DateTime.UtcNow.Ticks/TimeSpan.TicksPerMillisecond+(long)delay;
+                    }else if(expire>0){
+                        long now=DateTime.UtcNow.Ticks/TimeSpan.TicksPerMillisecond;
+                        if(now>expire){
+                            p.Reset();
+                            shell.InterpretParser(p);
+                            shell.exitq=false;
+                        }
+                    }
+                };
+            }else{
+                draw+=()=>{
+                    string txt=shell.env[name];
+                    string t=GUI.TextField(r,txt,style.text);
+                    if(t!=txt){
+                        shell.env[name]=t;
+                        p.Reset();
+                        shell.InterpretParser(p);
+                        shell.exitq=false;
+                    }
+                };
+            }
         }
     }
     public void AddCombo(int x,int y,int w,int h,ComShParser p,string name,string v0,string[] items,char dlmt){
@@ -260,7 +313,7 @@ public class ComShPanel {
         if(ret<0) return new ComboItems(items0,items0);
         return new ComboItems(ParseUtil.Chomp(sbo.GetSubShResult()).Split(ParseUtil.lf),dlmt);
     }
-    public void AddSlider(int x,int y,int w,int h,ComShParser p,string name,float v0,float min,float max){
+    public void AddSlider(int x,int y,int w,int h,ComShParser p,string name,float v0,float min,float max,float delay){
         var r=new Rect(x,y+TITLEHEIGHT,w,h);
         shell.env[name]=shell.fmt.FVal(v0);
         string old=shell.env[name];
@@ -268,28 +321,46 @@ public class ComShPanel {
         if(p==null){
             draw+=()=>{
                 string cur=shell.env[name];
-                if(old!=cur){ // 毎フレームTryParse()するよりはたぶんマシ
-                    float.TryParse(cur,out val);
-                    old=cur;
-                }
+                if(old!=cur){ float.TryParse(cur,out val); old=cur; }
                 float v=GUI.HorizontalSlider(r,val,min,max);
                 if(v!=val) shell.env[name]=shell.fmt.FVal(v);
             };
         }else{
-            draw+=()=>{
-                string cur=shell.env[name];
-                if(old!=cur){ float.TryParse(cur,out val); old=cur; }
-                float v=GUI.HorizontalSlider(r,val,min,max);
-                if(v!=val){
-                    shell.env[name]=shell.fmt.FVal(v);
-                    p.Reset();
-                    shell.InterpretParser(p);
-                    shell.exitq=false;
-                }
-            };
+            if(delay>0){
+                long expire=0;
+                draw+=()=>{
+                    string cur=shell.env[name];
+                    if(old!=cur){ float.TryParse(cur,out val); old=cur; }
+                    float v=GUI.HorizontalSlider(r,val,min,max);
+                    if(v!=val){
+                        shell.env[name]=shell.fmt.FVal(v);
+                        expire=DateTime.UtcNow.Ticks/TimeSpan.TicksPerMillisecond+(long)delay;
+                    }else if(expire>0){
+                        long now=DateTime.UtcNow.Ticks/TimeSpan.TicksPerMillisecond;
+                        if(now>expire){
+                            p.Reset();
+                            shell.InterpretParser(p);
+                            shell.exitq=false;
+                            expire=0;
+                        }
+                    }
+                };
+            }else{
+                draw+=()=>{
+                    string cur=shell.env[name];
+                    if(old!=cur){ float.TryParse(cur,out val); old=cur; }
+                    float v=GUI.HorizontalSlider(r,val,min,max);
+                    if(v!=val){
+                        shell.env[name]=shell.fmt.FVal(v);
+                        p.Reset();
+                        shell.InterpretParser(p);
+                        shell.exitq=false;
+                    }
+                };
+            }
         }
     }
-    public void AddVSlider(int x,int y,int w,int h,ComShParser p,string name,float v0,float min,float max){
+    public void AddVSlider(int x,int y,int w,int h,ComShParser p,string name,float v0,float min,float max,float delay){
         var r=new Rect(x,y+TITLEHEIGHT,w,h);
         shell.env[name]=shell.fmt.FVal(v0);
         string old=shell.env[name];
@@ -297,30 +368,52 @@ public class ComShPanel {
         if(p==null){
             draw+=()=>{
                 string cur=shell.env[name];
-                if(old!=cur){ // 毎フレームTryParse()するよりはたぶんマシ
-                    float.TryParse(cur,out val);
-                    old=cur;
-                }
+                if(old!=cur){ float.TryParse(cur,out val); old=cur; }
                 float v=GUI.VerticalSlider(r,val,min,max);
                 if(v!=val) shell.env[name]=shell.fmt.FVal(v);
             };
         }else{
-            draw+=()=>{
-                string cur=shell.env[name];
-                if(old!=cur){ float.TryParse(cur,out val); old=cur; }
-                float v=GUI.VerticalSlider(r,val,min,max);
-                if(v!=val){
-                    shell.env[name]=shell.fmt.FVal(v);
-                    p.Reset();
-                    shell.InterpretParser(p);
-                    shell.exitq=false;
-                }
-            };
+            if(delay>0){
+                long expire=0;
+                draw+=()=>{
+                    string cur=shell.env[name];
+                    if(old!=cur){ float.TryParse(cur,out val); old=cur; }
+                    float v=GUI.VerticalSlider(r,val,min,max);
+                    if(v!=val){
+                        shell.env[name]=shell.fmt.FVal(v);
+                        expire=DateTime.UtcNow.Ticks/TimeSpan.TicksPerMillisecond+(long)delay;
+                    }else if(expire>0){
+                        long now=DateTime.UtcNow.Ticks/TimeSpan.TicksPerMillisecond;
+                        if(now>expire){
+                            p.Reset();
+                            shell.InterpretParser(p);
+                            shell.exitq=false;
+                            expire=0;
+                        }
+                    }
+                };
+            }else{
+                draw+=()=>{
+                    string cur=shell.env[name];
+                    if(old!=cur){ float.TryParse(cur,out val); old=cur; }
+                    float v=GUI.VerticalSlider(r,val,min,max);
+                    if(v!=val){
+                        shell.env[name]=shell.fmt.FVal(v);
+                        p.Reset();
+                        shell.InterpretParser(p);
+                        shell.exitq=false;
+                    }
+                };
+            }
         }
     }
     public void AddLabel(int x,int y,int w,int h,string l){
         var r=new Rect(x,y+TITLEHEIGHT,w,h);
         draw+=()=>{ GUI.Label(r,l,style.label); };
+    }
+    public void AddLabel2(int x,int y,int w,int h,string name){
+        var r=new Rect(x,y+TITLEHEIGHT,w,h);
+        draw+=()=>{ GUI.Label(r,shell.env[name],style.label); };
     }
 }
 public class ComboItems {
