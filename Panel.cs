@@ -199,6 +199,7 @@ public class ComShPanel {
                             p.Reset();
                             shell.InterpretParser(p);
                             shell.exitq=false;
+                            expire=0;
                         }
                     }
                 };

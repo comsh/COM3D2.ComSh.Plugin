@@ -167,6 +167,15 @@ public class MiniSed {
         }
         return i;
     }
+    public static Regex GetPtnAndOpt(string txt,int pos=0){
+        if(pos>=txt.Length) return null;
+        int i=pos;
+        i=GetPattern(txt,i,out string ptn);
+        if(i<0) return null;
+        i=GetPtnOpt(txt,i+1,out int rcnt, out RegexOptions opt);
+        if(i!=txt.Length) return null;
+        try{ return new Regex(ptn,opt); }catch{ return null; }
+    }
     public class Line {
         public string txt;
         public int head=0;

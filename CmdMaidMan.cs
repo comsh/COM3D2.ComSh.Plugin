@@ -70,10 +70,12 @@ public static class CmdMaidMan {
         maidParamDic.Add("prot",new CmdParam<Maid>(MaidParamPRot));
         maidParamDic.Add("pquat",new CmdParam<Maid>(MaidParamPQuat));
         maidParamDic.Add("muneyure",new CmdParam<Maid>(MaidParamMuneYure));
+        maidParamDic.Add("autotwist",new CmdParam<Maid>(MaidParamAutoTwist));
         maidParamDic.Add("ap",new CmdParam<Maid>(MaidParamAttachPoint));
         maidParamDic.Add("handle",new CmdParam<Maid>(MaidParamHandle));
         maidParamDic.Add("describe",new CmdParam<Maid>(MaidParamDesc));
         maidParamDic.Add("node",new CmdParam<Maid>(MaidParamNode));
+        maidParamDic.Add("select",new CmdParam<Maid>(MaidParamSelect));
 
         maidParamDic.Add("l2w",new CmdParam<Maid>(MaidParamL2W));
         maidParamDic.Add("w2l",new CmdParam<Maid>(MaidParamW2L));
@@ -103,7 +105,7 @@ public static class CmdMaidMan {
         "wrot.x","wrot.y","wrot.z",
         "scale.x","scale.y","scale.z",
         "prot","pquat",
-        "ap","handle","describe",
+        "ap","handle","describe","select",
         "l2w","w2l"
     };
 
@@ -120,6 +122,7 @@ public static class CmdMaidMan {
             return 0;
         }else if(args[1]=="add"){
             if(args.Count<3) return sh.io.Error("メイドさんを指定してください");
+            PlacementWindow pw=GameObject.FindObjectOfType<PlacementWindow>();
             for(int i=2; i<args.Count; i++){
 			    CharacterMgr cm=GameMain.Instance.CharacterMgr;
                 int stockidx=MaidUtil.FindStockMaid(args[i]);
@@ -129,7 +132,6 @@ public static class CmdMaidMan {
                 int idx=MaidUtil.FindNullMaidIdx();
                 if(idx==-1) return sh.io.Error("これ以上追加できません");
 
-                PlacementWindow pw=GameObject.FindObjectOfType<PlacementWindow>();
                 if(pw==null){
                     Maid m=cm.Activate(idx,stockidx,false,false);
                     m.Visible=true;
@@ -138,8 +140,7 @@ public static class CmdMaidMan {
 				    m.FaceAnime("通常");
                     m.FaceBlend("オリジナル");
                 }else{
-                    int ret=MaidAddStudio(pw,sm,sm.status.lastName,sm.status.firstName);
-                    if(ret<0) return sh.io.Error("失敗しました");
+                    if(MaidAddStudio(pw,sm,sm.status.lastName,sm.status.firstName)<0) return sh.io.Error("失敗しました");
                 }
             }
             return 0;
@@ -177,27 +178,26 @@ public static class CmdMaidMan {
     }
     // スタジオモード用のGUI経由のメイド追加。普通にActivate()だとスタジオモード終了時にフリーズ
     private static int MaidAddStudio(PlacementWindow pw,Maid m,string lname,string fname){
-        // 簡単な解決方法がなさそうなので面倒だけどUI経由で処理
+        return MaidClickStudio(pw,m,lname,fname,"Plate/TopButton");
+    }
+    private static int MaidSelectStudio(PlacementWindow pw,Maid m,string lname,string fname){
+        return MaidClickStudio(pw,m,lname,fname,"Button");
+    }
+    private static int MaidClickStudio(PlacementWindow pw,Maid m,string lname,string fname,string path){
         UIGrid grid=UTY.GetChildObject(pw.content_game_object, "ListParent/Contents/UnitParent", false).GetComponent<UIGrid>();
         if(grid==null) return -1;
-        for(int i=0; i<grid.gameObject.transform.childCount; i++){
-            Transform tr=grid.gameObject.transform.GetChild(i);
-            SimpleMaidPlate[] mp=tr.GetComponentsInChildren<SimpleMaidPlate>();
-            if(mp==null) continue;
-            UIButton[] btn=tr.GetComponentsInChildren<UIButton>();
-            if(btn==null) continue;
-            for(int j=0; j<mp.Length; j++){
-                UILabel[] lbl=mp[j].GetComponentsInChildren<UILabel>();
-                if(lbl==null || lbl.Length<3) continue;
-                if((lname==null||lbl[1].text==lname) && (fname==null||lbl[2].text==fname)){
-                    if(btn[j].onClick==null || btn[j].onClick.Count==0) continue;
-                    UIButton.current=btn[j];
-                    btn[j].onClick[0].Execute();
-                    UIButton.current=null;
-                    m.boAllProcPropBUSY=false;
-                    m.AllProcProp();
-                    return 0;
-                }
+        SimpleMaidPlate[] mp=grid.transform.GetComponentsInChildren<SimpleMaidPlate>();
+        if(mp==null) return -1;
+        for(int i=0; i<mp.Length; i++){
+            UILabel[] lbl=mp[i].GetComponentsInChildren<UILabel>();
+            if(lbl==null || lbl.Length<3) continue;
+            if((lname==null||lbl[1].text==lname) && (fname==null||lbl[2].text==fname)){
+                UIButton b=UTY.GetChildObject(mp[i].gameObject,path).GetComponent<UIButton>();
+                if(b==null || b.onClick==null || b.onClick.Count==0) continue;
+                UIButton.current=b;
+                EventDelegate.Execute(b.onClick);
+                UIButton.current=null;
+                return 0;
             }
         }
         return -1;
@@ -357,31 +357,45 @@ public static class CmdMaidMan {
     private static int MaidParamW2L(ComShInterpreter sh,Maid m,string val){
         return _CmdParamW2L(sh,m.transform,val);
     }
-    private static string SingleMotion(Maid m,MotionName.Clip clip,bool q=false){
-        string name=UTIL.Suffix(clip.name,".anm");
-        string myposename=ComShInterpreter.myposeDir+name;
-        string id=name;
+    private static AnimationState SingleMotion(Maid m,MotionName.Clip clip,bool q,bool tailq){
+        string name=clip.name;
+        string filename,id;
+        if(clip.tmpq==1){
+            var tf=DataFiles.GetTempFile(name);
+            if(tf==null) return null;
+            filename=tf.filename;
+            id=tf.original;
+        }else{
+            id=name;
+            name=UTIL.Suffix(name,".anm");
+            filename=ComShInterpreter.myposeDir+name;
+        }
         if(clip.layer>0 && clip.official_layer<0){
             string seq=UTIL.GetSeqId();
-            id=$"{clip.name}_l_{clip.layer}_#{seq}.anm";
+            id=$"{Path.GetFileNameWithoutExtension(id)}_l_{clip.layer}_#{seq}.anm";
+        }else{
+            id=UTIL.Suffix(id,".anm");
         }
         byte[] array;
-        AnmFile af;
+        AnmFile af=null;
         try{
-            if(File.Exists(myposename)){  // マイポーズに存在するファイルならそちらを再生
-                array=File.ReadAllBytes(myposename); 
-                af=new AnmFile(array);
-                if(m.boMAN!=(af.gender==1)) array=af.ChgGender();
-                m.SetAutoTwist(Maid.AutoTwist.ShoulderL,true);
-                m.SetAutoTwist(Maid.AutoTwist.ShoulderR,true);
-                m.SetAutoTwist(Maid.AutoTwist.WristL,true);
-                m.SetAutoTwist(Maid.AutoTwist.WristR,true);
-                m.SetAutoTwist(Maid.AutoTwist.ThighL,true);
-                m.SetAutoTwist(Maid.AutoTwist.ThighR,true);
+            if(clip.tmpq==1){
+                if(File.Exists(filename)){
+                    array=File.ReadAllBytes(filename); 
+                    af=new AnmFile(array);
+                    if(m.boMAN!=(af.gender==1)) array=af.ChgGender();
+                }else array=null;
             }else{
-                array=UTIL.AReadAll(name);
-                af=new AnmFile(array);
-                if(m.boMAN!=(af.gender==1)) array=af.ChgGender();
+                if(File.Exists(filename)){
+                    array=File.ReadAllBytes(filename); 
+                    af=new AnmFile(array);
+                    if(m.boMAN!=(af.gender==1)) array=af.ChgGender();
+                    m.SetAutoTwistAll(true);
+                }else{
+                    array=UTIL.AReadAll(name);
+                    af=new AnmFile(array);
+                    if(m.boMAN!=(af.gender==1)) array=af.ChgGender();
+                }
             }
         }catch{ return null; }
         if(array==null||array.Length==0) return null;
@@ -398,7 +412,29 @@ public static class CmdMaidMan {
                 m.body0.jbMuneR.enabled=rq;
             }
         }
-        return m.body0.CrossFade(id,array,clip.type=='&',false,q,clip.fade);
+        return CrossFade(m,id,array,clip,q,tailq);
+    }
+    private static AnimationState CrossFade(Maid m,string id,byte[] array,MotionName.Clip clip,bool q,bool tailq){
+        Animation anim=m.body0.m_Animation;
+        AnimationState st=m.body0.LoadAnime(id,array,clip.type=='&',false);
+        st.blendMode=(clip.type=='&')?AnimationBlendMode.Additive:AnimationBlendMode.Blend;
+        st.layer=clip.layer*10;
+        st.speed=clip.speed;
+        st.time=clip.time;
+        st.wrapMode=(!tailq)?WrapMode.Once:Int2Wrap(clip.loop);
+        if(clip.tr!=null) for(int k=0; k<clip.tr.Count; k++)
+            st.AddMixingTransform(clip.tr[k].tr,clip.tr[k].single==0);
+        if(q) anim.CrossFadeQueued(id,clip.fade,QueueMode.CompleteOthers);
+        else anim.CrossFade(id,clip.fade);
+        st.weight=clip.weight;
+        return st;
+    }
+    private static WrapMode Int2Wrap(int lp){
+        if(lp==0) return WrapMode.Once;
+        else if(lp==1) return WrapMode.Loop;
+        else if(lp==2) return WrapMode.PingPong;
+        else if(lp==3) return WrapMode.ClampForever;
+        return 0;
     }
     private static int MaidParamMotion(ComShInterpreter sh,Maid m,string val){
         if(val==null){
@@ -414,11 +450,11 @@ public static class CmdMaidMan {
         if(val[0]!='+'&&val[0]!=':'&&val[0]!='&'){    // お掃除
             GameMain.Instance.ScriptMgr.StopMotionScript();
             Animation anim=m.GetAnimation();
-            var remove=new List<AnimationClip>();
+            var remove=new List<string>();
             foreach(AnimationState state in anim)
                 if(!anim.IsPlaying(state.name)||state.layer>0||state.name.IndexOf(" - Queued Clone",Ordinal)>=0)
-                    remove.Add(state.clip);
-            foreach(var clip in remove) anim.RemoveClip(clip);
+                    remove.Add(state.name);
+            foreach(var name in remove) anim.RemoveClip(name);
         }
 
         bool updated=false;
@@ -429,25 +465,9 @@ public static class CmdMaidMan {
             bool q=cl.type!=0;
             for(int j=0; j<cl.list.Count; j++){
                 MotionName.Clip clip=cl.list[j];
-                string tag=SingleMotion(m,clip,q);
-                if(tag==null) return sh.io.Error("指定されたモーションが見つかりません");
+                AnimationState st=SingleMotion(m,clip,q,i==ml.list.Count-1);
+                if(st==null) return sh.io.Error("指定されたモーションが見つかりません");
                 updated=true;
-                foreach(AnimationState st in m.GetAnimation()) if(st.name.StartsWith(tag,Ordinal)){
-                    // ベースなら完全一致、キューに入れたときは後ろに何かついてるものだけ
-                    if(q == (st.name.Length==tag.Length)) continue;
-                    st.blendMode=(clip.type=='&')?AnimationBlendMode.Additive:AnimationBlendMode.Blend;
-                    st.speed=clip.speed;
-                    st.time=clip.time;
-                    st.weight=clip.weight;
-                    // st.layer=clip.layer;
-                    if(i<ml.list.Count-1) st.wrapMode=WrapMode.Once;
-                    else if(clip.loop==0) st.wrapMode=WrapMode.Once;
-                    else if(clip.loop==1) st.wrapMode=WrapMode.Loop;
-                    else if(clip.loop==2) st.wrapMode=WrapMode.PingPong;
-                    else if(clip.loop==3) st.wrapMode=WrapMode.ClampForever;
-                    if(clip.tr!=null) for(int k=0; k<clip.tr.Count; k++)
-                        st.AddMixingTransform(clip.tr[k].tr,clip.tr[k].single==0);
-                }
             }
         }
         if(updated){
@@ -573,9 +593,8 @@ public static class CmdMaidMan {
     private static int MaidParamMotionWeight(ComShInterpreter sh,Maid m,string val){
         var anm=m.body0.m_Animation;
         if(val==null){
-            foreach(AnimationState st in anm) if(anm.IsPlaying(st.name)){
+            foreach(AnimationState st in anm) if(anm.IsPlaying(st.name))
                 sh.io.PrintJoinLn(sh.ofs,st.layer.ToString(),sh.fmt.FInt(st.weight));
-            }
             return 0;
         }
         string[] sa;
@@ -625,6 +644,7 @@ public static class CmdMaidMan {
 
         public class Clip{
             public int type=0;
+            public byte tmpq=0;
             public string name;
             public float speed=1f;
             public float fade=0f;
@@ -659,7 +679,13 @@ public static class CmdMaidMan {
                 int idx=val.IndexOf(',',m0,j-m0);
                 int tridx;
                 if(idx>=0){ // オプション指定がややこしくなったので新方式
-                    c.name=val.Substring(m0,idx-m0);
+                    if(val[m0]=='*'){
+                        c.name=val.Substring(m0+1,idx-m0-1);
+                        c.tmpq=1;
+                    }else{
+                        c.name=val.Substring(m0,idx-m0);
+                        c.tmpq=0;
+                    }
                     string optstr=val.Substring(idx+1,j-idx-1);
                     var sa=optstr.Split(ParseUtil.comma);
                     if(sa[0].Length>0 && char.IsLetter(sa[0][0])){
@@ -697,7 +723,13 @@ public static class CmdMaidMan {
                         c.tr.Add(new MotionName.MixTr(bn.boneTr,single));
                     }
                 }else{
-                    c.name=val.Substring(m0,j-m0);
+                    if(val[m0]=='*'){
+                        c.name=val.Substring(m0+1,j-m0-1);
+                        c.tmpq=1;
+                    }else{
+                        c.name=val.Substring(m0,j-m0);
+                        c.tmpq=0;
+                    }
                     c.speed=dflt[0]; c.fade=dflt[1]; c.loop=(int)dflt[2]; c.time=dflt[3];
                     c.weight=(c.type==':')?0.5f:1f; c.layer=(c.type==0)?0:2;
                 }
@@ -1215,11 +1247,11 @@ public static class CmdMaidMan {
             sh.io.Print($"{lc}{rc}");
             return 0;
         }
-        if(val.Length!=2) sh.io.Error("値の形式が不正です");
+        if(val.Length!=2) return sh.io.Error("値の形式が不正です");
         lc=val[0]; rc=val[1];
         if(lc=='X'||lc=='x') l=0; else if(lc=='-') l=1; else if(lc=='O'||lc=='o') l=2; else l=-1;
         if(rc=='X'||rc=='x') r=0; else if(rc=='-') r=1; else if(rc=='O'||rc=='o') r=2; else r=-1;
-        if(l<0||r<0) sh.io.Error("値の形式が不正です");
+        if(l<0||r<0) return sh.io.Error("値の形式が不正です");
         muneMotionYureq[iid]=l*4+r;
         bool lq=l>1, rq=r>1;
         m.body0.MuneYureL(lq?1f:0f);
@@ -1227,6 +1259,41 @@ public static class CmdMaidMan {
         m.body0.MuneYureR(rq?1f:0f);
         m.body0.jbMuneR.enabled=rq;
         return 1;
+    }
+
+    private static int MaidParamAutoTwist(ComShInterpreter sh,Maid m,string val){
+        if(val==null){
+            sh.io.Print(new string(new char[]{
+                m.body0.boAutoTwistShoulderL?'o':'x',
+                m.body0.boAutoTwistShoulderR?'o':'x',
+                m.body0.boAutoTwistWristL?'o':'x',
+                m.body0.boAutoTwistWristR?'o':'x',
+                m.body0.boAutoTwistThighL?'o':'x',
+                m.body0.boAutoTwistThighR?'o':'x'
+            }));
+            return 0;
+        }
+        if(val.Length!=6) return sh.io.Error("値の形式が不正です");
+        char[] ca=val.ToCharArray();
+        for(int i=0; i<6; i++) if(ca[i]!='o'&&ca[i]!='x') return sh.io.Error("値の形式が不正です");
+        m.body0.boAutoTwistShoulderL=(ca[0]=='o');
+        m.body0.boAutoTwistShoulderR=(ca[1]=='o');
+        m.body0.boAutoTwistWristL=(ca[2]=='o');
+        m.body0.boAutoTwistWristR=(ca[3]=='o');
+        m.body0.boAutoTwistThighL=(ca[4]=='o');
+        m.body0.boAutoTwistThighR=(ca[5]=='o');
+        return 1;
+    }
+    private static int MaidParamSelect(ComShInterpreter sh,Maid m,string val){
+        PlacementWindow pw=GameObject.FindObjectOfType<PlacementWindow>(); 
+        if(pw==null) return sh.io.Error("スタジオモードでのみ有効です");
+        if(m.boMAN){
+            int no=m.ActiveSlotNo;
+            string manname=(no==0)?"主人公":$"男{no}";
+            return MaidSelectStudio(pw,m,"",manname);
+        }else{
+            return MaidSelectStudio(pw,m,m.status.lastName,m.status.firstName);
+        }
     }
 
     private static int MaidParamAttachPoint(ComShInterpreter sh,Maid m,string val){

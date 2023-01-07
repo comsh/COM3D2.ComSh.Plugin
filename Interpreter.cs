@@ -157,9 +157,8 @@ public partial class ComShInterpreter {
         try{ return FullScriptName(scriptName); }catch{}
         return "";
     }
-    private static Regex dosdev=new Regex(@"^(?:AUX|CON|NUL|PRN|CLOCK\$|COM\d|LPT\d)(?:\..*)?$",RegexOptions.Compiled|RegexOptions.IgnoreCase);
     public static string FullScriptName(string scriptName){
-        if(dosdev.Match(Path.GetFileName(scriptName)).Success) return "";
+        if(UTIL.dosdev.Match(Path.GetFileName(scriptName)).Success) return "";
         string filename=Path.GetFullPath(scriptFolder+scriptName);
         string path=Path.GetDirectoryName(filename);
         // ..\等でscriptFolderより上のフォルダを指定していたら弾く

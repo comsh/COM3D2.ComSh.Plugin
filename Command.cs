@@ -53,6 +53,7 @@ public static class Command {
         cmdTbl.Add("kill",new Cmd(CmdKill));
         cmdTbl.Add("cutloop",new Cmd(CmdCutLoop));
         cmdTbl.Add("lineloop",new Cmd(CmdLineLoop));
+        cmdTbl.Add("regexloop",new Cmd(CmdRegexLoop));
         cmdTbl.Add("seqno",new Cmd(CmdSeqNo));
         cmdTbl.Add("refreshmypose",new Cmd(CmdRefreshMypose));
         cmdTbl.Add("sin",new Cmd(CmdSin));
@@ -97,6 +98,7 @@ public static class Command {
         cmdTbl.Add("vsync", new Cmd(CmdVSync));
         cmdTbl.Add("timescale", new Cmd(CmdTimeScale));
         cmdTbl.Add("count", new Cmd(CmdCount));
+        cmdTbl.Add("system", new Cmd(CmdSystem));
 
         cmdTbl.Add("__res",new Cmd(Cmd__Resource));
         cmdTbl.Add("__files",new Cmd(Cmd__Files));
@@ -487,6 +489,41 @@ public static class Command {
         if(p.Parse(args[1])<0) return sh.io.Error(p.error);
         return sh.InterpretParser(p);
     }
+    private static int CmdSystem(ComShInterpreter sh,List<string>args){
+        if(args.Count==1 || args[1]=="") return sh.io.Error("使い方: system 外部コマンド名 引数1 ...");
+        var sb=new StringBuilder();
+        for(int i=2; i<args.Count; i++){
+            string prm=args[i];
+            if(prm.Length>2 && prm[0]=='*'){
+                var tf=DataFiles.GetTempFile(prm.Substring(1));
+                if(tf==null) return sh.io.Error("一時ファイル名が未定義です");
+                prm=tf.filename;
+            }
+            sb.Append(" ").Append(prm);
+        }
+        string ret=CmdSystemSub(args[1],sb.ToString());
+        if(ret==null) return sh.io.Error("外部コマンドが実行できません");
+        sh.io.Print(ret);
+        return 0;
+    }
+    public static string CmdSystemSub(string cmd,string args){
+        var p=new System.Diagnostics.Process();
+        p.StartInfo.FileName=ComShInterpreter.scriptFolder+"bin\\"+cmd;
+        p.StartInfo.Arguments=args;
+        p.StartInfo.UseShellExecute=false;
+        p.StartInfo.RedirectStandardOutput=true;
+        p.StartInfo.RedirectStandardInput=false;
+        //p.StartInfo.StandardOutputEncoding=Encoding.UTF8;
+        p.StartInfo.CreateNoWindow=false;
+        try{
+            p.Start();
+            string ret=p.StandardOutput.ReadToEnd();
+            p.WaitForExit();
+            p.Close();
+            return ret;
+        }catch{}
+        return null;
+    }
     private static int CmdTest(ComShInterpreter sh,List<string> args){
         string usage=$"使い方: test 対象1 比較演算子 対象2 コマンド1 [コマンド2]\n"
                     +"比較演算子   eq|ne|ge|le|gt|lt|has|and|or\n"
@@ -708,6 +745,44 @@ public static class Command {
             if(args.Count!=3) return sh.io.Error(usage);
             return CutLoop(sh,args[1],"\n",args[2]);
         }
+    }
+    private static int CmdRegexLoop(ComShInterpreter sh,List<string> args){
+        const string usage="使い方: regexloop 入力文字列 正規表現 コマンド";
+        const string usage2="使い方: regexloop 正規表現 コマンド";
+        if(sh.io.pipedText!=null){
+            if(args.Count!=3) return sh.io.Error(usage2);
+            Regex reg=MiniSed.GetPtnAndOpt(args[1]);
+            if(reg==null) return sh.io.Error("正規表現が不正です");
+            return RegexLoop(sh,sh.io.pipedText,reg,args[2]);
+        }else{
+            if(args.Count!=4) return sh.io.Error(usage);
+            Regex reg=MiniSed.GetPtnAndOpt(args[2]);
+            if(reg==null) return sh.io.Error("正規表現が不正です");
+            return RegexLoop(sh,args[1],reg,args[3]);
+        }
+    }
+    private static int RegexLoop(ComShInterpreter sh,string text,Regex reg,string cmd){
+        var psr=new ComShParser(sh.lastParser.lineno);
+        int r=psr.Parse(cmd);
+        if(r<0) return sh.io.Error(psr.error);
+        if(r==0) return sh.io.Error("コマンドが空です");
+
+        ComShInterpreter.Output orig=sh.io.output;
+        var subout=new ComShInterpreter.SubShOutput();
+        sh.io.output=new ComShInterpreter.Output(subout.Output);
+
+        int ret=0;
+        Match m=reg.Match(text);
+        while(m.Success){
+            for(int i=0; i<m.Groups.Count; i++) sh.env[$"_{i}"]=m.Groups[i].Value;
+            psr.Reset();
+            ret=sh.InterpretParser(psr);
+            if(ret<0 || sh.exitq){ ret=sh.io.exitStatus; sh.exitq=false; break; }
+            m=m.NextMatch();
+        }
+        sh.io.output=orig;
+        sh.io.Print(subout.GetSubShResult());
+        return ret;
     }
     private static int CmdPs(ComShInterpreter sh,List<string> args){
         var ls=ComShBg.cron.LsJob(string.Empty);
@@ -1693,6 +1768,12 @@ public static class UTIL {
             pftr.SetParent(GameMain.Instance.BgMgr.Parent.transform, false);
             return pftr;
         }else return null;
+    }
+    public static Regex dosdev=new Regex(@"^(?:AUX|CON|NUL|PRN|CLOCK\$|COM\d|LPT\d)(?:\..*)?$",RegexOptions.Compiled|RegexOptions.IgnoreCase);
+    public static int CheckFileName(string fname){
+        if(fname.IndexOfAny(Path.GetInvalidFileNameChars())>=0) return -1;
+        if(dosdev.Match(fname).Success) return -1;
+        return 0;
     }
     public static byte[] ReadAll(string fname){
         byte[] array=null;

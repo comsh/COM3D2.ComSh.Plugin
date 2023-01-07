@@ -1,7 +1,7 @@
 ﻿using System;
+using System.IO;
 using UnityEngine;
 using UnityInjector.Attributes;
-using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
 namespace COM3D2.ComSh.Plugin {
@@ -15,6 +15,7 @@ namespace COM3D2.ComSh.Plugin {
 		public void Update() { ComShWM.Update(); ComShBg.OnUpdate(); }
 		public void LateUpdate() { ComShBg.OnLateUpdate(); }
 		public void OnGUI() { ComShWM.OnGUI(); }
+        public void OnApplicationQuit(){ DataFiles.Clean(); }
 	}
 
 	public static class ComShWM {
