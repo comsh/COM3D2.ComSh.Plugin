@@ -99,6 +99,12 @@ public static class Command {
         cmdTbl.Add("timescale", new Cmd(CmdTimeScale));
         cmdTbl.Add("count", new Cmd(CmdCount));
         cmdTbl.Add("system", new Cmd(CmdSystem));
+        cmdTbl.Add("floor", new Cmd(CmdFloor));
+        cmdTbl.Add("ceil", new Cmd(CmdCeil));
+        cmdTbl.Add("truncate", new Cmd(CmdTruncate));
+        cmdTbl.Add("round", new Cmd(CmdRound));
+        cmdTbl.Add("roundup", new Cmd(CmdRoundUp));
+        cmdTbl.Add("perlinnoise", new Cmd(CmdPerlinNoise));
 
         cmdTbl.Add("__res",new Cmd(Cmd__Resource));
         cmdTbl.Add("__files",new Cmd(Cmd__Files));
@@ -265,7 +271,7 @@ public static class Command {
     private static int CmdTimer(ComShInterpreter sh,List<string>args){
         if(args.Count==1) foreach(string name in ComShBg.cron.LsJob("timer/")) sh.io.PrintLn(name);
         if(args.Count!=3) return sh.io.Error("使い方: timer 待機時間(ms) 待機後に実行するコマンド");
-        if(!float.TryParse(args[1],out float ms)||ms<=0) return sh.io.Error("数値の指定が不正です");
+        if(!double.TryParse(args[1],out double ms)||ms<=0) return sh.io.Error("数値の指定が不正です");
         var psr=new ComShParser(sh.lastParser.lineno);
         int r=psr.Parse(args[2]);
         if(r<0) return sh.io.Error(psr.error);
@@ -648,9 +654,9 @@ public static class Command {
             string name=jobpfx+args[2];
             if(bg.ContainsName(name)) return sh.io.Error("その名前は既に使われています");
             int prio=0;
-            float ms=0,life=0;
-            if(args.Count>=5 && (!float.TryParse(args[4],out ms) || ms<0)) return sh.io.Error("実行間隔の値が不正です");
-            if(args.Count>=6 && (!float.TryParse(args[5],out life) || life<0)) return sh.io.Error("寿命の値が不正です");
+            double ms=0,life=0;
+            if(args.Count>=5 && (!double.TryParse(args[4],out ms) || ms<0)) return sh.io.Error("実行間隔の値が不正です");
+            if(args.Count>=6 && (!double.TryParse(args[5],out life) || life<0)) return sh.io.Error("寿命の値が不正です");
             if(args.Count==7 && (!int.TryParse(args[6],out prio) || prio<0)) return sh.io.Error("順序の値が不正です");
             var subsh=new ComShInterpreter(null,sh.env,sh.func);
             subsh.env[ComShInterpreter.SCRIPT_ERR_ON]="1";
@@ -913,6 +919,75 @@ public static class Command {
 		mw.PopupAndTabList.SetData(data,nameterm,true);
         return 0;
     }
+    private static int CmdFloor(ComShInterpreter sh,List<string> args){
+        if(args.Count!=2 && args.Count!=3) return sh.io.Error("使い方: floor 値 [小数部桁数]");
+        double v=ParseUtil.ParseDouble(args[1]);
+        if(double.IsNaN(v)) return sh.io.Error("数値の指定が不正です");
+        if(args.Count==3){
+            float n=ParseUtil.ParseFloat(args[2]);
+            if(float.IsNaN(n) || n<0 || n>99) return sh.io.Error("桁数の指定が不正です");
+            double t=Math.Pow(10,n);
+            sh.io.Print((Math.Floor(v*t)/t).ToString($"F{(int)n}"));
+        }else{
+            sh.io.Print(((long)Math.Floor(v)).ToString());
+        }
+        return 0;
+    }
+    private static int CmdCeil(ComShInterpreter sh,List<string> args){
+        if(args.Count!=2 && args.Count!=3) return sh.io.Error("使い方: ceil 値 [小数部桁数]");
+        double v=ParseUtil.ParseDouble(args[1]);
+        if(double.IsNaN(v)) return sh.io.Error("数値の指定が不正です");
+        if(args.Count==3){
+            float n=ParseUtil.ParseFloat(args[2]);
+            if(float.IsNaN(n) || n<0 || n>99) return sh.io.Error("桁数の指定が不正です");
+            double t=Math.Pow(10,n);
+            sh.io.Print((Math.Ceiling(v*t)/t).ToString($"F{(int)n}"));
+        }else{
+            sh.io.Print(((long)Math.Ceiling(v)).ToString());
+        }
+        return 0;
+    }
+    private static int CmdTruncate(ComShInterpreter sh,List<string> args){
+        if(args.Count!=2 && args.Count!=3) return sh.io.Error("使い方: truncate 値 [小数部桁数]");
+        double v=ParseUtil.ParseDouble(args[1]);
+        if(double.IsNaN(v)) return sh.io.Error("数値の指定が不正です");
+        if(args.Count==3){
+            float n=ParseUtil.ParseFloat(args[2]);
+            if(float.IsNaN(n) || n<0 || n>99) return sh.io.Error("桁数の指定が不正です");
+            double t=Math.Pow(10,n);
+            sh.io.Print((Math.Truncate(v*t)/t).ToString($"F{(int)n}"));
+        }else{
+            sh.io.Print(((long)Math.Truncate(v)).ToString());
+        }
+        return 0;
+    }
+    private static int CmdRoundUp(ComShInterpreter sh,List<string> args){
+        if(args.Count!=2 && args.Count!=3) return sh.io.Error("使い方: roundup 値 [小数部桁数]");
+        double v=ParseUtil.ParseDouble(args[1]);
+        if(double.IsNaN(v)) return sh.io.Error("数値の指定が不正です");
+        if(args.Count==3){
+            float n=ParseUtil.ParseFloat(args[2]);
+            if(float.IsNaN(n) || n<0 || n>99) return sh.io.Error("桁数の指定が不正です");
+            double t=Math.Pow(10,n);
+            sh.io.Print((((v>=0)?Math.Ceiling(v*t):Math.Floor(v*t))/t).ToString($"F{(int)n}"));
+        }else{
+            sh.io.Print(((long)((v>=0)?Math.Ceiling(v):Math.Floor(v))).ToString());
+        }
+        return 0;
+    }
+    private static int CmdRound(ComShInterpreter sh,List<string> args){
+        if(args.Count!=2 && args.Count!=3) return sh.io.Error($"使い方: round 値 [小数部桁数]");
+        double v=ParseUtil.ParseDouble(args[1]);
+        if(double.IsNaN(v)) return sh.io.Error("数値の指定が不正です");
+        if(args.Count==3){
+            float n=ParseUtil.ParseFloat(args[2]);
+            if(float.IsNaN(n) || n<0 || n>99) return sh.io.Error("桁数の指定が不正です");
+            sh.io.Print(Math.Round(v,(int)n,MidpointRounding.AwayFromZero).ToString($"F{(int)n}"));
+        }else{
+            sh.io.Print(((long)Math.Round(v,MidpointRounding.AwayFromZero)).ToString());
+        }
+        return 0;
+    }
     private static int CmdSin(ComShInterpreter sh,List<string> args){
         if(args.Count<2||args.Count>6) return sh.io.Error(
             "使い方: sin 角度(度) [半径] [中央値] [角速度(度/ms)] [時刻(ms)]"
@@ -984,24 +1059,24 @@ public static class Command {
     }
     private static int CmdAbs(ComShInterpreter sh,List<string> args){
         if(args.Count!=2) return sh.io.Error("使い方: abs 値");
-        float v=ParseUtil.ParseFloat(args[1]);
-        if(float.IsNaN(v)) return sh.io.Error("数値の指定が不正です");
-        sh.io.Print(sh.fmt.FVal(Mathf.Abs(v)));
+        double v=ParseUtil.ParseDouble(args[1]);
+        if(double.IsNaN(v)) return sh.io.Error("数値の指定が不正です");
+        sh.io.Print(sh.fmt.FVal(Math.Abs(v)));
         return 0;
     }
     private static int CmdSqrt(ComShInterpreter sh,List<string> args){
         if(args.Count!=2) return sh.io.Error("使い方: sqrt 値");
-        float v=ParseUtil.ParseFloat(args[1],-1);
+        double v=ParseUtil.ParseDouble(args[1],-1);
         if(v<0) return sh.io.Error("数値の指定が不正です");
-        sh.io.Print(sh.fmt.FVal(Mathf.Sqrt(v)));
+        sh.io.Print(sh.fmt.FVal(Math.Sqrt(v)));
         return 0;
     }
     private static int CmdMax(ComShInterpreter sh,List<string> args){
         if(args.Count<2) return sh.io.Error("使い方: max 値1 [値2 ...]");
-        float max=float.MinValue;
+        double max=double.MinValue;
         for(int i=1; i<args.Count; i++){
-            float v=ParseUtil.ParseFloat(args[i]);
-            if(float.IsNaN(v)) return sh.io.Error("数値の指定が不正です");
+            double v=ParseUtil.ParseDouble(args[i]);
+            if(double.IsNaN(v)) return sh.io.Error("数値の指定が不正です");
             if(v>max) max=v;
         }
         sh.io.Print(sh.fmt.FVal(max));
@@ -1009,10 +1084,10 @@ public static class Command {
     }
     private static int CmdMin(ComShInterpreter sh,List<string> args){
         if(args.Count<2) return sh.io.Error("使い方: min 値1 [値2 ...]");
-        float min=float.MaxValue;
+        double min=double.MaxValue;
         for(int i=1; i<args.Count; i++){
-            float v=ParseUtil.ParseFloat(args[i]);
-            if(float.IsNaN(v)) return sh.io.Error("数値の指定が不正です");
+            double v=ParseUtil.ParseDouble(args[i]);
+            if(double.IsNaN(v)) return sh.io.Error("数値の指定が不正です");
             if(v<min) min=v;
         }
         sh.io.Print(sh.fmt.FVal(min));
@@ -1031,6 +1106,21 @@ public static class Command {
             UnityEngine.Random.InitState(s);
         }
         sh.io.Print(sh.fmt.FVal(UnityEngine.Random.value));
+        return 0;
+    }
+    private static int CmdPerlinNoise(ComShInterpreter sh,List<string> args){
+        if(args.Count!=3 && args.Count!=5) return sh.io.Error("使い方: perlinnoise x y [半径 角度]");
+
+        if(!float.TryParse(args[1],out float x)) return sh.io.Error("数値の指定が不正です");
+        if(!float.TryParse(args[2],out float y)) return sh.io.Error("数値の指定が不正です");
+        if(args.Count==5){
+            if(!float.TryParse(args[3],out float r)||r<=0) return sh.io.Error("数値の指定が不正です");
+            if(!float.TryParse(args[4],out float d)) return sh.io.Error("数値の指定が不正です");
+            float rad=d*Mathf.Deg2Rad;
+            x+=r*Mathf.Cos(rad);
+            y+=r*Mathf.Sin(rad);
+        }
+        sh.io.Print(sh.fmt.FVal(Mathf.PerlinNoise(x,y)));
         return 0;
     }
     private static int CmdQuat(ComShInterpreter sh,List<string> args){
@@ -1062,7 +1152,7 @@ public static class Command {
     }
 	private static int CmdSleep(ComShInterpreter sh,List<string> args){
         if(args.Count!=2) return sh.io.Error("使い方: sleep 待機時間(ms)");
-        if(!float.TryParse(args[1],out float t)||t<0) return sh.io.Error("数値の指定が不正です");
+        if(!double.TryParse(args[1],out double t)||t<0) return sh.io.Error("数値の指定が不正です");
         if(sh.runningScript!=null) sh.runningScript.toSleep(t);
         return -1;  // マルチステートメントの後続を処理しないためエラーにする
     }
@@ -1190,9 +1280,9 @@ public static class Command {
         return 0;
     }
     private static int CmdClamp(ComShInterpreter sh,List<string> args){
-        float v,min,max;
-        if(args.Count!=4 || !float.TryParse(args[1],out v)
-            || !float.TryParse(args[2],out min) || !float.TryParse(args[3],out max) )
+        double v,min,max;
+        if(args.Count!=4 || !double.TryParse(args[1],out v)
+            || !double.TryParse(args[2],out min) || !double.TryParse(args[3],out max) )
                 return sh.io.Error("使い方: clamp 値 最小値 最大値");
         if(v<min) v=min; if(v>max) v=max;
         sh.io.Print(sh.fmt.FVal(v));

@@ -170,7 +170,7 @@ public partial class ComShInterpreter {
     public class ScriptStatus {
         public string name="";
         public int current=-1;
-        public float sleeptime=0;
+        public double sleeptime=0;
         public bool isFunc=false;
         public bool isSource=false;
         public bool enableSleep=false;
@@ -260,7 +260,7 @@ public partial class ComShInterpreter {
 			    return sh.io.Error("スクリプトにアクセスできません");
 		    }
         }
-        public int toSleep(float ms){
+        public int toSleep(double ms){
             current--;
             sleeptime=ms;
             return 0;

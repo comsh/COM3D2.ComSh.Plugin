@@ -23,6 +23,7 @@ public static class CmdCamera {
         cameraParamDic.Add("rot.z",new CmdParam<CameraMain>(CameraParamRotZ));
         cameraParamDic.Add("type",new CmdParam<CameraMain>(CameraParamType));
         cameraParamDic.Add("ui",new CmdParam<CameraMain>(CameraParamUI));
+        cameraParamDic.Add("describe",new CmdParam<CameraMain>(CameraParamDesc));
 
         CmdParamPosRotCp(cameraParamDic,"pos","position");
         CmdParamPosRotCp(cameraParamDic,"rot","rotation");
@@ -247,6 +248,22 @@ public static class CmdCamera {
         else mc.SetPos(p);
         return 1;
     }
+    private static int CameraParamDesc(ComShInterpreter sh,CameraMain mc,string val){
+        if(mc.GetCameraType()==CameraMain.CameraType.Free){
+            sh.io.PrintJoin(" ", // コマンドラインの体裁だからofsではない
+                "type F",
+                "wpos", sh.fmt.FPos(mc.GetPos()),
+                "wrot", sh.fmt.FEuler(mc.transform.rotation.eulerAngles)
+            );
+        }else{
+            sh.io.PrintJoin(" ",
+                "type T",
+                "wpos", sh.fmt.FPos(mc.GetPos()),
+                "target", sh.fmt.FPos(mc.GetTargetPos())
+            );
+        }
+        return 0;
+    } 
     private static int CameraParamUI(ComShInterpreter sh,CameraMain mc,string val){
         if(val==null) return 0;
         int onoff=ParseUtil.OnOff(val);

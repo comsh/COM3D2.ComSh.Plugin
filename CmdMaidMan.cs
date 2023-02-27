@@ -418,7 +418,7 @@ public static class CmdMaidMan {
         Animation anim=m.body0.m_Animation;
         AnimationState st=m.body0.LoadAnime(id,array,clip.type=='&',false);
         st.blendMode=(clip.type=='&')?AnimationBlendMode.Additive:AnimationBlendMode.Blend;
-        st.layer=clip.layer*10;
+        st.layer=clip.layer;
         st.speed=clip.speed;
         st.time=clip.time;
         st.wrapMode=(!tailq)?WrapMode.Once:Int2Wrap(clip.loop);
