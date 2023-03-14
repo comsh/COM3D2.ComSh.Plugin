@@ -420,6 +420,9 @@ public partial class ComShInterpreter {
         public string FQuat(Quaternion v){ return FVal(v.x)+","+FVal(v.y)+","+FVal(v.z)+","+FVal(v.w);}
         public string FMul(Vector3 v){ return FInt(v.x)+","+FInt(v.y)+","+FInt(v.z);}
         public string FEA2(Vector3 v){ return FVal(v.x)+","+FVal(v.y); }
+        public string FXY(Vector2 v){ return FVal(v.x)+","+FVal(v.y); }
+        public string FXY(Vector3 v){ return FVal(v.x)+","+FVal(v.y); }
+        public string FXY(float x,float y){ return FVal(x)+","+FVal(y); }
         public string RGB(Color c){
             int rgb=(((int)(c.r*255))<<16)|(((int)(c.g*255))<<8)|((int)(c.b*255));
             return rgb.ToString("X6");

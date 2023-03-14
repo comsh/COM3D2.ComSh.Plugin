@@ -133,7 +133,7 @@ public static class BoneUtil{
             if(s3=="/") return tr;
             string fullname=ParseUtil.CompleteBoneName(s3,false);
             var oi=tr.gameObject.GetComponent<ObjInfo>();
-            if(oi!=null) return oi.FindBone(fullname);
+            if(oi!=null) return oi.data.FindBone(fullname);
             else return CMT.SearchObjName(tr,fullname);
         }else if(s1=="maid"||s1=="man"){
             string[] s2lr=ParseUtil.LeftAndRight(s2,'.');

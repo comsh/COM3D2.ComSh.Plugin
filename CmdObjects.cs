@@ -246,7 +246,7 @@ public static class CmdObjects {
             for(int i=0; i<tr.childCount; i++) sh.io.PrintLn(tr.GetChild(i).name);
         }else if(val=="d"||val=="descendant"){
             var oi=tr.GetComponent<ObjInfo>();
-            if(oi!=null) foreach(Transform t in oi.GetBones()) sh.io.PrintLn(t.name);
+            if(oi!=null) foreach(Transform t in oi.data.bones) sh.io.PrintLn(t.name);
             else UTIL.TraverseTr(tr,(Transform t)=>{
                 if(!string.IsNullOrEmpty(t.name)) sh.io.PrintLn(t.name);
                 return 0;
@@ -444,9 +444,9 @@ public static class CmdObjects {
             }else if(v=="off"){
                 op.render.sharedMaterial.DisableKeyword(p);
             }else if(v.IndexOf(',')>=0){
-                if((err=SetColorProp(op.render.sharedMaterial,p,v))!="") return sh.io.Error(err);
+                if((err=CmdMeshes.SetColorProp(op.render.sharedMaterial,p,v))!="") return sh.io.Error(err);
             }else{
-                if((err=SetFloatProp(op.render.sharedMaterial,p,v))!="") return sh.io.Error(err);
+                if((err=CmdMeshes.SetFloatProp(op.render.sharedMaterial,p,v))!="") return sh.io.Error(err);
             }
         } else switch(p){
         case "shader":
@@ -607,9 +607,9 @@ public static class CmdObjects {
             }else if(v=="off"){
                 par.render.sharedMaterial.DisableKeyword(p);
             }else if(v.IndexOf(',')>=0){
-                if((err=SetColorProp(par.render.sharedMaterial,p,v))!="") return sh.io.Error(err);
+                if((err=CmdMeshes.SetColorProp(par.render.sharedMaterial,p,v))!="") return sh.io.Error(err);
             }else{
-                if((err=SetFloatProp(par.render.sharedMaterial,p,v))!="") return sh.io.Error(err);
+                if((err=CmdMeshes.SetFloatProp(par.render.sharedMaterial,p,v))!="") return sh.io.Error(err);
             }
         }else switch(p){
         case "shader":
@@ -759,43 +759,13 @@ public static class CmdObjects {
         }
         return 0;
     }
-    public class MeshInfo {
-        public int count=0;
-        public ObjInfo.MeshList mesh=new ObjInfo.MeshList();
-        public List<Material> material=new List<Material>();
-        public MeshInfo(Renderer[] ra){
-            int meshno=0;
-            for(int i=0; i<ra.Length; i++){
-                if(ReferenceEquals(ra[i].GetType(),typeof(SkinnedMeshRenderer))){
-                    var smr=(SkinnedMeshRenderer)ra[i];
-                    mesh.Add(new ObjInfo.MeshList.Entry{no=meshno,count=smr.sharedMesh.subMeshCount,mesh=smr.sharedMesh});
-                    Material[] mate=smr.sharedMaterials;
-                    for(int j=0; j<mate.Length; j++) material.Add(mate[j]);
-                    meshno+=smr.sharedMesh.subMeshCount;
-                }else{
-                    MeshFilter mf=ra[i].transform.GetComponent<MeshFilter>();
-                    if(mf==null) continue;
-                    mesh.Add(new ObjInfo.MeshList.Entry{no=meshno,count=mf.sharedMesh.subMeshCount,mesh=mf.sharedMesh});
-                    Material[] mate=ra[i].sharedMaterials;
-                    for(int j=0; j<mate.Length; j++) material.Add(mate[j]);
-                    meshno+=mf.sharedMesh.subMeshCount;
-                }
-            }
-            count=meshno;
-        }
-    }
 
     private static int ObjParamMesh(ComShInterpreter sh,Transform tr,string val){
-        var oi=ObjInfo.GetObjInfo(tr);
-        Renderer[] r=(oi!=null)?oi.FindComponentsArray<Renderer>():tr.GetComponentsInChildren<Renderer>();
-        if(r==null&&r.Length==0) return sh.io.Error("メッシュが見つかりません");
-
-        var mi=new MeshInfo(r);
-
+        var mi=new CmdMeshes.MeshInfo(tr);
+        if(mi.count==0) return sh.io.Error("メッシュが見つかりません");
         if(val==null){
-            ObjInfo.MeshList ml=(oi!=null && oi.mesh!=null)?oi.mesh:mi.mesh;
             for(int i=0; i<mi.count; i++){
-                sh.io.Print($"{i}{sh.ofs}count={ml.GetIndices(i).Length/3}");
+                sh.io.Print($"{i}{sh.ofs}count={mi.oid.originalMesh.GetIndices(i).Length/3}");
                 if(mi.material.Count>i) sh.io.Print($"{sh.ofs}mate={mi.material[i].name}{sh.ofs}shader={mi.material[i].shader.name}");
                 sh.io.PrintLn("");
             }
@@ -814,9 +784,9 @@ public static class CmdObjects {
             }else if(kv[1]=="off"){
                 mi.material[n].DisableKeyword(kv[0]);
             }else if(kv[1].IndexOf(',')>=0){
-                if((err=SetColorProp(mi.material[n],kv[0],kv[1]))!="") return sh.io.Error(err);
+                if((err=CmdMeshes.SetColorProp(mi.material[n],kv[0],kv[1]))!="") return sh.io.Error(err);
             }else{
-                if((err=SetFloatProp(mi.material[n],kv[0],kv[1]))!="") return sh.io.Error(err);
+                if((err=CmdMeshes.SetFloatProp(mi.material[n],kv[0],kv[1]))!="") return sh.io.Error(err);
             }
         } else switch(kv[0]){
         case "color":
@@ -830,105 +800,16 @@ public static class CmdObjects {
             mi.material[n].shader=shader;
             break;
         case "blend":
-            if(ChgBlendMode(mi.material[n],kv[1])<0) return sh.io.Error("blendにはopaque|cutout|fade|transparentのいずれかを指定して下さい");
+            if(CmdMeshes.ChgBlendMode(mi.material[n],kv[1])<0)
+                return sh.io.Error("blendにはopaque|cutout|fade|transparentのいずれかを指定して下さい");
             break;
         case "topology":
-            if(oi==null) oi=ObjInfo.AddObjInfo(tr.gameObject,"");
-            if(oi.mesh==null) oi.CopyMesh(mi.mesh);
-            if(kv[1]=="0"){
-                mi.mesh.SetIndices(new int[0],MeshTopology.Points,n);
-            }else if(kv[1]=="1"){
-                if(mi.mesh.GetTopology(n)==MeshTopology.Points) break;
-                int[] ia=oi.mesh.GetIndices(n);
-                var hs=new HashSet<int>();
-                for(int i=0; i<ia.Length; i++) hs.Add(ia[i]);
-                int[] ia2=new int[hs.Count];
-                hs.CopyTo(ia2);
-                mi.mesh.SetIndices(ia2,MeshTopology.Points,n);
-            }else if(kv[1]=="2"){
-                if(mi.mesh.GetTopology(n)==MeshTopology.Lines) break;
-                MeshTopology mt=oi.mesh.GetTopology(n);
-                if(mt!=MeshTopology.Triangles) return sh.io.Error($"未対応の形式です(topology={mt.ToString()})");
-                int[] ia=oi.mesh.GetIndices(n);
-                var hs=new HashSet<uint>();
-                for(int i=0; i<ia.Length; i+=3){
-                    hs.Add((ia[i]<ia[i+1])?(uint)(ia[i]*65536+ia[i+1]):(uint)(ia[i+1]*65536+ia[i]));
-                    hs.Add((ia[i+1]<ia[i+2])?(uint)(ia[i+1]*65536+ia[i+2]):(uint)(ia[i+2]*65536+ia[i+1]));
-                    hs.Add((ia[i+2]<ia[i])?(uint)(ia[i+2]*65536+ia[i]):(uint)(ia[i]*65536+ia[i+2]));
-                }
-                int[] ia2=new int[hs.Count*2];
-                int cnt=0;
-                foreach(var u in hs){ ia2[cnt++]=(int)(u>>16); ia2[cnt++]=(int)(u&0xffff); }
-                mi.mesh.SetIndices(ia2,MeshTopology.Lines,n);
-            }else if(kv[1]=="3"){
-                if(mi.mesh.GetTopology(n)==MeshTopology.Triangles) break;
-                mi.mesh.SetIndices(oi.mesh.GetIndices(n),oi.mesh.GetTopology(n),n);
-            }
+            CmdMeshes.MeshParamTopologySub(sh,mi,n,kv[1]);
             break;
         }
         return 1;
     }
-    private static int ChgBlendMode(Material material,string mode){
-        switch (mode) {
-        case "opaque":
-            material.SetOverrideTag("RenderType", "");
-            material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
-            material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.Zero);
-            material.SetInt("_ZWrite", 1);
-            material.DisableKeyword("_ALPHATEST_ON");
-            material.DisableKeyword("_ALPHABLEND_ON");
-            material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-            material.renderQueue = -1;
-            break;
-        case "cutout":
-            material.SetOverrideTag("RenderType", "TransparentCutout");
-            material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
-            material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.Zero);
-            material.SetInt("_ZWrite", 1);
-            material.EnableKeyword("_ALPHATEST_ON");
-            material.DisableKeyword("_ALPHABLEND_ON");
-            material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.AlphaTest;
-            break;
-        case "fade":
-            material.SetOverrideTag("RenderType", "Transparent");
-            material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-            material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-            material.SetInt("_ZWrite", 0);
-            material.DisableKeyword("_ALPHATEST_ON");
-            material.EnableKeyword("_ALPHABLEND_ON");
-            material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
-            break;
-        case "transparent":
-            material.SetOverrideTag("RenderType", "Transparent");
-            material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
-            material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-            material.SetInt("_ZWrite", 0);
-            material.DisableKeyword("_ALPHATEST_ON");
-            material.DisableKeyword("_ALPHABLEND_ON");
-            material.EnableKeyword("_ALPHAPREMULTIPLY_ON");
-            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
-            break;
-        default:
-            return -1;
-        }
-        return 0;
-    }
-    private static string SetColorProp(Material m, string key, string val){
-        if(!m.HasProperty(key)) return "指定されたプロパティは現在のシェーダでは無効です";
-        float[] fa=ParseUtil.RgbaLenient(val);
-        if(fa==null) return ParseUtil.error;
-        m.SetColor(key,new Color(fa[0],fa[1],fa[2],fa[3]));
-        return "";
-    }
-    private static string SetFloatProp(Material m, string key, string val){
-        if(!m.HasProperty(key)) return "指定されたプロパティは現在のシェーダでは無効です";
-        float f=ParseUtil.ParseFloat(val);
-        if(float.IsNaN(f)) return ParseUtil.error;
-        m.SetFloat(key,f);
-        return "";
-    }
+
 }
 public static class ObjUtil {
     public static Dictionary<string,Transform> objDic=new Dictionary<string,Transform>();
@@ -1169,7 +1050,7 @@ public static class ObjUtil {
         string mate=UTIL.Suffix(fname,".mate");
         var oi=tr.GetComponent<ObjInfo>();
         if(oi==null) return -2;
-        foreach(var r in oi.FindComponents<Renderer>())
+        foreach(var r in oi.data.FindComponents<Renderer>())
             if (r.sharedMaterials!=null && no<r.sharedMaterials.Length)
                 try{ ImportCM.LoadMaterial(mate,null,r.sharedMaterials[no]);}catch{ return -1; }
         return 0;

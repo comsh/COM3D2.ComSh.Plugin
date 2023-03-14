@@ -76,6 +76,7 @@ public static class CmdMaidMan {
         maidParamDic.Add("describe",new CmdParam<Maid>(MaidParamDesc));
         maidParamDic.Add("node",new CmdParam<Maid>(MaidParamNode));
         maidParamDic.Add("select",new CmdParam<Maid>(MaidParamSelect));
+        maidParamDic.Add("later",new CmdParam<Maid>(MaidParamLater));
 
         maidParamDic.Add("l2w",new CmdParam<Maid>(MaidParamL2W));
         maidParamDic.Add("w2l",new CmdParam<Maid>(MaidParamW2L));
@@ -105,7 +106,7 @@ public static class CmdMaidMan {
         "wrot.x","wrot.y","wrot.z",
         "scale.x","scale.y","scale.z",
         "prot","pquat",
-        "ap","handle","describe","select",
+        "ap","handle","describe","select","later",
         "l2w","w2l"
     };
 
@@ -484,8 +485,8 @@ public static class CmdMaidMan {
 
                 // ポーズエディットON時にレイヤ2以降掃除
                 var pelst=pew.CheckbtnUse.onClick;
-                for(i=0; i<lst.Count; i++) if(lst[i]==peLayerSweepHdr) break;
-                if(i==lst.Count) pelst.Insert(0,peLayerSweepHdr); // AddだとON時もOFF時も引数がTrue
+                for(i=0; i<pelst.Count; i++) if(pelst[i]==peLayerSweepHdr) break;
+                if(i==pelst.Count) pelst.Insert(0,peLayerSweepHdr); // AddだとON時もOFF時も引数がTrue
             }
         }
         return 1;
@@ -1294,6 +1295,36 @@ public static class CmdMaidMan {
         }else{
             return MaidSelectStudio(pw,m,m.status.lastName,m.status.firstName);
         }
+    }
+    private static int MaidParamLater(ComShInterpreter sh,Maid m,string val){
+        if(val==null) return 0;
+
+        var subsh=new ComShInterpreter(null,sh.env,sh.func);
+        subsh.env[ComShInterpreter.SCRIPT_ERR_ON]="1";
+        var psr=subsh.parser;
+        int r=psr.Parse(val); // パースだけしておく
+        if(r<0) return sh.io.Error(psr.error);
+
+        ComShBg.cron.KillJob("maidlater/"+m.GetInstanceID().ToString());
+        if(r==0) return 1; // 空→登録削除のみ
+
+        int ret=0;
+        long stime=DateTime.UtcNow.Ticks;
+        System.Action act=()=>{
+            subsh.env["1"]=((DateTime.UtcNow.Ticks-stime)/TimeSpan.TicksPerMillisecond).ToString();
+            psr.Reset();
+            ret=subsh.InterpretParser();
+        };
+        // OnLateUpdateEndは毎フレームクリアされるようなので、毎フレーム登録する
+        ComShBg.cron.AddJob("maidlater/"+m.GetInstanceID().ToString(),0,0,(t)=>{
+            if(m.body0.m_Bones==null || ret!=0){
+                if(m.body0!=null) m.body0.OnLateUpdateEnd-=act;
+                return -1;
+            }
+            m.body0.OnLateUpdateEnd+=act;
+            return 0;
+        });
+        return 1;
     }
 
     private static int MaidParamAttachPoint(ComShInterpreter sh,Maid m,string val){

@@ -24,6 +24,8 @@ public static class CmdCamera {
         cameraParamDic.Add("type",new CmdParam<CameraMain>(CameraParamType));
         cameraParamDic.Add("ui",new CmdParam<CameraMain>(CameraParamUI));
         cameraParamDic.Add("describe",new CmdParam<CameraMain>(CameraParamDesc));
+        cameraParamDic.Add("w2s",new CmdParam<CameraMain>(CameraParamW2S));
+        cameraParamDic.Add("screensize",new CmdParam<CameraMain>(CameraParamScreenSize));
 
         CmdParamPosRotCp(cameraParamDic,"pos","position");
         CmdParamPosRotCp(cameraParamDic,"rot","rotation");
@@ -264,6 +266,19 @@ public static class CmdCamera {
         }
         return 0;
     } 
+    private static int CameraParamW2S(ComShInterpreter sh,CameraMain mc,string val){
+        if(val==null) return 0;
+        float[] xyz=ParseUtil.Xyz(val);
+        if(xyz==null) return sh.io.Error(ParseUtil.error);
+        Vector3 xy=mc.camera.WorldToScreenPoint(new Vector3(xyz[0],xyz[1],xyz[2]));
+        // このxyは左下を0,0とする系。左上起点になおして表示
+        sh.io.PrintLn($"{(long)xy[0]},{(long)Mathf.Round(mc.camera.pixelHeight-1-xy[1])}");
+        return 0;
+    }
+    private static int CameraParamScreenSize(ComShInterpreter sh,CameraMain mc,string val){
+        sh.io.PrintLn($"{mc.camera.pixelWidth},{mc.camera.pixelHeight}");
+        return 0;
+    }
     private static int CameraParamUI(ComShInterpreter sh,CameraMain mc,string val){
         if(val==null) return 0;
         int onoff=ParseUtil.OnOff(val);

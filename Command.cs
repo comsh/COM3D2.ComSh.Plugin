@@ -114,6 +114,7 @@ public static class Command {
         CmdBones.Init();
         CmdObjects.Init();
         CmdLights.Init();
+        CmdMeshes.Init();
         CmdCamera.Init();
         CmdMisc.Init();
     }
