@@ -105,6 +105,7 @@ public static class Command {
         cmdTbl.Add("round", new Cmd(CmdRound));
         cmdTbl.Add("roundup", new Cmd(CmdRoundUp));
         cmdTbl.Add("perlinnoise", new Cmd(CmdPerlinNoise));
+        cmdTbl.Add("pixellights", new Cmd(CmdPixelLights));
 
         cmdTbl.Add("__res",new Cmd(Cmd__Resource));
         cmdTbl.Add("__files",new Cmd(Cmd__Files));
@@ -116,6 +117,7 @@ public static class Command {
         CmdLights.Init();
         CmdMeshes.Init();
         CmdCamera.Init();
+        CmdSubCamera.Init();
         CmdMisc.Init();
     }
 
@@ -361,6 +363,16 @@ public static class Command {
         }
         return 0;
     }
+    private static int CmdPixelLights(ComShInterpreter sh, List<string> args){
+        if(args.Count==1){
+            sh.io.PrintLn(QualitySettings.pixelLightCount.ToString());
+        }else{
+            if(!int.TryParse(args[1],out int n) || n<0) return sh.io.Error("数値の指定が不正です");
+            QualitySettings.pixelLightCount=n;
+        }
+        return 0;
+    }
+
     private static int CmdEcho(ComShInterpreter sh,List<string> args) {
         if(args.Count==1) return 0;
         for(int i=1; i<args.Count-1; i++) sh.io.Print(args[i]+sh.ofs);

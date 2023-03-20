@@ -69,34 +69,8 @@ public static class CmdObjects {
     private static int CmdObject(ComShInterpreter sh,List<string> args){
         Transform pftr;
         if(args.Count==1){
-            var oset=new HashSet<string>(); // 重複削除
-            if(sh.objRef.Length>0){ // スタジオモード分参照
-                pftr= UTIL.GetObjRoot(sh.objRef);
-                if(pftr!=null) for(int i=0; i<pftr.childCount; i++){
-                    Transform tr=pftr.GetChild(i);
-                    if(tr==null) continue;
-                    oset.Add(tr.name);
-                    sh.io.PrintJoinLn(sh.ofs,tr.name,sh.fmt.FPos(tr.position));
-                }
-            }
-            // 現root直下のobject
-            if((pftr=ObjUtil.GetPhotoPrefabTr(sh))!=null){
-                for(int i=0; i<pftr.childCount; i++){
-                    Transform tr=pftr.GetChild(i);
-                    if(tr==null) continue;
-                    oset.Add(tr.name);
-                    sh.io.PrintJoinLn(sh.ofs,tr.name,sh.fmt.FPos(tr.position));
-                }
-            }
-            List<string> remove=new List<string>();
-            foreach(var kv in ObjUtil.objDic){
-                Transform tr=kv.Value;
-                if(tr==null){ remove.Add(kv.Key); continue; }
-                if(oset.Contains(tr.name)) continue; // root直下のものは取得済
-                // 何かにアタッチされているもの
-                sh.io.PrintJoinLn(sh.ofs,kv.Key,(tr.parent!=null)?tr.parent.name:"orphan",sh.fmt.FPos(tr.position));
-            }
-            foreach(string k in remove) ObjUtil.objDic.Remove(k);
+            var lst=GetObjList(sh);
+            foreach(var tr in lst) sh.io.PrintJoinLn(sh.ofs,tr.name,sh.fmt.FPos(tr.position));
             return 0;
         }
         if(args[1]=="add"){
@@ -171,6 +145,39 @@ public static class CmdObjects {
             return 0;
         }
         return CmdObjectSub(sh,args[1].Split(ParseUtil.colon),args,2);
+    }
+    public static List<Transform> GetObjList(ComShInterpreter sh){
+        var ret=new List<Transform>();
+        var oset=new HashSet<string>(); // 重複削除
+        Transform pftr;
+        if(sh.objRef.Length>0){ // スタジオモード分参照
+            pftr= UTIL.GetObjRoot(sh.objRef);
+            if(pftr!=null) for(int i=0; i<pftr.childCount; i++){
+                Transform tr=pftr.GetChild(i);
+                if(tr==null) continue;
+                oset.Add(tr.name);
+                ret.Add(tr);
+            }
+        }
+        // 現root直下のobject
+        if((pftr=ObjUtil.GetPhotoPrefabTr(sh))!=null){
+            for(int i=0; i<pftr.childCount; i++){
+                Transform tr=pftr.GetChild(i);
+                if(tr==null) continue;
+                oset.Add(tr.name);
+                ret.Add(tr);
+            }
+        }
+        List<string> remove=new List<string>();
+        foreach(var kv in ObjUtil.objDic){
+            Transform tr=kv.Value;
+            if(tr==null){ remove.Add(kv.Key); continue; }
+            if(oset.Contains(tr.name)) continue; // root直下のものは取得済
+            // 何かにアタッチされているもの
+            ret.Add(tr);
+        }
+        foreach(string k in remove) ObjUtil.objDic.Remove(k);
+        return ret;
     }
     private static string AutoObjName(string name){
         string seq=UTIL.GetSeqId();
@@ -853,9 +860,7 @@ public static class ObjUtil {
         if(sa.Length==3){
             tr=BoneUtil.FindBone(sh,sa[0],sa[1],(lr[0]=="")?"/":lr[0]);
         }else if(sa.Length==2){
-            Maid m=MaidUtil.FindMaidMan(sa[0],lr[0]);
-            if(m==null) return null;
-            tr=m.body0.m_trBones; // "maid:0:/"と同じ
+            tr=BoneUtil.FindBone(sh,sa[0],lr[0],"/");
         }
         if(tr==null) return null;
         if(lr[1]!="") return tr.Find(lr[1]);

@@ -27,6 +27,8 @@ public static class CmdCamera {
         cameraParamDic.Add("w2s",new CmdParam<CameraMain>(CameraParamW2S));
         cameraParamDic.Add("screensize",new CmdParam<CameraMain>(CameraParamScreenSize));
 
+        cameraParamDic.Add("sub",new CmdParam<CameraMain>(CameraParamSub));
+
         CmdParamPosRotCp(cameraParamDic,"pos","position");
         CmdParamPosRotCp(cameraParamDic,"rot","rotation");
         CmdParamPosRotCp(cameraParamDic,"pos","wpos");
@@ -279,6 +281,22 @@ public static class CmdCamera {
         sh.io.PrintLn($"{mc.camera.pixelWidth},{mc.camera.pixelHeight}");
         return 0;
     }
+
+    public static Camera subcam;
+    private static int CameraParamSub(ComShInterpreter sh,CameraMain mc,string val){
+        if(subcam!=null){
+            Object.Destroy(subcam.targetTexture);
+            Object.Destroy(subcam.gameObject);
+        }
+        GameObject go=new GameObject("subcamera");
+        go.transform.position=Vector3.zero;
+        subcam=go.AddComponent<Camera>();
+        subcam.CopyFrom(mc.camera);
+        var rt=new RenderTexture(1024,1024,32);
+        subcam.targetTexture=rt;
+        return 0;
+    }
+
     private static int CameraParamUI(ComShInterpreter sh,CameraMain mc,string val){
         if(val==null) return 0;
         int onoff=ParseUtil.OnOff(val);

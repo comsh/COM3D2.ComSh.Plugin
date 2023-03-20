@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
+using static System.StringComparison;
 
 namespace COM3D2.ComSh.Plugin {
 
@@ -10,7 +11,8 @@ public class ObjInfo : MonoBehaviour{
     public void InitBones(){ data=new ObjInfoData(transform); }
     public void OnDestroy(){
         ObjUtil.objDic.Remove(name);
-        foreach(var m in this.data.workMesh) UnityEngine.Object.Destroy(m.mesh);
+        if(this.data!=null && this.data.workMesh!=null)
+            foreach(var m in this.data.workMesh) UnityEngine.Object.Destroy(m.mesh);
     }
 
     public static ObjInfo AddObjInfo(Transform tr,string src,TMorph morph=null){
@@ -46,7 +48,13 @@ public class ObjInfoData {
     public ObjInfoData(Transform transform){ UpdateBones(transform); }
     public void UpdateBones(Transform transform){
         bones.Clear();
-        UTIL.TraverseTr(transform,(Transform tr)=>{ bones.Add(tr); return 0; },true);
+        if(transform.parent!=null && transform.parent.name=="Offset") // メイド
+            UTIL.TraverseTr(transform,(Transform tr)=>{
+                if(!tr.name.StartsWith("_SM_",Ordinal)) bones.Add(tr);
+                return 0; 
+            },true);
+        else
+            UTIL.TraverseTr(transform,(Transform tr)=>{ bones.Add(tr); return 0; },true);
     }
     public Transform FindBone(Transform tr){
         for(int i=0; i<bones.Count; i++) if(ReferenceEquals(bones[i],tr)) return bones[i];
