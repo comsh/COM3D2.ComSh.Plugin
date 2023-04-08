@@ -792,5 +792,70 @@ public static class ParseUtil {
         if(l!=s.Length) return s.Substring(0,l);
         return s;
     }
+    public struct ColonDesc {
+        public int num;
+        public string type;
+        public string id;
+        public string bone;
+        public string path;
+        public int meshno;
+        public ColonDesc(string s){
+            this.num=0;
+            this.type="";
+            this.id=s;
+            this.bone="";
+            this.path="";
+            this.meshno=-1;
+            if(string.IsNullOrEmpty(s)) return;
+            int li=s.LastIndexOf(':');
+            if(li<0){       // objectname#0の形のみ
+                int sharp=s.IndexOf('#');
+                if(sharp>=0 && int.TryParse(s.Substring(sharp+1),out int n) && n>=0){
+                    this.num=2;
+                    this.type="obj";
+                    this.id=s.Substring(0,sharp);
+                    this.meshno=n;
+                }
+                return;
+            }
+
+            int fi=s.IndexOf(':');
+            if(fi>=0){
+                if(fi==li){ // maid:0等
+                    this.num=2;
+                    this.type=s.Substring(0,fi);
+                    int sharp=s.IndexOf('#',fi+1);
+                    if(sharp>=0 && int.TryParse(s.Substring(sharp+1),out int n) && n>=0){
+                        this.id=s.Substring(fi+1,sharp-fi-1);
+                        this.meshno=n;
+                    }else{
+                        this.id=s.Substring(fi+1);
+                    }
+                    return;
+                }else{      // maid:0:BHead等
+                    this.num=3;
+                    this.type=s.Substring(0,fi);
+                    this.id=s.Substring(fi+1,li-fi-1);
+                    this.bone=s.Substring(li+1);
+                    int p=this.bone.IndexOf('/');
+                    if(p>=0){
+                        this.path=this.bone.Substring(p+1);
+                        this.bone=this.bone.Substring(0,p);
+                        int sharp=this.path.IndexOf('#');
+                        if(sharp>=0 && int.TryParse(this.path.Substring(sharp+1),out int n) && n>=0){
+                            this.meshno=n;
+                            this.path=this.path.Substring(0,sharp);
+                        }
+                    }else{
+                        int sharp=this.bone.IndexOf('#');
+                        if(sharp>=0 && int.TryParse(this.bone.Substring(sharp+1),out int n) && n>=0){
+                            this.meshno=n;
+                            this.bone=this.bone.Substring(0,sharp);
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 }

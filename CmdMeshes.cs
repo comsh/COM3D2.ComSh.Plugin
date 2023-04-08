@@ -17,15 +17,16 @@ public static class CmdMeshes {
         meshParamDic.Add("reset",new CmdParam<SingleMesh>(MeshParamReset));
         meshParamDic.Add("texture",new CmdParam<SingleMesh>(MeshParamTexture));
         meshParamDic.Add("recalc",new CmdParam<SingleMesh>(MeshParamRecalc));
+        meshParamDic.Add("rq",new CmdParam<SingleMesh>(MeshParamRQ));
     }
     private static Dictionary<string,CmdParam<SingleMesh>> meshParamDic=new Dictionary<string,CmdParam<SingleMesh>>();
 
     private static int CmdMesh(ComShInterpreter sh,List<string> args){
         if(args.Count==1) return 0;
-        string[] lr=ParseUtil.LeftAndRight(args[1],'#');
-        string[] sa=lr[0].Split(ParseUtil.colon);
-        if(lr[1]=="" && args.Count==2){
-            Transform tr=ObjUtil.FindObj(sh,sa);
+        var cd=new ParseUtil.ColonDesc(args[1]);
+        if(cd.meshno<0){
+            if(args.Count!=2) return sh.io.Error("メッシュ番号が不正です");
+            Transform tr=ObjUtil.FindObj(sh,cd);
             if(tr==null) return sh.io.Error("オブジェクトが存在しません");
             var mi=new MeshInfo(tr);
             for(int i=0; i<mi.count; i++){
@@ -35,20 +36,19 @@ public static class CmdMeshes {
             }
             return 0;
         }
-        if(!float.TryParse(lr[1],out float no) || no<0) return sh.io.Error("メッシュ番号が不正です");
-        return CmdMeshSub(sh,sa,(int)no,args,2);
+        return CmdMeshSub(sh,cd,args,2);
     }
-    public static int CmdMeshSub(ComShInterpreter sh,string[] sa,int meshno,List<string> args,int startpos){
-        Transform tr=ObjUtil.FindObj(sh,sa);
+    public static int CmdMeshSub(ComShInterpreter sh,ParseUtil.ColonDesc cd,List<string> args,int startpos){
+        Transform tr=ObjUtil.FindObj(sh,cd);
         if(tr==null) return sh.io.Error("オブジェクトが存在しません");
         var mi=new MeshInfo(tr);
-        if(mi.count<=meshno) return sh.io.Error("指定されたメッシュが存在しません");
+        if(mi.count<=cd.meshno) return sh.io.Error("指定されたメッシュが存在しません");
         if(args.Count==startpos){
-            sh.io.Print($"count:{mi.oid.originalMesh.GetIndices(meshno).Length/3}");
-            if(mi.material.Count>meshno) sh.io.Print($"\nmaterial:{mi.material[meshno].name}\nshader:{mi.material[meshno].shader.name}");
+            sh.io.Print($"count:{mi.oid.originalMesh.GetIndices(cd.meshno).Length/3}");
+            if(mi.material.Count>cd.meshno) sh.io.Print($"\nmaterial:{mi.material[cd.meshno].name}\nshader:{mi.material[cd.meshno].shader.name}");
             return 0;
         }
-        var mesh=new SingleMesh(meshno,mi);
+        var mesh=new SingleMesh(cd.meshno,mi);
         int ret=ParamLoop(sh,mesh,meshParamDic,args,startpos);
         return ret;
     }
@@ -211,6 +211,7 @@ public static class CmdMeshes {
         }
         Shader shader=Shader.Find(val);
         if(shader==null) return sh.io.Error("指定されたシェーダは見つかりません");
+        sm.mi.EditMaterial();
         sm.mi.material[sm.submeshno].shader=shader;
         return 1;
     }
@@ -218,6 +219,7 @@ public static class CmdMeshes {
         if(val==null) return 0;
         string[] kv=ParseUtil.LeftAndRight(val,'=');
         string err;
+        sm.mi.EditMaterial();
         if(kv[1]=="on"){
             sm.mi.material[sm.submeshno].EnableKeyword(kv[0]);
         }else if(kv[1]=="off"){
@@ -263,6 +265,7 @@ public static class CmdMeshes {
             sh.io.Print(mode);
             return 0;
         }
+        sm.mi.EditMaterial();
         if(ChgBlendMode(sm.mi.material[sm.submeshno],val)<0)
             return sh.io.Error("blendにはopaque|cutout|fade|transparentのいずれかを指定して下さい");
         return 1;
@@ -363,7 +366,11 @@ public static class CmdMeshes {
         return 0;
     }
     private static int MeshParamReset(ComShInterpreter sh,SingleMesh sm,string val){
-        sm.mi.RestoreMesh(sm.submeshno);
+        int mode=0;
+        if(val!=null && val!=""
+            && (!int.TryParse(val,out mode) || mode<0 || mode>2)) return sh.io.Error("0～2で指定してください");
+        if(mode!=1) sm.mi.RestoreMesh(sm.submeshno);
+        if(mode!=0) sm.mi.RestoreMaterial(sm.submeshno);
         return 0;
     }
     private static int MeshParamRecalc(ComShInterpreter sh,SingleMesh sm,string val){
@@ -385,6 +392,7 @@ public static class CmdMeshes {
     private static int MeshParamTexture(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null || val=="") return 0;
 
+        sm.mi.EditMaterial();
         Material mate=sm.mi.material[sm.submeshno];
 
         string prop="_MainTex",right="";
@@ -392,20 +400,40 @@ public static class CmdMeshes {
         if(lr[1]=="") right=lr[0]; else { prop=lr[0]; right=lr[1]; }
         if(!mate.HasProperty(prop)) return sh.io.Error("指定されたプロパティは現在のシェーダでは無効です");
 
+        int wrap=1;
+        lr=ParseUtil.LeftAndRight(val,',');
+        if(lr[1]!=""){
+            right=lr[0];
+            if(!int.TryParse(lr[1],out wrap) || wrap<0 || wrap>1) return sh.io.Error("書式が不正です");
+        }
+
         Camera cam;
         if(ObjUtil.objDic.TryGetValue(right,out Transform camTr) && (cam=camTr.GetComponent<Camera>())!=null){
-            mate.SetTexture(prop,cam.targetTexture);
+            var tex=cam.targetTexture;
+            tex.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
+            mate.SetTexture(prop,tex);
         }else try{
             string fname=UTIL.Suffix(right,".tex");
             if(GameUty.IsExistFile(fname,GameUty.FileSystem)){
                 var tere=ImportCM.LoadTexture(GameUty.FileSystem,fname,false);
                 var t2d=tere.CreateTexture2D();
                 t2d.name=lr[1];
+                t2d.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
                 mate.SetTexture(prop,t2d);
             }else return sh.io.Error("texファイルが見つかりません");
         }catch{
             return sh.io.Error("texファイルの読み込みに失敗しました");
         }
+        return 1;
+    }
+    private static int MeshParamRQ(ComShInterpreter sh,SingleMesh sm,string val){
+        if(val==null){
+            sh.io.Print(sm.mi.material[sm.submeshno].renderQueue.ToString());
+            return 0;
+        }
+        if(!int.TryParse(val,out int n) || n<0 || n>5000) return sh.io.Error("0～5000の数値を指定して下さい");
+        sm.mi.EditMaterial();
+        sm.mi.material[sm.submeshno].renderQueue=n;
         return 1;
     }
 
@@ -437,32 +465,14 @@ public static class CmdMeshes {
             oid=(oi==null)?new ObjInfoData(tr):oi.data;
 
             if(oid.workMesh==null){
-                oid.BackupMesh();
+                oid.Backup();
                 mesh=oid.originalMesh;
+                material=oid.originalMate;
             }else{
                 mesh=oid.workMesh;
+                material=oid.workMate;
             }
             count=(mesh.Count==0)?0:mesh[mesh.Count-1].no+mesh[mesh.Count-1].submeshcount;
-
-            material=new List<Material>();
-            foreach(var b in oid.bones){
-                Renderer r=b.GetComponent<Renderer>();
-                if(r==null) continue;
-                if(ReferenceEquals(r.GetType(),typeof(SkinnedMeshRenderer))){
-                    var smr=(SkinnedMeshRenderer)r;
-                    int n=smr.sharedMesh.subMeshCount;
-                    Material[] mate=smr.sharedMaterials;
-                    n=(n>mate.Length)?mate.Length:n;    // 1サブメッシュ1マテリアルのみ対応
-                    for(int j=0; j<n; j++) material.Add(mate[j]);
-                }else{
-                    MeshFilter mf=r.transform.GetComponent<MeshFilter>();
-                    if(mf==null) continue;
-                    int n=mf.sharedMesh.subMeshCount;
-                    Material[] mate=r.sharedMaterials;
-                    n=(n>mate.Length)?mate.Length:n;    // 1サブメッシュ1マテリアルのみ対応
-                    for(int j=0; j<n; j++) material.Add(mate[j]);
-                }
-            }
         }
         public void EditMesh(){
             if(oi==null){
@@ -486,12 +496,37 @@ public static class CmdMeshes {
                 MeshFilter mf=ra[midx].transform.GetComponent<MeshFilter>();
                 if(mf==null) return -1;
                 newMesh=Object.Instantiate(oid.originalMesh[midx].mesh);
-                mf.sharedMesh=newMesh;
+                mf.mesh=newMesh;
             }
             var e=oid.workMesh[midx];
             Object.Destroy(e.mesh);
             e.mesh=newMesh;
             oid.workMesh[midx]=e;
+            return 0;
+        }
+        public void EditMaterial(){
+            if(oi==null){
+                // 編集すると後始末が必要になるので、ComShで追加したオブジェト以外にもObjInfoを付ける
+                oi=ObjInfo.AddObjInfo(transform,oid,"",null);
+            }
+            oid.CloneMaterial();
+            material=oid.workMate;
+        }
+        public int RestoreMaterial(int submeshno){
+            if(oid==null || oid.originalMate==null || oid.workMate==null) return -1;
+            int midx=oid.originalMesh.FindMeshIdx(submeshno);
+
+            Renderer[] ra=oid.FindComponentsToArray<Renderer>();
+            if(ra==null || ra.Length<midx) return -1;
+
+            Material newMaterial=Object.Instantiate(oid.originalMate[submeshno]);
+            Object.Destroy(oid.workMate[submeshno]);
+            oid.workMate[submeshno]=newMaterial;
+
+            var ma=ra[midx].materials;
+            ma[submeshno-oid.originalMesh[midx].no]=newMaterial;
+            ra[midx].materials=ma;
+
             return 0;
         }
     }

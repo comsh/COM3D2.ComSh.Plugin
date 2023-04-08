@@ -14,6 +14,7 @@ public static class CmdSubCamera {
         subcamParamDic.Add("w2s",new CmdParam<Camera>(SubCamParamW2S));
         subcamParamDic.Add("screensize",new CmdParam<Camera>(SubCamParamScreenSize));
         subcamParamDic.Add("describe",new CmdParam<Camera>(SubCamParamDesc));
+        subcamParamDic.Add("range",new CmdParam<Camera>(SubCamParamRange));
     }
     private static Dictionary<string,CmdParam<Camera>> subcamParamDic=new Dictionary<string,CmdParam<Camera>>();
 
@@ -45,7 +46,10 @@ public static class CmdSubCamera {
             var rt=new RenderTexture(w,h,32);
             rt.filterMode=FilterMode.Bilinear;
             rt.antiAliasing=QualitySettings.antiAliasing;
+            rt.wrapMode=TextureWrapMode.Repeat;
             cam.targetTexture=rt;
+            cam.backgroundColor=new Color(0,0,0,0);
+            cam.clearFlags=CameraClearFlags.Color;
             cam.transform.position=Vector3.zero;
             cam.transform.rotation=Quaternion.identity;
             ObjUtil.objDic.Add(go.transform.name,go.transform);
@@ -56,6 +60,9 @@ public static class CmdSubCamera {
                 Transform tr=ObjUtil.FindObj(sh,args[i]);
                 if(tr!=null){
                     ObjUtil.objDic.Remove(tr.name);
+                    var cam=tr.GetComponent<Camera>();
+                    cam.targetTexture.Release();
+                    cam.targetTexture.DiscardContents();
                     UnityEngine.Object.Destroy(tr.gameObject);
                 }
             }
@@ -126,11 +133,24 @@ public static class CmdSubCamera {
         float[] xy=ParseUtil.Xy(val);
         if(xy==null) return sh.io.Error(ParseUtil.error);
         RenderTexture tex=cam.targetTexture;
-        if(tex!=null) Object.Destroy(tex);
+        if(tex!=null){
+            tex.Release();
+            tex.DiscardContents();
+            Object.Destroy(tex);
+        }
         var rt=new RenderTexture((int)xy[0],(int)xy[1],32);
         rt.filterMode=FilterMode.Bilinear;
         rt.antiAliasing=QualitySettings.antiAliasing;
         cam.targetTexture=rt;
+        return 1;
+    }
+    private static int SubCamParamRange(ComShInterpreter sh,Camera cam,string val){
+        if(val==null){
+            sh.io.Print(sh.fmt.FVal(cam.farClipPlane));
+            return 0;
+        }
+        if(!float.TryParse(val,out float f)||f<=0) return sh.io.Error("数値が不正です");
+        cam.farClipPlane=f;
         return 1;
     }
 }

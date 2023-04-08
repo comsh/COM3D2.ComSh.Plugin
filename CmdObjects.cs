@@ -47,6 +47,7 @@ public static class CmdObjects {
         objParamDic.Add("prot",new CmdParam<Transform>(_CmdParamPRot));
         objParamDic.Add("pquat",new CmdParam<Transform>(_CmdParamPQuat));
         objParamDic.Add("name",new CmdParam<Transform>(ObjParamName));
+        objParamDic.Add("layer",new CmdParam<Transform>(ObjParamLayer));
         objParamDic.Add("motion",new CmdParam<Transform>(ObjParamMotion));
         objParamDic.Add("particle",new CmdParam<Transform>(ObjParamParticle));
         objParamDic.Add("handle",new CmdParam<Transform>(ObjParamHandle));
@@ -186,8 +187,17 @@ public static class CmdObjects {
         return ret;
     }
     public static int CmdObjectSub(ComShInterpreter sh,string[] sa,List<string> args,int startpos){
-        if(ObjUtil.GetPhotoPrefabTr(sh,true)==null) return sh.io.Error("オブジェクトが存在しません");
         Transform tr=ObjUtil.FindObj(sh,sa);
+        if(tr==null) return sh.io.Error("オブジェクトが存在しません");
+        if(args.Count==startpos){
+            sh.io.PrintLn2("iid:",tr.gameObject.GetInstanceID().ToString());
+            UTIL.PrintTrInfo(sh,tr);
+            return 0;
+        }
+        return ParamLoop(sh,tr,objParamDic,args,startpos);
+    }
+    public static int CmdObjectSub(ComShInterpreter sh,ParseUtil.ColonDesc cd,List<string> args,int startpos){
+        Transform tr=ObjUtil.FindObj(sh,cd);
         if(tr==null) return sh.io.Error("オブジェクトが存在しません");
         if(args.Count==startpos){
             sh.io.PrintLn2("iid:",tr.gameObject.GetInstanceID().ToString());
@@ -307,12 +317,13 @@ public static class CmdObjects {
         if (fromrdr==null || fromrdr.sharedMaterial==null || fromidx>=fromrdr.sharedMaterials.Length)
             return sh.io.Error("マテリアルが見つかりません");
  
-        Renderer r=tr.GetComponentInChildren<Renderer>();
-        if (r==null || r.sharedMaterial==null || idx>=r.sharedMaterials.Length)
-            return sh.io.Error("マテリアルが見つかりません");
-
-        r.sharedMaterials[idx].shader=fromrdr.sharedMaterials[fromidx].shader;
-        r.sharedMaterials[idx].CopyPropertiesFromMaterial(fromrdr.sharedMaterials[fromidx]);
+        var mi=new CmdMeshes.MeshInfo(tr);
+        if(mi==null) return sh.io.Error("マテリアルが見つかりません");
+        if(mi.material.Count<=idx) return sh.io.Error("マテリアル番号の指定が不正です");
+        mi.EditMaterial();
+        var ma=fromrdr.sharedMaterials;
+        mi.material[idx].shader=ma[fromidx].shader;
+        mi.material[idx].CopyPropertiesFromMaterial(ma[fromidx]);
         return 1;
     }
     private static int ObjParamShape(ComShInterpreter sh,Transform tr,string val){
@@ -343,6 +354,15 @@ public static class CmdObjects {
         }
         ObjUtil.RenameTr(tr,val);
         ObjInfo.UpdObjInfo(tr); // (あれば)ボーン情報更新
+        return 1;
+    }
+    private static int ObjParamLayer(ComShInterpreter sh,Transform tr,string val){
+        if(val==null){
+            sh.io.Print(tr.gameObject.layer.ToString());
+            return 0;
+        }
+        if(!int.TryParse(val,out int n)||n<0||n>31) return sh.io.Error("レイヤ番号の指定が不正です");
+        tr.gameObject.layer=n;
         return 1;
     }
 
@@ -405,6 +425,11 @@ public static class CmdObjects {
         public ParticleAnimator anim;
         public ParticleEmitter emit;
         public ParticleRenderer render;
+        public ParticleInfo pi;
+        public Material EditMaterial(){
+            if(pi==null) pi=emit.gameObject.AddComponent<ParticleInfo>();
+            return render.material;
+        }
     }   
     private static int ObjParamOldParticle(ComShInterpreter sh,Transform tr,string val){
         var emit=tr.gameObject.GetComponentsInChildren<ParticleEmitter>();
@@ -414,6 +439,7 @@ public static class CmdObjects {
             op[i].anim=emit[i].gameObject.GetComponent<ParticleAnimator>();
             op[i].emit=emit[i];
             op[i].render=emit[i].gameObject.GetComponent<ParticleRenderer>();
+            op[i].pi=emit[i].gameObject.GetComponent<ParticleInfo>();
         }
         if(val==null){
             if(emit!=null) for(int i=0; i<emit.Length; i++) if(emit[i]!=null){
@@ -441,26 +467,31 @@ public static class CmdObjects {
     }
 
     private static int OldParticleSub(ComShInterpreter sh,OldParticle op,string p,string v){
-        float f; float[] fa;
+        float f; float[] fa; Material mate;
         if(p.Length==0) return sh.io.Error("書式が不正です");
         if(p[0]=='_'){
             if(op.render==null || op.render.sharedMaterial==null) return 0;
             string err;
             if(v=="on"){
-                op.render.sharedMaterial.EnableKeyword(p);
+                mate=op.EditMaterial();
+                mate.EnableKeyword(p);
             }else if(v=="off"){
-                op.render.sharedMaterial.DisableKeyword(p);
+                mate=op.EditMaterial();
+                mate.DisableKeyword(p);
             }else if(v.IndexOf(',')>=0){
-                if((err=CmdMeshes.SetColorProp(op.render.sharedMaterial,p,v))!="") return sh.io.Error(err);
+                mate=op.EditMaterial();
+                if((err=CmdMeshes.SetColorProp(mate,p,v))!="") return sh.io.Error(err);
             }else{
-                if((err=CmdMeshes.SetFloatProp(op.render.sharedMaterial,p,v))!="") return sh.io.Error(err);
+                mate=op.EditMaterial();
+                if((err=CmdMeshes.SetFloatProp(mate,p,v))!="") return sh.io.Error(err);
             }
         } else switch(p){
         case "shader":
             if(op.render==null) return 0;
             var shader=Shader.Find(v);
             if(shader==null) return sh.io.Error("指定されたシェーダは見つかりません");
-            op.render.sharedMaterial.shader=shader;
+            mate=op.EditMaterial();
+            mate.shader=shader;
             break;
         case "speedlimit":
             return sh.io.Error("パーティクルが旧形式のため設定できません");
@@ -564,6 +595,11 @@ public static class CmdObjects {
     private struct NewParticle {
         public ParticleSystem sys;
         public ParticleSystemRenderer render;
+        public ParticleInfo pi;
+        public Material EditMaterial(){
+            if(pi==null) sys.gameObject.AddComponent<ParticleInfo>();
+            return render.material;
+        }
     }   
     private static int ObjParamParticle(ComShInterpreter sh,Transform tr,string val){
         var pa=tr.gameObject.GetComponentsInChildren<ParticleSystem>();
@@ -572,6 +608,7 @@ public static class CmdObjects {
         for(int i=0; i<pa.Length; i++){
             par[i].sys=pa[i];
             par[i].render=pa[i].gameObject.GetComponent<ParticleSystemRenderer>();
+            par[i].pi=pa[i].gameObject.GetComponent<ParticleInfo>();
         }
         if(val==null){
             if(pa!=null) for(int i=0; i<pa.Length; i++) if(pa[i]!=null){
@@ -604,26 +641,31 @@ public static class CmdObjects {
         var vot=par.sys.limitVelocityOverLifetime;
         var sot=par.sys.sizeOverLifetime;
         var shape=par.sys.shape;
-        int d; float[] fa; float f;
+        int d; float[] fa; float f; Material mate;
         if(p.Length==0) return sh.io.Error("書式が不正です");
         if(p[0]=='_'){
             if(par.render==null || par.render.sharedMaterial==null) return 0;
             string err;
             if(v=="on"){
-                par.render.sharedMaterial.EnableKeyword(p);
+                mate=par.EditMaterial();
+                mate.EnableKeyword(p);
             }else if(v=="off"){
-                par.render.sharedMaterial.DisableKeyword(p);
+                mate=par.EditMaterial();
+                mate.DisableKeyword(p);
             }else if(v.IndexOf(',')>=0){
-                if((err=CmdMeshes.SetColorProp(par.render.sharedMaterial,p,v))!="") return sh.io.Error(err);
+                mate=par.EditMaterial();
+                if((err=CmdMeshes.SetColorProp(mate,p,v))!="") return sh.io.Error(err);
             }else{
-                if((err=CmdMeshes.SetFloatProp(par.render.sharedMaterial,p,v))!="") return sh.io.Error(err);
+                mate=par.EditMaterial();
+                if((err=CmdMeshes.SetFloatProp(mate,p,v))!="") return sh.io.Error(err);
             }
         }else switch(p){
         case "shader":
             if(par.render==null) return 0;
             var shader=Shader.Find(v);
             if(shader==null) return sh.io.Error("指定されたシェーダは見つかりません");
-            par.render.sharedMaterial.shader=shader;
+            mate=par.EditMaterial();
+            mate.shader=shader;
             break;
         case "lifetime":
             fa=ParseUtil.MinMax(v);
@@ -787,26 +829,33 @@ public static class CmdObjects {
         if(kv[0][0]=='_'){
             string err;
             if(kv[1]=="on"){
+                mi.EditMaterial();
                 mi.material[n].EnableKeyword(kv[0]);
             }else if(kv[1]=="off"){
+                mi.EditMaterial();
                 mi.material[n].DisableKeyword(kv[0]);
             }else if(kv[1].IndexOf(',')>=0){
+                mi.EditMaterial();
                 if((err=CmdMeshes.SetColorProp(mi.material[n],kv[0],kv[1]))!="") return sh.io.Error(err);
             }else{
+                mi.EditMaterial();
                 if((err=CmdMeshes.SetFloatProp(mi.material[n],kv[0],kv[1]))!="") return sh.io.Error(err);
             }
         } else switch(kv[0]){
         case "color":
             fa=ParseUtil.Rgba(kv[1]);
             if(fa==null) return sh.io.Error(ParseUtil.error);
+            mi.EditMaterial();
             mi.material[n].color=new Color(fa[0],fa[1],fa[2],fa[3]);
             break;
         case "shader":
             Shader shader=Shader.Find(kv[1]);
             if(shader==null) return sh.io.Error("指定されたシェーダは見つかりません");
+            mi.EditMaterial();
             mi.material[n].shader=shader;
             break;
         case "blend":
+            mi.EditMaterial();
             if(CmdMeshes.ChgBlendMode(mi.material[n],kv[1])<0)
                 return sh.io.Error("blendにはopaque|cutout|fade|transparentのいずれかを指定して下さい");
             break;
@@ -839,13 +888,13 @@ public static class ObjUtil {
 
         if(sh==null) return null;
         tr=GetPhotoPrefabTr(sh);
-        if(tr==null) return null;
-        tr=tr.Find(name);
-        if(tr!=null) return tr;
+        if(tr!=null){
+            tr=tr.Find(name);
+            if(tr!=null) return tr;
+        }
         if(sh.objRef!=""){
             tr=UTIL.GetObjRoot(sh.objRef);
-            if(tr==null) return null;
-            return tr.Find(name);
+            if(tr!=null) return tr.Find(name);
         }
         return null;
     }
@@ -866,6 +915,19 @@ public static class ObjUtil {
         if(lr[1]!="") return tr.Find(lr[1]);
         return tr;
     }
+    public static Transform FindObj(ComShInterpreter sh,ParseUtil.ColonDesc cd){
+        Transform tr=null;
+        if(cd.num==0 && cd.id!="") return FindObj(sh,cd.id);
+        if(cd.num==3){
+            tr=BoneUtil.FindBone(sh,cd.type,cd.id,(cd.bone=="")?"/":cd.bone);
+        }else{
+            if(cd.type=="obj") return FindObj(sh,cd.id);
+            tr=BoneUtil.FindBone(sh,cd.type,cd.id,"/");
+        }
+        if(tr==null) return null;
+        if(cd.path!="") return tr.Find(cd.path);
+        return tr;
+    }
 
     public static void RenameTr(Transform tr, string name){
         if(ObjUtil.objDic.TryGetValue(tr.name,out Transform t) && ReferenceEquals(tr,t)){
@@ -878,7 +940,7 @@ public static class ObjUtil {
         if(sh.objBase==string.Empty){
             GameObject bg=GameMain.Instance.BgMgr.BgObject;
             if(bg!=null) return bg.transform;
-            return null;
+            return UTIL.GetObjRoot("");
         }else return UTIL.GetObjRoot(sh.objBase,create);
     }
 
@@ -941,7 +1003,7 @@ public static class ObjUtil {
         b.transform.localPosition=pos;
         b.transform.localRotation=Quaternion.Euler(rot);
         b.transform.localScale=scl;
-        var oi=ObjInfo.AddObjInfo(b,src,morph);
+        ObjInfo.AddObjInfo(b,src,morph);
 
         if(mo!=null){
             if(mo.material!=null)
@@ -1055,9 +1117,14 @@ public static class ObjUtil {
         string mate=UTIL.Suffix(fname,".mate");
         var oi=tr.GetComponent<ObjInfo>();
         if(oi==null) return -2;
-        foreach(var r in oi.data.FindComponents<Renderer>())
-            if (r.sharedMaterials!=null && no<r.sharedMaterials.Length)
-                try{ ImportCM.LoadMaterial(mate,null,r.sharedMaterials[no]);}catch{ return -1; }
+        foreach(var r in oi.data.FindComponents<Renderer>()){
+            var sma=r.sharedMaterials;
+            if (sma!=null && no<sma.Length)
+                try{
+                    sma[no]=ImportCM.LoadMaterial(mate,null,sma[no]);
+                    r.sharedMaterials=sma;
+                }catch{ return -1; }
+        }
         return 0;
     }
     private static int ChkBoneGender(Transform t){

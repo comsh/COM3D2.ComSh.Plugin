@@ -57,7 +57,7 @@ public partial class ComShInterpreter {
             int ret=InterpretTokens(tokens,parser.prevEoL,parser.currentEoL,canSleep);
             if(ret<0) return ret;
             if(exitq) return io.OK(io.exitStatus);
-            if (envChanged) { OnEnvChanged(); envChanged = false; } // 変数変更後最初のコマンド実行時
+            if (envChanged) { OnEnvChanged(); envChanged = false; }
         }
         return io.OK();
     }
@@ -73,19 +73,21 @@ public partial class ComShInterpreter {
             tokens[0]=tokens[0].Substring(1);
         }
 
-        if(tokens[0].IndexOf(':')>0){   // maid:0:BHead などコロン記法
-            string[] sa=tokens[0].Split(ParseUtil.colon);
-            if(sa.Length==2){
-                switch(sa[0]){
-                case "maid": ret=CmdMaidMan.CmdMaidSub(this,sa[1],tokens,1); break;
-                case "man": ret=CmdMaidMan.CmdManSub(this,sa[1],tokens,1); break;
-                case "obj": ret=CmdObjects.CmdObjectSub(this,sa,tokens,1); break;
-                case "light": ret=CmdLights.CmdLightSub(this,sa[1],tokens,1); break;
+        var cd=new ParseUtil.ColonDesc(tokens[0]);
+        if(cd.num>0){   // maid:0:BHead などのコロン記法
+            if(cd.meshno>=0){
+                ret=CmdMeshes.CmdMeshSub(this,cd,tokens,1);
+            }else if(cd.num==3 || cd.path!=""){
+                ret=CmdObjects.CmdObjectSub(this,cd,tokens,1);
+            }else {
+                switch(cd.type){
+                case "maid": ret=CmdMaidMan.CmdMaidSub(this,cd.id,tokens,1); break;
+                case "man": ret=CmdMaidMan.CmdManSub(this,cd.id,tokens,1); break;
+                case "obj": ret=CmdObjects.CmdObjectSub(this,cd,tokens,1); break;
+                case "light": ret=CmdLights.CmdLightSub(this,cd.id,tokens,1); break;
                 default: ret=io.Error("コマンドが存在しません"); break;
                 }
-            }else if(sa.Length==3){
-                ret=CmdObjects.CmdObjectSub(this,sa,tokens,1);
-            }else ret=io.Error("コマンドが存在しません");
+            }
         }else if((cmd=Command.GetCmd(tokens[0]))!=null){    // 通常のコマンド処理
             if(tokens[0]!="sleep" || canSleep) ret=cmd.Invoke(this,tokens);
         }else if(func.ContainsKey(tokens[0])){              // func
@@ -160,9 +162,14 @@ public partial class ComShInterpreter {
     public static string FullScriptName(string scriptName){
         if(UTIL.dosdev.Match(Path.GetFileName(scriptName)).Success) return "";
         string filename=Path.GetFullPath(scriptFolder+scriptName);
-        string path=Path.GetDirectoryName(filename);
+        string path=Path.GetDirectoryName(filename)+@"\";
         // ..\等でscriptFolderより上のフォルダを指定していたら弾く
-        if((path.Length+1)<scriptFolder.Length) return "";
+        if(path.Length<scriptFolder.Length) return "";
+
+        // データ用のフォルダからはスクリプト実行禁止
+        string f1=path.Substring(scriptFolder.Length);
+        if(f1==@"bin\"||f1==@"kvs\"||f1==@"export\") return "";
+
         if(File.Exists(filename)) return filename;
         if(!filename.EndsWith(".comsh",StringComparison.Ordinal) && File.Exists(filename+".comsh")) return filename+=".comsh";
         return "";

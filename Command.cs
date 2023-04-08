@@ -61,6 +61,9 @@ public static class Command {
         cmdTbl.Add("rnd",new Cmd(CmdRnd));
         cmdTbl.Add("sleep",new Cmd(CmdSleep));
         cmdTbl.Add("kvs",new Cmd(CmdKvs));
+        cmdTbl.Add("kvs.save",new Cmd(CmdKvsSave));
+        cmdTbl.Add("kvs.load",new Cmd(CmdKvsLoad));
+        cmdTbl.Add("kvs.clear",new Cmd(CmdKvsClear));
         cmdTbl.Add("distance",new Cmd(CmdDistance));
         cmdTbl.Add("replace",new Cmd(CmdReplace));
         cmdTbl.Add("split",new Cmd(CmdSplit));
@@ -1183,6 +1186,60 @@ public static class Command {
         }else return sh.io.Error("引数が多すぎます");
         return 0;
     }
+    private static string kvsdir=ComShInterpreter.scriptFolder+@"kvs\";
+    private static int mkKvsDir(){
+        try{
+            if(!Directory.Exists(kvsdir)) Directory.CreateDirectory(kvsdir);
+        }catch{ return -1; }
+        return 0;
+    }
+    private static int CmdKvsClear(ComShInterpreter sh,List<string> args){
+        if(args.Count>2) return sh.io.Error("使い方: kvs.clear [プレフィクス]");
+        string prefix=(args.Count==2)?args[1]:"";
+        var kvs=Variables.g;
+        List<string> delkey=new List<string>();
+        foreach(var kv in kvs){
+            if(prefix!="" && !kv.Key.StartsWith(prefix,Ordinal)) continue;
+            delkey.Add(kv.Key);
+        }
+        foreach(var k in delkey) kvs.Remove(k);
+        return 0;
+    }
+    private static int CmdKvsSave(ComShInterpreter sh,List<string> args){
+        if(args.Count==1 || args.Count>3) return sh.io.Error("使い方: kvs.save 名前 [プレフィクス]");
+        string fn=args[1], prefix=(args.Count==3)?args[2]:"";
+        if(fn=="" || !UTIL.ValidName(fn)) return sh.io.Error("名前の指定が不正です");
+        if(mkKvsDir()<0) return sh.io.Error("処理に失敗しました");
+        try{
+            var kvs=Variables.g;
+            using (var wr=new StreamWriter( kvsdir+fn,false,Encoding.UTF8)){
+                if(prefix!=""){
+                    foreach(var kv in kvs)
+                        if(kv.Key.StartsWith(prefix,Ordinal)) wr.Write($"{kv.Key}\t{kv.Value}\t");
+                }else foreach(var kv in kvs) wr.Write($"{kv.Key}\t{kv.Value}\t");
+            }
+        }catch{
+            return sh.io.Error("書き込みに失敗しました");
+        }
+        return 0;
+    }
+    private static int CmdKvsLoad(ComShInterpreter sh,List<string> args){
+        if(args.Count==1 || args.Count>3) return sh.io.Error("使い方: kvs.load 名前 [プレフィクス]");
+        string fn=args[1], prefix=(args.Count==3)?args[2]:"";
+        if(fn=="" || !UTIL.ValidName(fn)) return sh.io.Error("名前の指定が不正です");
+        if(mkKvsDir()<0) return sh.io.Error("処理に失敗しました");
+        try{ 
+            string buf=File.ReadAllText( kvsdir+fn,Encoding.UTF8);
+            var idx=new int[3];
+            string key,value;
+            while( ParseUtil.CutNext(buf,'\t',idx) ){
+                key=buf.Substring(idx[0],idx[1]);
+                if(ParseUtil.CutNext(buf,'\t',idx)) value=buf.Substring(idx[0],idx[1]); else break;
+                if(key.StartsWith(prefix,Ordinal)) Variables.g[key]=value;
+            }
+        }catch{ return sh.io.Error("読み込みに失敗しました"); }
+        return 0;
+    }
     private static bool IsKvsNameValid(string key){
         int i;
         for(i=0; i<key.Length; i++) if(!(ParseUtil.IsWordChar(key[i])||key[i]=='/')) break;
@@ -1864,11 +1921,14 @@ public static class UTIL {
         "add","del","main","Offset","AllOffset","none","off","maid","man","obj","light","clone"
     };
     public static Transform GetObjRoot(string name,bool create=false){
-        Transform pftr=GameMain.Instance.BgMgr.Parent.transform.Find(name);
+        Transform bg=GameMain.Instance.gameObject.transform.Find("BG");
+        if(name=="") return bg;
+        if(bg==null) return null;
+        Transform pftr=bg.Find(name);
         if(pftr!=null) return pftr;
         if(create){
             pftr=(new GameObject(name)).transform;
-            pftr.SetParent(GameMain.Instance.BgMgr.Parent.transform, false);
+            pftr.SetParent(bg, false);
             return pftr;
         }else return null;
     }
