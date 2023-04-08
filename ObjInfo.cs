@@ -99,7 +99,7 @@ public class ObjInfoData {
             if(r==null) continue;
             if(ReferenceEquals(r.GetType(), typeof(SkinnedMeshRenderer))) {
                 var smr = (SkinnedMeshRenderer)r;
-                originalMesh.Add(new MeshList.Entry { no=meshno,submeshcount=smr.sharedMesh.subMeshCount,mesh=smr.sharedMesh,ownq=false });
+                originalMesh.Add(new MeshList.Entry { no=meshno,submeshcount=smr.sharedMesh.subMeshCount,mesh=smr.sharedMesh });
                 int n=smr.sharedMesh.subMeshCount;
                 meshno+=n;
 
@@ -109,7 +109,7 @@ public class ObjInfoData {
             }else{
                 MeshFilter mf=r.transform.GetComponent<MeshFilter>();
                 if(mf==null) continue;
-                originalMesh.Add(new MeshList.Entry { no=meshno,submeshcount=mf.sharedMesh.subMeshCount,mesh=mf.sharedMesh,ownq=false });
+                originalMesh.Add(new MeshList.Entry { no=meshno,submeshcount=mf.sharedMesh.subMeshCount,mesh=mf.sharedMesh });
                 int n=mf.sharedMesh.subMeshCount;
                 meshno+=n;
 
@@ -133,12 +133,12 @@ public class ObjInfoData {
                 var smr = (SkinnedMeshRenderer)r;
                 Mesh newmesh=Object.Instantiate(smr.sharedMesh);
                 smr.sharedMesh=newmesh;
-                workMesh.Add(new MeshList.Entry { no=meshno,submeshcount=smr.sharedMesh.subMeshCount,mesh=newmesh,ownq=true });
+                workMesh.Add(new MeshList.Entry { no=meshno,submeshcount=smr.sharedMesh.subMeshCount,mesh=newmesh });
                 meshno +=smr.sharedMesh.subMeshCount;
             }else{
                 MeshFilter mf=r.transform.GetComponent<MeshFilter>();
                 if(mf==null) continue;
-                workMesh.Add(new MeshList.Entry { no=meshno,submeshcount=mf.sharedMesh.subMeshCount,mesh=mf.mesh,ownq=true });
+                workMesh.Add(new MeshList.Entry { no=meshno,submeshcount=mf.sharedMesh.subMeshCount,mesh=mf.mesh });
                 meshno += mf.sharedMesh.subMeshCount;
             }
         }
@@ -177,7 +177,6 @@ public class ObjInfoData {
             public int no;              // オブジェクト全体での通し番号。このメッシュの0番サブメッシュがオブジェクト全体で何番目か
             public int submeshcount;    // このメッシュ内のサブメッシュ数
             public Mesh mesh;           // メッシュ本体。triangleで複数のサブメッシュに分かれている
-            public bool ownq;           // メッシュのインスタンスを作ったらtrue
         }
         public int submeshCount=0;
         private static int[] triangle_empty=new int[0];
