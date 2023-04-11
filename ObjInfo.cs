@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
+using System.Reflection;
 using static System.StringComparison;
 
 namespace COM3D2.ComSh.Plugin {
@@ -7,7 +8,6 @@ namespace COM3D2.ComSh.Plugin {
 public class ObjInfo : MonoBehaviour{
     public string source="";    // obj add時のプレハブ名
     public ObjInfoData data;
-    public TMorph morph;        // シェイプキー用
     public void InitBones(){ data=new ObjInfoData(transform); }
     public void OnDestroy(){
         ObjUtil.objDic.Remove(name);
@@ -21,14 +21,14 @@ public class ObjInfo : MonoBehaviour{
         var oi=tr.gameObject.AddComponent<ObjInfo>();
         oi.source=src;
         oi.InitBones();
-        oi.morph=morph;
+        oi.data.morph=morph;
         return oi;
     }
     public static ObjInfo AddObjInfo(Transform tr,ObjInfoData oid,string src,TMorph morph=null){
         var oi=tr.gameObject.AddComponent<ObjInfo>();
         oi.source=src;
-        oi.morph=morph;
         oi.data=oid;
+        oi.data.morph=morph;
         return oi;
     }
     public static ObjInfo AddObjInfo(GameObject go,string src,TMorph morph=null){ return AddObjInfo(go.transform,src,morph); }
@@ -47,6 +47,7 @@ public class ObjInfo : MonoBehaviour{
 public class ObjInfoData {
     // 自分のボーンを認識するためのもの。アタッチで子ボーンが増えるのに備えて
     public List<Transform> bones=new List<Transform>();
+    public TMorph morph;        // シェイプキー用
     public ObjInfoData(Transform transform){ UpdateBones(transform); }
     public void UpdateBones(Transform transform){
         bones.Clear();
@@ -129,12 +130,14 @@ public class ObjInfoData {
         foreach(var b in bones){
             var r=b.GetComponent<Renderer>();
             if(r==null) continue;
-            if (ReferenceEquals(r.GetType(), typeof(SkinnedMeshRenderer))) {
+            if (ReferenceEquals(r.GetType(), typeof(SkinnedMeshRenderer))){
                 var smr = (SkinnedMeshRenderer)r;
-                Mesh newmesh=Object.Instantiate(smr.sharedMesh);
+                Mesh oldmesh=smr.sharedMesh;
+                Mesh newmesh=Object.Instantiate(oldmesh);
                 smr.sharedMesh=newmesh;
                 workMesh.Add(new MeshList.Entry { no=meshno,submeshcount=smr.sharedMesh.subMeshCount,mesh=newmesh });
                 meshno +=smr.sharedMesh.subMeshCount;
+                UpdateMorph(r.transform,oldmesh,newmesh);
             }else{
                 MeshFilter mf=r.transform.GetComponent<MeshFilter>();
                 if(mf==null) continue;
@@ -145,7 +148,21 @@ public class ObjInfoData {
         workMesh.submeshCount=meshno;
         return;
     }
-
+    private static FieldInfo meshField=null;
+    public void UpdateMorph(Transform tr,Mesh oldmesh,Mesh newmesh){
+        if(meshField==null) try{ meshField=typeof(TMorph).GetField("m_mesh",BindingFlags.Instance | BindingFlags.NonPublic); }catch{ return; }
+        if(this.morph!=null){
+            var mmesh=meshField.GetValue(this.morph);
+            if(object.ReferenceEquals(mmesh,oldmesh)) meshField.SetValue(this.morph,newmesh);
+        }
+        var tb=tr.GetComponentInParent<TBody>();
+        if(tb==null || tb.goSlot==null) return;
+        foreach(var skin in tb.goSlot){
+            if(skin.morph==null) continue;
+            var mmesh=meshField.GetValue(skin.morph);
+            if(object.ReferenceEquals(mmesh,oldmesh)) meshField.SetValue(skin.morph,newmesh);
+        }
+    }
     public void CloneMaterial(){
         if(workMate!=null) return;
         workMate=new List<Material>();

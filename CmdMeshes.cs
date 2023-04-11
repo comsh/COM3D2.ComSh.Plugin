@@ -490,7 +490,9 @@ public static class CmdMeshes {
             if (ReferenceEquals(ra[midx].GetType(), typeof(SkinnedMeshRenderer))) {
                 var smr=(SkinnedMeshRenderer)ra[midx];
                 newMesh=Object.Instantiate(oid.originalMesh[midx].mesh);
+                var oldMesh=smr.sharedMesh;
                 smr.sharedMesh=newMesh;
+                oid.UpdateMorph(smr.transform,oldMesh,newMesh);
             }else{
                 MeshFilter mf=ra[midx].transform.GetComponent<MeshFilter>();
                 if(mf==null) return -1;

@@ -275,7 +275,7 @@ public static class CmdObjects {
         if(val==null) return 0;
         if(val=="")  return 1;
         var bd=tr.GetComponent<ObjInfo>();
-        if(bd==null||bd.morph==null) return sh.io.Error("objコマンドで追加されたオブジェクト以外は変更できません");
+        if(bd==null||bd.data.morph==null) return sh.io.Error("objコマンドで追加されたオブジェクト以外は変更できません");
         UTIL.TraverseTr(tr,(Transform t)=>{
             if(!string.IsNullOrEmpty(t.name)) ObjUtil.RenameTr(t,val+t.name);
             return 0; 
@@ -330,21 +330,21 @@ public static class CmdObjects {
         ObjInfo oi;
         if(val==null){
             oi=tr.GetComponent<ObjInfo>();
-            if(oi==null||oi.morph==null) return 0;
-            foreach (string mk in oi.morph.hash.Keys)
-                sh.io.PrintLn2(mk+":",sh.fmt.F0to1(oi.morph.GetBlendValues((int)oi.morph.hash[mk])));
+            if(oi==null||oi.data.morph==null) return 0;
+            foreach (string mk in oi.data.morph.hash.Keys)
+                sh.io.PrintLn2(mk+":",sh.fmt.F0to1(oi.data.morph.GetBlendValues((int)oi.data.morph.hash[mk])));
             return 0;
         }
         oi=tr.GetComponent<ObjInfo>();
-        if(oi==null||oi.morph==null) return 1;
+        if(oi==null||oi.data.morph==null) return 1;
         var kvs=ParseUtil.GetKVFloat(val);
         if(kvs==null) return sh.io.Error(ParseUtil.error);
         bool dirty=false;
-        foreach(string dk in kvs.Keys) if(oi.morph.hash.ContainsKey(dk)){
-            oi.morph.SetBlendValues((int)oi.morph.hash[dk],kvs[dk]);
+        foreach(string dk in kvs.Keys) if(oi.data.morph.hash.ContainsKey(dk)){
+            oi.data.morph.SetBlendValues((int)oi.data.morph.hash[dk],kvs[dk]);
             dirty=true;
         }
-        if(dirty) oi.morph.FixBlendValues();
+        if(dirty) oi.data.morph.FixBlendValues();
         return 1;
     }
     private static int ObjParamName(ComShInterpreter sh,Transform tr,string val){
@@ -1020,7 +1020,7 @@ public static class ObjUtil {
         Transform orig=obase;
         ObjInfo oi=orig.GetComponent<ObjInfo>();
         TMorph morph=null;
-        if(oi!=null){ morph=oi.morph; if(orig.childCount==1) orig=orig.GetChild(0); }
+        if(oi!=null){ morph=oi.data.morph; if(orig.childCount==1) orig=orig.GetChild(0); }
         if(orig==null) return null;
         Vector3 opos=orig.position;
         Quaternion orot=orig.rotation;
