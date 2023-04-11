@@ -467,11 +467,10 @@ public static class CmdMeshes {
             if(oid.workMesh==null){
                 oid.Backup();
                 mesh=oid.originalMesh;
-                material=oid.originalMate;
             }else{
                 mesh=oid.workMesh;
-                material=oid.workMate;
             }
+            material=(oid.workMate==null)?oid.originalMate:oid.workMate;
             count=(mesh.Count==0)?0:mesh[mesh.Count-1].no+mesh[mesh.Count-1].submeshcount;
         }
         public void EditMesh(){
