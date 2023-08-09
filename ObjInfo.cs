@@ -17,21 +17,21 @@ public class ObjInfo : MonoBehaviour{
         }
     }
 
-    public static ObjInfo AddObjInfo(Transform tr,string src,TMorph morph=null){
+    public static ObjInfo AddObjInfo(Transform tr,string src,List<TMorph> morph=null){
         var oi=tr.gameObject.AddComponent<ObjInfo>();
         oi.source=src;
         oi.InitBones();
         oi.data.morph=morph;
         return oi;
     }
-    public static ObjInfo AddObjInfo(Transform tr,ObjInfoData oid,string src,TMorph morph=null){
+    public static ObjInfo AddObjInfo(Transform tr,ObjInfoData oid,string src,List<TMorph> morph=null){
         var oi=tr.gameObject.AddComponent<ObjInfo>();
         oi.source=src;
         oi.data=oid;
         oi.data.morph=morph;
         return oi;
     }
-    public static ObjInfo AddObjInfo(GameObject go,string src,TMorph morph=null){ return AddObjInfo(go.transform,src,morph); }
+    public static ObjInfo AddObjInfo(GameObject go,string src,List<TMorph> morph=null){ return AddObjInfo(go.transform,src,morph); }
     public static ObjInfo UpdObjInfo(Transform tr){
         var oi=GetObjInfo(tr);
         if(oi!=null) oi.data.UpdateBones(tr);
@@ -47,17 +47,19 @@ public class ObjInfo : MonoBehaviour{
 public class ObjInfoData {
     // 自分のボーンを認識するためのもの。アタッチで子ボーンが増えるのに備えて
     public List<Transform> bones=new List<Transform>();
-    public TMorph morph;        // シェイプキー用
+    public List<TMorph> morph;        // シェイプキー用
     public ObjInfoData(Transform transform){ UpdateBones(transform); }
     public void UpdateBones(Transform transform){
         bones.Clear();
-        if(transform.parent!=null && transform.parent.name=="Offset") // メイド
-            UTIL.TraverseTr(transform,(Transform tr)=>{
-                if(!tr.name.StartsWith("_SM_",Ordinal)) bones.Add(tr);
-                return 0; 
-            },true);
-        else
-            UTIL.TraverseTr(transform,(Transform tr)=>{ bones.Add(tr); return 0; },true);
+        if(transform.parent!=null && transform.parent.name=="Offset"){ // メイド
+            var ta=transform.GetComponentsInChildren<Transform>();
+            if(ta!=null) for(int i=0; i<ta.Length; i++){
+                if(!ta[i].name.StartsWith("_SM_",Ordinal)) bones.Add(ta[i]);
+            }
+        }else{
+            var ta=transform.GetComponentsInChildren<Transform>();
+            if(ta!=null) bones=new List<Transform>(ta);
+        }
     }
     public Transform FindBone(Transform tr){
         for(int i=0; i<bones.Count; i++) if(ReferenceEquals(bones[i],tr)) return bones[i];
@@ -152,8 +154,10 @@ public class ObjInfoData {
     public void UpdateMorph(Transform tr,Mesh oldmesh,Mesh newmesh){
         if(meshField==null) try{ meshField=typeof(TMorph).GetField("m_mesh",BindingFlags.Instance | BindingFlags.NonPublic); }catch{ return; }
         if(this.morph!=null){
-            var mmesh=meshField.GetValue(this.morph);
-            if(object.ReferenceEquals(mmesh,oldmesh)) meshField.SetValue(this.morph,newmesh);
+            foreach(TMorph m in this.morph){
+                var mmesh=meshField.GetValue(m);
+                if(object.ReferenceEquals(mmesh,oldmesh)) meshField.SetValue(m,newmesh);
+            }
         }
         var tb=tr.GetComponentInParent<TBody>();
         if(tb==null || tb.goSlot==null) return;

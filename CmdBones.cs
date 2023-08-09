@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
+using static System.StringComparison;
 using static COM3D2.ComSh.Plugin.Command;
 
 namespace COM3D2.ComSh.Plugin {
@@ -54,7 +55,7 @@ public static class CmdBones {
             // aliasと言いつつ、キャッシュするのが真の目的
             BoneUtil.CleanBoneCache();
             if(args.Count==2){
-                foreach(var kv in BoneUtil.boneCache) sh.io.PrintLn(kv.Key);
+                foreach(var kv in BoneUtil.boneCache) if(kv.Key.StartsWith(sh.ns,Ordinal)) sh.io.PrintLn(kv.Key);
                 return 0;
             }
             if(args.Count<4) return sh.io.Error("使い方: bone alias ボーン指定 別名");
@@ -62,12 +63,13 @@ public static class CmdBones {
             if(tr==null) return sh.io.Error("ボーンの指定が不正です");
 
             if(!UTIL.ValidName(args[3])) sh.io.Error("その名前は使用できません");
-            if(BoneUtil.boneCache.ContainsKey(args[3])) return sh.io.Error("その名前はすでに使用されています");
-            BoneUtil.boneCache[args[3]]=tr;
+            string name=sh.ns+args[3];
+            if(BoneUtil.boneCache.ContainsKey(name)) return sh.io.Error("その名前はすでに使用されています");
+            BoneUtil.boneCache[name]=tr;
             return 0;
         }else if(args[1]=="unalias"){
             if(args.Count<3) return sh.io.Error("使い方: bone unalias 別名");
-            for(int i=2; i<args.Count; i++) BoneUtil.boneCache.Remove(args[i]);
+            for(int i=2; i<args.Count; i++) BoneUtil.boneCache.Remove(sh.ns+args[i]);
             BoneUtil.CleanBoneCache();
             return 0;
         }
@@ -88,7 +90,7 @@ public static class CmdBones {
         if(val=="c"||val=="child"){
             for(int i=0; i<tr.childCount; i++) sh.io.PrintLn(tr.GetChild(i).name);
         }else if(val=="d"||val=="descendant"){
-            UTIL.TraverseTr(tr,(Transform t)=>{sh.io.PrintLn(t.name); return 0;});
+            UTIL.TraverseTr(tr,(Transform t,int d)=>{sh.io.PrintLn(t.name); return 0;});
         }else return sh.io.Error("list種別に child か descendant を指定してください");
         return 0;
     }
@@ -117,9 +119,10 @@ public static class BoneUtil{
     }
 
     public static Transform FindBone(ComShInterpreter sh,string name){
-        if(boneCache.TryGetValue(name,out Transform tr)){
+        string nsid=sh.ns+name;
+        if(boneCache.TryGetValue(nsid,out Transform tr)){
             // 配置解除等で消えていたらUnity的なnullになる。ちゃんと参照を消しておく
-            if(tr==null){ boneCache.Remove(name); return null; }
+            if(tr==null){ boneCache.Remove(nsid); return null; }
             return tr;
         }
         return ObjUtil.FindObj(sh, name.Split(ParseUtil.colon));

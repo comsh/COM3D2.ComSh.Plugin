@@ -109,6 +109,9 @@ public static class Command {
         cmdTbl.Add("roundup", new Cmd(CmdRoundUp));
         cmdTbl.Add("perlinnoise", new Cmd(CmdPerlinNoise));
         cmdTbl.Add("pixellights", new Cmd(CmdPixelLights));
+        cmdTbl.Add("namespace", new Cmd(CmdNameSpace));
+        cmdTbl.Add("namespace.clear", new Cmd(CmdNameSpaceClear));
+        cmdTbl.Add("date", new Cmd(CmdDate));
 
         cmdTbl.Add("__res",new Cmd(Cmd__Resource));
         cmdTbl.Add("__files",new Cmd(Cmd__Files));
@@ -375,6 +378,38 @@ public static class Command {
         }
         return 0;
     }
+    private static int CmdNameSpace(ComShInterpreter sh, List<string> args){
+        if(args.Count!=2){
+            if(sh.ns!="") sh.io.PrintLn(sh.ns.Substring(0,sh.ns.Length-1));
+            return 0;
+        }
+        if(args[1]=="") sh.ns=""; else sh.ns=args[1]+".";
+        return 0;
+    }
+
+    private static int CmdNameSpaceClear(ComShInterpreter sh, List<string> args){
+        if(args.Count!=2) return sh.io.Error($"使い方: {args[0]} 名前空間名");
+        string id=args[1];
+        var l=new List<string>();
+        foreach(string k in BoneUtil.boneCache.Keys) if(k.StartsWith(id,Ordinal)) l.Add(k);
+        foreach(string k in l) BoneUtil.boneCache.Remove(k);
+        l.Clear();
+        foreach(string k in CmdMisc.curveDic.Keys) if(k.StartsWith(id,Ordinal)) l.Add(k);
+        foreach(string k in l) CmdMisc.curveDic.Remove(k);
+        l.Clear();
+        foreach(string k in CmdMisc.queDic.Keys) if(k.StartsWith(id,Ordinal)) l.Add(k);
+        foreach(string k in l) CmdMisc.queDic.Remove(k);
+
+        foreach(string k in ComShBg.cron.LsJob(id)) if(k.StartsWith("cron/"+id,Ordinal)) ComShBg.cron.KillJob(k);
+        foreach(string k in ComShBg.cron2.LsJob(id)) if(k.StartsWith("cron2/"+id,Ordinal)) ComShBg.cron2.KillJob(k);
+        return 0;
+    }
+
+    private static int CmdDate(ComShInterpreter sh, List<string> args){
+        sh.io.PrintLn(DateTime.Now.ToString("yyyyMMddHHmmssfff"));
+        return 0;
+    }
+
 
     private static int CmdEcho(ComShInterpreter sh,List<string> args) {
         if(args.Count==1) return 0;
@@ -658,7 +693,7 @@ public static class Command {
                 +"順序　　　この値が大きいものほど後に実行される。正の整数。省略時0";
         string jobpfx=args[0]+"/";
         if(args.Count<=2){
-            var ls=bg.LsJob(jobpfx);
+            var ls=bg.LsJob(jobpfx+sh.ns);
             foreach(string name in ls) sh.io.PrintLn(name.Substring(jobpfx.Length));
             return 0;
         }
@@ -667,14 +702,15 @@ public static class Command {
             if(args.Count>7) return sh.io.Error(string.Format(usage,args[0]));
             if(args[2]==string.Empty) return sh.io.Error("識別名が空です");
             if(!UTIL.ValidName(args[2])) return sh.io.Error("その名前は使用できません");
-            string name=jobpfx+args[2];
+            string name=jobpfx+sh.ns+args[2];
             if(bg.ContainsName(name)) return sh.io.Error("その名前は既に使われています");
             int prio=0;
             double ms=0,life=0;
             if(args.Count>=5 && (!double.TryParse(args[4],out ms) || ms<0)) return sh.io.Error("実行間隔の値が不正です");
             if(args.Count>=6 && (!double.TryParse(args[5],out life) || life<0)) return sh.io.Error("寿命の値が不正です");
             if(args.Count==7 && (!int.TryParse(args[6],out prio) || prio<0)) return sh.io.Error("順序の値が不正です");
-            var subsh=new ComShInterpreter(null,sh.env,sh.func);
+            var sbo=new ComShInterpreter.SubShOutput();
+            var subsh=new ComShInterpreter(new ComShInterpreter.Output(sbo.Output),sh.env,sh.func,sh.ns);
             subsh.env[ComShInterpreter.SCRIPT_ERR_ON]="1";
             var psr=subsh.parser;
             int r=psr.Parse(args[3]); // パースだけしておく
@@ -689,9 +725,9 @@ public static class Command {
             if(j==null) return sh.io.Error("登録に失敗しました");          
             j.sh=subsh;
         }else if(args[1]=="del"){
-            for(int i=2; i<args.Count; i++) bg.KillJob(jobpfx+args[i]);
+            for(int i=2; i<args.Count; i++) bg.KillJob(jobpfx+sh.ns+args[i]);
         }else if(args.Count==4){
-            var name=jobpfx+args[1];
+            var name=jobpfx+sh.ns+args[1];
             var j=bg.Find(name);
             if(j==null) return sh.io.Error("その識別名の定期処理は存在しません");
             if(args[2]=="ondestroy"){
@@ -935,6 +971,7 @@ public static class Command {
 		mw.PopupAndTabList.SetData(data,nameterm,true);
         return 0;
     }
+
     private static int CmdFloor(ComShInterpreter sh,List<string> args){
         if(args.Count!=2 && args.Count!=3) return sh.io.Error("使い方: floor 値 [小数部桁数]");
         double v=ParseUtil.ParseDouble(args[1]);
@@ -1854,25 +1891,25 @@ public static class UTIL {
         tr.localScale=Vector3.one;
         return tr;
     }
-    public delegate int TraverseFunc(Transform tr);
+    public delegate int TraverseFunc(Transform tr,int depth);
     public static int TraverseTr(Transform tr,TraverseFunc act,bool rootq=true){
-       if(rootq) return TraverseTrSub(tr,act);
+       if(rootq) return TraverseTrSub(tr,act,0);
        int ret=0;
-       for(int i=0; i<tr.childCount; i++) if((ret=TraverseTrSub(tr.GetChild(i),act))<0) return ret;
-       return ret;
+       for(int i=0; i<tr.childCount; i++) if((ret=TraverseTrSub(tr.GetChild(i),act,1))<0) return ret;
+       return 0;
     }
-    private static int TraverseTrSub(Transform tr,TraverseFunc act){
-        int ret=act.Invoke(tr);
+    private static int TraverseTrSub(Transform tr,TraverseFunc act,int depth){
+        int ret=act.Invoke(tr,depth);
         if(ret<0) return ret; // 負:中止
         if(ret==1) return 0; //   1: このノードの子は見ない
-        for(int i=0; i<tr.childCount; i++) if((ret=TraverseTr(tr.GetChild(i),act))<0) return ret;
+        for(int i=0; i<tr.childCount; i++) if((ret=TraverseTrSub(tr.GetChild(i),act,depth+1))<0) return ret;
         return 0;
     }
     public static int BFT(Transform tr,TraverseFunc f){ // branch-first traversal
         var q=new Queue<Transform>();
         q.Enqueue(tr);
         for(Transform t=tr; q.Count>0; t=q.Dequeue()){
-            int ret=f(t);
+            int ret=f(t,0);
             if(ret<0) return ret;
             if(ret==1) continue; // このノードの子は見ない
             for(int i=0; i<t.childCount; i++) q.Enqueue(t.GetChild(i));
@@ -1883,7 +1920,7 @@ public static class UTIL {
         var q=new Queue<Transform>();
         q.Enqueue(tr);
         for(Transform t=tr; q.Count>0; t=q.Dequeue()){
-            int ret=f(t);
+            int ret=f(t,0);
             if(ret<0) return null;
             if(ret==1) return t;
             for(int i=0; i<t.childCount; i++) q.Enqueue(t.GetChild(i));

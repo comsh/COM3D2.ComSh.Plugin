@@ -29,9 +29,9 @@ public static class Variables {
         if(key[0]=='/') g[key]+=val;
         else if(key[0]=='.'){
             if(sdic==null) return;
-            sdic[key]+=val;
+            if(sdic.ContainsKey(key)) sdic[key]+=val; else sdic[key]=val;
         }else{
-            ldic[key]+=val;
+            if(ldic.ContainsKey(key)) ldic[key]+=val; else ldic[key]=val;
         }
     }
     public static string Value(VarDic dic, string key,string dflt=""){

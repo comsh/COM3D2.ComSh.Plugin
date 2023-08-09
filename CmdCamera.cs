@@ -26,6 +26,7 @@ public static class CmdCamera {
         cameraParamDic.Add("describe",new CmdParam<CameraMain>(CameraParamDesc));
         cameraParamDic.Add("w2s",new CmdParam<CameraMain>(CameraParamW2S));
         cameraParamDic.Add("screensize",new CmdParam<CameraMain>(CameraParamScreenSize));
+        cameraParamDic.Add("speed",new CmdParam<CameraMain>(CameraParamSpeed));
 
         CmdParamPosRotCp(cameraParamDic,"pos","position");
         CmdParamPosRotCp(cameraParamDic,"rot","rotation");
@@ -278,6 +279,17 @@ public static class CmdCamera {
     private static int CameraParamScreenSize(ComShInterpreter sh,CameraMain mc,string val){
         sh.io.PrintLn($"{mc.camera.pixelWidth},{mc.camera.pixelHeight}");
         return 0;
+    }
+    private static int CameraParamSpeed(ComShInterpreter sh,CameraMain mc,string val){
+        var uc=mc.GetComponent<UltimateOrbitCamera>();
+        if(uc==null) return sh.io.Error("失敗しました");
+        if(val==null){
+            sh.io.PrintLn($"{sh.fmt.FInt(uc.moveSpeed)}");
+            return 0;
+        }
+        if(!float.TryParse(val,out float f) || f<=0) return sh.io.Error("数値が不正です");
+        uc.moveSpeed=f;
+        return 1;
     }
 
     private static int CameraParamUI(ComShInterpreter sh,CameraMain mc,string val){

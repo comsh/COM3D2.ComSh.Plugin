@@ -55,6 +55,9 @@ public static class CmdObjects {
         objParamDic.Add("type",new CmdParam<Transform>(ObjParamType));
         objParamDic.Add("mesh",new CmdParam<Transform>(ObjParamMesh));
         objParamDic.Add("component",new CmdParam<Transform>(ObjParamComponent));
+        objParamDic.Add("lookat",new CmdParam<Transform>(ObjParamLookAt));
+        objParamDic.Add("locik",new CmdParam<Transform>(ObjParamLocIK));
+        objParamDic.Add("locik-",new CmdParam<Transform>(ObjParamLocIKMinus));
         
         objParamDic.Add("l2w",new CmdParam<Transform>(_CmdParamL2W));
         objParamDic.Add("w2l",new CmdParam<Transform>(_CmdParamW2L));
@@ -258,17 +261,25 @@ public static class CmdObjects {
         return 1;
     }
     private static int ObjParamList(ComShInterpreter sh,Transform tr,string val){
-        if(val==null) return sh.io.Error("list種別に child か descendant を指定してください");
+        if(val==null) return sh.io.Error("list種別に child か descendant か tree を指定してください");
         if(val=="c"||val=="child"){
             for(int i=0; i<tr.childCount; i++) sh.io.PrintLn(tr.GetChild(i).name);
         }else if(val=="d"||val=="descendant"){
             var oi=tr.GetComponent<ObjInfo>();
             if(oi!=null) foreach(Transform t in oi.data.bones) sh.io.PrintLn(t.name);
-            else UTIL.TraverseTr(tr,(Transform t)=>{
+            else UTIL.TraverseTr(tr,(Transform t,int d)=>{
                 if(!string.IsNullOrEmpty(t.name)) sh.io.PrintLn(t.name);
                 return 0;
             });
-        }else return sh.io.Error("list種別に child か descendant を指定してください");
+        }else if(val=="t"||val=="tree"){
+            UTIL.TraverseTr(tr,(Transform t,int d)=>{
+                if(!string.IsNullOrEmpty(t.name)){
+                    for(int i=0; i<d; i++) sh.io.Print("  ");
+                    sh.io.PrintLn(t.name);
+                }
+                return 0;
+            });
+        }else return sh.io.Error("list種別に child か descendant か tree を指定してください");
         return 0;
     }
     private static int ObjParamPrefix(ComShInterpreter sh,Transform tr,string val){
@@ -276,7 +287,7 @@ public static class CmdObjects {
         if(val=="")  return 1;
         var bd=tr.GetComponent<ObjInfo>();
         if(bd==null||bd.data.morph==null) return sh.io.Error("objコマンドで追加されたオブジェクト以外は変更できません");
-        UTIL.TraverseTr(tr,(Transform t)=>{
+        UTIL.TraverseTr(tr,(Transform t,int d)=>{
             if(!string.IsNullOrEmpty(t.name)) ObjUtil.RenameTr(t,val+t.name);
             return 0; 
         },false);
@@ -331,20 +342,24 @@ public static class CmdObjects {
         if(val==null){
             oi=tr.GetComponent<ObjInfo>();
             if(oi==null||oi.data.morph==null) return 0;
-            foreach (string mk in oi.data.morph.hash.Keys)
-                sh.io.PrintLn2(mk+":",sh.fmt.F0to1(oi.data.morph.GetBlendValues((int)oi.data.morph.hash[mk])));
+            var sd=new SortedDictionary<string,float>();    // セットメニューで読んだブツには重複もある
+            foreach(TMorph m in oi.data.morph) foreach (string mk in m.hash.Keys)
+                sd.Add(mk,m.GetBlendValues((int)m.hash[mk]));
+            foreach(var kv in sd) sh.io.PrintLn($"{kv.Key}:{sh.fmt.F0to1(kv.Value)}");
             return 0;
         }
         oi=tr.GetComponent<ObjInfo>();
         if(oi==null||oi.data.morph==null) return 1;
         var kvs=ParseUtil.GetKVFloat(val);
         if(kvs==null) return sh.io.Error(ParseUtil.error);
-        bool dirty=false;
-        foreach(string dk in kvs.Keys) if(oi.data.morph.hash.ContainsKey(dk)){
-            oi.data.morph.SetBlendValues((int)oi.data.morph.hash[dk],kvs[dk]);
-            dirty=true;
+        foreach(TMorph m in oi.data.morph){
+            bool dirty=false;
+            foreach(string dk in kvs.Keys) if(m.hash.ContainsKey(dk)){
+                m.SetBlendValues((int)m.hash[dk],kvs[dk]);
+                dirty=true;
+            }
+            if(dirty) m.FixBlendValues();
         }
-        if(dirty) oi.data.morph.FixBlendValues();
         return 1;
     }
     private static int ObjParamName(ComShInterpreter sh,Transform tr,string val){
@@ -770,6 +785,7 @@ public static class CmdObjects {
                 if(sa[0]=="box") shape.shapeType=ParticleSystemShapeType.Box;
                 else if(sa[0]=="boxshell") shape.shapeType=ParticleSystemShapeType.BoxShell;
                 else return sh.io.Error("shapeの指定が不正です");
+                shape.randomDirectionAmount=0;
             }else if(sa.Length==2){
                 if(sa[0]=="hemisphere") shape.shapeType=ParticleSystemShapeType.Hemisphere;
                 else if(sa[0]=="hemisphereshell") shape.shapeType=ParticleSystemShapeType.HemisphereShell;
@@ -778,13 +794,19 @@ public static class CmdObjects {
                 else return sh.io.Error("shapeの指定が不正です");
                 if(!float.TryParse(sa[1],out f)||f<0) return sh.io.Error("数値の指定が不正です");
                 shape.radius=f;
-                shape.arc=Mathf.PI*2;
+                shape.arc=360.0f;
+                shape.arcMode=ParticleSystemShapeMultiModeValue.Random;
+                shape.radiusMode=ParticleSystemShapeMultiModeValue.Random;
+                shape.randomDirectionAmount=0;
             }else if(sa.Length==3){
                 if(sa[0]=="cone"){
                     if(!float.TryParse(sa[1],out f)||f<0) return sh.io.Error("数値の指定が不正です");
                     shape.radius=f;
-                    shape.arc=Mathf.PI*2;
+                    shape.arc=360.0f;
                     shape.shapeType=ParticleSystemShapeType.Cone;
+                    shape.arcMode=ParticleSystemShapeMultiModeValue.Random;
+                    shape.radiusMode=ParticleSystemShapeMultiModeValue.Random;
+                    shape.randomDirectionAmount=0;
                     if(!float.TryParse(sa[2],out f)||f<0||f>90) return sh.io.Error("数値の指定が不正です");
                     shape.angle=f;
                 }else return sh.io.Error("shapeの指定が不正です");
@@ -865,7 +887,58 @@ public static class CmdObjects {
         }
         return 1;
     }
+    private static int ObjParamLookAt(ComShInterpreter sh,Transform tr,string val){
+        if(val==null){ return 0; }
+        if(val.IndexOf(':')>=0){
+            var cd=new ParseUtil.ColonDesc(val);
+            var tgt=ObjUtil.FindObj(sh,cd);
+            if(tgt==null) return sh.io.Error("対象が見つかりません");
+            tr.transform.LookAt(tgt.position,tr.up);
+        }else{
+            float[] xyz=ParseUtil.Xyz(val);
+            if(xyz==null){
+                return sh.io.Error(ParseUtil.error);
+            }
+            tr.transform.LookAt(new Vector3(xyz[0],xyz[1],xyz[2]),tr.up);
+        }
+        return 1;
+    }
+    private static int ObjParamLocIK(ComShInterpreter sh,Transform tr,string val){
+        return ObjParamLocIKSub(sh,tr,val,1);
+    }
+    private static int ObjParamLocIKMinus(ComShInterpreter sh,Transform tr,string val){
+        return ObjParamLocIKSub(sh,tr,val,-1);
+    }
 
+    private static int ObjParamLocIKSub(ComShInterpreter sh,Transform tr,string val,int dir){
+        if(val==null) return 0;
+
+        float[] xyz=ParseUtil.Xyz(val);
+        if(xyz==null) return sh.io.Error(ParseUtil.error);
+
+        Transform p1=null,p2=null;
+        if(tr.name=="Bip01" || tr.name=="ManBip") return sh.io.Error("親ボーンが足りません");
+        if(tr.parent!=null) p1=tr.parent;
+        if(p1==null || p1.name=="Bip01" || p1.name=="ManBip") return sh.io.Error("親ボーンが足りません");
+        if(p1.parent!=null) p2=p1.parent;
+        if(p2==null) return sh.io.Error("親ボーンが足りません");
+
+        Vector3 p=new Vector3(xyz[0],xyz[1],xyz[2]);
+        float a=(p - p2.position).sqrMagnitude;
+        if(Mathf.Approximately(a,0)) return sh.io.Error("ボーンの長さが0です");
+        float b=(p1.position-tr.position).sqrMagnitude;
+        if(Mathf.Approximately(b,0)) return sh.io.Error("ボーンの長さが0です");
+        float c=(p2.position-p1.position).sqrMagnitude;
+        if(Mathf.Approximately(c,0)) return sh.io.Error("ボーンの長さが0です");
+        float co=(a-b-c)/-2/Mathf.Sqrt(b*c); // the law of cosine
+        p1.localRotation=Quaternion.Euler(0,0,180-dir*Mathf.Acos(co)*Mathf.Rad2Deg);
+        var w2l=p2.worldToLocalMatrix;
+        var lpt=w2l.MultiplyPoint3x4(p);
+        var lpw=w2l.MultiplyPoint3x4(tr.position);
+        var lps=w2l.MultiplyPoint3x4(p2.position);
+        p2.localRotation=p2.localRotation*Quaternion.FromToRotation((lpw-lps).normalized,(lpt-lps).normalized);
+        return 1;
+    }
 }
 public static class ObjUtil {
     public static Dictionary<string,Transform> objDic=new Dictionary<string,Transform>();
@@ -958,7 +1031,7 @@ public static class ObjUtil {
         }
         if(o==null) o=Resources.Load<GameObject>("BG/"+src);
         if(o==null) o=Resources.Load<GameObject>("BG/2_0/"+src);
-        TMorph morph=null;
+        List<TMorph> morph=null;
         MenuObj mo=null;
         if(o==null){
             if(dummyMaid==null){ // LoadSkinMesh_Rを呼ぶためだけのニセMaid
@@ -980,21 +1053,19 @@ public static class ObjUtil {
                     if(mo==null) return null;
                 }
             }
-            if(mo==null) mo=new MenuObj(){modelName=fname+".model"};
-            if(!string.IsNullOrEmpty(mo.modelName) && GameUty.IsExistFile(mo.modelName)){
-                TBodySkin tbs=dummyMaid.body0.goSlot[0];
-                var m=new TMorph(tbs);
-                o=ImportCM.LoadSkinMesh_R(mo.modelName,m,"body",tbs,0);
-                instanceq=false; // これは中で既にインスタンス化されてる
-                if(m!=null && m.MorphCount>0){
-                    m.InitGameObject(o);
-                    morph=m;
-                }
-                tbs.listDEL.Clear();
+            if(mo==null) mo=new MenuObj(fname+".model");
+            morph=new List<TMorph>();
+            var ga=MenuObj.ToObject(mo,morph);
+            if(ga.Count>0){
+                o=new GameObject("");
+                foreach(var g in ga) g.transform.SetParent(o.transform);
             }
+            instanceq=false; // この場合は既にインスタンス化されてる
         }
         if(o==null) return null;
-        GameObject b=new GameObject(name);
+        GameObject b;
+        if(o.name=="") b=o; else b=new GameObject();
+        b.name=name;
         b.transform.SetParent(pr);
         GameObject go=o;
         if(instanceq) go=UnityEngine.Object.Instantiate(o,b.transform); else go.transform.SetParent(b.transform);
@@ -1004,22 +1075,12 @@ public static class ObjUtil {
         b.transform.localRotation=Quaternion.Euler(rot);
         b.transform.localScale=scl;
         ObjInfo.AddObjInfo(b,src,morph);
-
-        if(mo!=null){
-            if(mo.material!=null)
-                foreach(var mate in mo.material) ChgMaterial(b.transform,mate.no,mate.name);
-            if(mo.anmFile!=null){
-                var a=go.GetComponent<Animation>();
-                if(a==null) a=go.AddComponent<Animation>();
-                PlayMotion(a,mo.anmFile,1.0f,mo.anmLoop?1:0);
-            }
-        }
         return b;
     }
     public static GameObject CloneObject(string name,Transform obase,Transform pr){
         Transform orig=obase;
         ObjInfo oi=orig.GetComponent<ObjInfo>();
-        TMorph morph=null;
+        List<TMorph> morph=null;
         if(oi!=null){ morph=oi.data.morph; if(orig.childCount==1) orig=orig.GetChild(0); }
         if(orig==null) return null;
         Vector3 opos=orig.position;
@@ -1061,26 +1122,87 @@ public static class ObjUtil {
         public class Material{
             public int no;
             public string name;
+            public string shader;
+            public string slot;
         }
-        public string modelName;
-        public string anmFile;
-        public bool anmLoop=false;
-        public List<Material> material;
-        public void AddMaterial(int no,string name){
-            if(material==null) material=new List<Material>();
-            var mate=new Material();
-            mate.no=no; mate.name=name;
-            material.Add(mate);
+        public class Anm{
+            public string name;
+            public bool loopq;
+            public Anm(string name){ this.name=name; }
+        }
+        public Dictionary<string,List<Material>> material=new Dictionary<string,List<Material>>();
+        public Dictionary<string,string> modelName=new Dictionary<string,string>();
+        public Dictionary<string,Anm> anmFile=new Dictionary<string,Anm>();
+        public MenuObj(){}
+        public MenuObj(string model){ modelName.Add("",model);}
+        public Material FindMaterial(string slot,int no){
+            List<Material> mlist;
+            if(!material.TryGetValue(slot,out mlist)) return null;
+            foreach(var m in mlist) if(m.no==no) return m;
+            return null;
+        }
+        public Material AddMaterial(string slot,int no,string name){
+            Material m=FindMaterial(slot,no);
+            if(m==null){
+                List<Material> mlist;
+                if(!material.TryGetValue(slot,out mlist)){
+                    mlist=new List<Material>();
+                    material.Add(slot,mlist);
+                }
+                m=new Material();
+                m.slot=slot; m.no=no; m.name=name;
+                mlist.Add(m);
+                return m;
+            }else{
+                m.name=name;
+                return m;
+            }
+        }
+        public void ChgShader(string slot,int no,string shader){
+            Material m=FindMaterial(slot,no);
+            if(m==null) m=AddMaterial(slot,no,"");
+            m.shader=shader;
+        }
+
+        public static List<GameObject> ToObject(MenuObj mo,List<TMorph> morph){
+            List<GameObject> ret=new List<GameObject>();
+            foreach(var kv in mo.modelName){
+                string slot=kv.Key;
+                string file=kv.Value;
+                if(!string.IsNullOrEmpty(file) && GameUty.IsExistFile(file)){
+                    TBodySkin tbs=dummyMaid.body0.goSlot[0];
+                    var m=new TMorph(tbs);
+                    GameObject o=ImportCM.LoadSkinMesh_R(file,m,"body",tbs,0);
+                    if(o!=null){
+                        if(m.MorphCount>0){
+                            m.InitGameObject(o);
+                            morph.Add(m);
+                        }
+                        if(o.name.Length>4 && o.name.StartsWith("_SM_",Ordinal))
+                            o.name=o.name.Substring(4); // "_SM_"付きだとコロン記法でボーンを辿れない
+                    }
+                    tbs.listDEL.Clear();
+                    if(mo.material.TryGetValue(slot,out List<Material> mlist)) foreach(var mate in mlist)
+                        SetMaterial(o.transform,mate.no,mate.name,mate.shader);
+                    if(mo.anmFile.TryGetValue(slot,out MenuObj.Anm anm)){
+                        var a=o.GetComponent<Animation>();
+                        if(a==null) a=o.AddComponent<Animation>();
+                        PlayMotion(a,anm.name,1.0f,anm.loopq?1:0);
+                    }
+                    ret.Add(o);
+                }  
+            }
+            return ret;
         }
     }
     private static char[] menuWhite={' ','\t','\u3000'};
-    public static MenuObj ReadMenuObj(string fname){
+    public static MenuObj ReadMenuObj(string fname,MenuObj mo=null){
         byte[] buf=UTIL.AReadAll(fname);
         if(buf==null) return null;
-        return ReadMenuObj(buf);
+        return ReadMenuObj(buf,mo);
     }
-    public static MenuObj ReadMenuObj(byte[] buf){
-        MenuObj ret=new MenuObj();
+    public static MenuObj ReadMenuObj(byte[] buf,MenuObj mo=null){
+        MenuObj ret=(mo==null)?new MenuObj():mo;
         try{
             using(BinaryReader r=new BinaryReader(new MemoryStream(buf),Encoding.UTF8)){
                 string header=r.ReadString();
@@ -1101,19 +1223,43 @@ public static class ObjUtil {
                     string cmd=args[0].ToLower();
                     if(cmd=="end") return ret;
                     else if(cmd=="additem"){
-                        if(args.Count>=2) ret.modelName=UTIL.Suffix(args[1],".model");
+                        string slot="";
+                        if(args.Count>=3) slot=args[2];
+                        if(args.Count>=2) ret.modelName[slot]=UTIL.Suffix(args[1],".model");
+                    }else if(cmd=="アイテム"){
+                        if(args.Count>=2) ReadMenuObj(UTIL.Suffix(args[1],".menu"),ret);
                     }else if(cmd=="マテリアル変更"){
-                        if(args.Count>=4) ret.AddMaterial(int.Parse(args[2]),UTIL.Suffix(args[3],".mate"));
+                        if(args.Count>=4) ret.AddMaterial(args[1],int.Parse(args[2]),UTIL.Suffix(args[3],".mate"));
+                    }else if(cmd=="shader"){
+                        if(args.Count>=4) ret.ChgShader(args[1],int.Parse(args[2]),args[3]);
                     }else if(cmd=="anime"){
-                        if(args.Count>=3) ret.anmFile=UTIL.Suffix(args[2],".anm");
-                        if(args.Count>=4 && args[3]=="loop") ret.anmLoop=true;
+                        string slot="";
+                        if(args.Count>=2) slot=args[1];
+                        if(args.Count>=3){ ret.anmFile[slot]=new MenuObj.Anm(UTIL.Suffix(args[2],".anm")); }
+                        if(args.Count>=4 && args[3]=="loop") ret.anmFile[slot].loopq=true;
                     }
                 }
             }
-        }catch{ return string.IsNullOrEmpty(ret.modelName)?null:ret; }
+        }catch{}
         return ret;
     }
-    public static int ChgMaterial(Transform tr,int no,string fname){
+    public static int SetMaterial(Transform tr,int no,string fname,string shader=null){
+        string mate=UTIL.Suffix(fname,".mate");
+        foreach(var r in tr.GetComponentsInChildren<Renderer>()){
+            var sma=r.sharedMaterials;
+            if (sma!=null && no<sma.Length)
+                try{
+                    sma[no]=ImportCM.LoadMaterial(mate,null,sma[no]);
+                    if(shader!=null){
+                        Shader sh=Shader.Find(shader);
+                        if(sh!=null) sma[no].shader=sh;
+                    }
+                    r.sharedMaterials=sma;
+                }catch{ return -1; }
+        }
+        return 0;
+    }
+    public static int ChgMaterial(Transform tr,int no,string fname,string shader=null){
         string mate=UTIL.Suffix(fname,".mate");
         var oi=tr.GetComponent<ObjInfo>();
         if(oi==null) return -2;
@@ -1122,6 +1268,10 @@ public static class ObjUtil {
             if (sma!=null && no<sma.Length)
                 try{
                     sma[no]=ImportCM.LoadMaterial(mate,null,sma[no]);
+                    if(shader!=null){
+                        Shader sh=Shader.Find(shader);
+                        if(sh!=null) sma[no].shader=sh;
+                    }
                     r.sharedMaterials=sma;
                 }catch{ return -1; }
         }

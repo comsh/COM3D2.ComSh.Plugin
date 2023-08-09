@@ -18,6 +18,8 @@ public static class CmdMeshes {
         meshParamDic.Add("texture",new CmdParam<SingleMesh>(MeshParamTexture));
         meshParamDic.Add("recalc",new CmdParam<SingleMesh>(MeshParamRecalc));
         meshParamDic.Add("rq",new CmdParam<SingleMesh>(MeshParamRQ));
+        meshParamDic.Add("ss",new CmdParam<SingleMesh>(MeshParamSS));
+        meshParamDic.Add("png",new CmdParam<SingleMesh>(MeshParamPNG));
     }
     private static Dictionary<string,CmdParam<SingleMesh>> meshParamDic=new Dictionary<string,CmdParam<SingleMesh>>();
 
@@ -57,26 +59,36 @@ public static class CmdMeshes {
         if(val==null || val=="") return 0;
         float[] sz=new float[6];
         int n=ParseUtil.XyzSub(val,sz);
-        if(n!=6) return sh.io.Error("フィルタの形式が不正です");
-        if(sz[3]<=0||sz[4]<=0||sz[5]<=0) return sh.io.Error("幅/高さ/奥行の指定が不正です");
-        sm.filter=new float[]{  // x,y,z,w,h,d -> x0,x1,y0,y1,z0,z1
-            sz[0]-sz[3]/2,sz[0]+sz[3]/2,
-            sz[1]-sz[4]/2,sz[1]+sz[4]/2,
-            sz[2]-sz[5]/2,sz[2]+sz[5]/2
-        };
+        if(n!=4 && n!=6) return sh.io.Error("フィルタの形式が不正です");
+        if(n==4 && sz[3]<=0) return sh.io.Error("半径の指定が不正です");
+        else if(n==6 && (sz[3]<=0||sz[4]<=0||sz[5]<=0)) return sh.io.Error("幅/高さ/奥行の指定が不正です");
+        if(n==6){
+            sm.filter=new float[]{  // x,y,z,w,h,d -> x0,x1,y0,y1,z0,z1
+                sz[0]-sz[3]/2,sz[0]+sz[3]/2,
+                sz[1]-sz[4]/2,sz[1]+sz[4]/2,
+                sz[2]-sz[5]/2,sz[2]+sz[5]/2
+            };
+        }else{
+            sm.filter=new float[]{ sz[0],sz[1],sz[2],sz[3]*sz[3] };   // x,y,z,r -> x,y,z,r^2
+        }
         return 1;
     }
     private static int MeshParamExclude(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null || val=="") return 0;
         float[] sz=new float[6];
         int n=ParseUtil.XyzSub(val,sz);
-        if(n!=6) return sh.io.Error("フィルタの形式が不正です");
-        if(sz[3]<=0||sz[4]<=0||sz[5]<=0) return sh.io.Error("幅/高さ/奥行の指定が不正です");
-        sm.exclude=new float[]{  // x,y,z,w,h,d -> x0,x1,y0,y1,z0,z1
-            sz[0]-sz[3]/2,sz[0]+sz[3]/2,
-            sz[1]-sz[4]/2,sz[1]+sz[4]/2,
-            sz[2]-sz[5]/2,sz[2]+sz[5]/2
-        };
+        if(n!=4 && n!=6) return sh.io.Error("フィルタの形式が不正です");
+        if(n==4 && sz[3]<=0) return sh.io.Error("半径の指定が不正です");
+        else if(n==6 && (sz[3]<=0||sz[4]<=0||sz[5]<=0)) return sh.io.Error("幅/高さ/奥行の指定が不正です");
+        if(n==6){
+            sm.exclude=new float[]{  // x,y,z,w,h,d -> x0,x1,y0,y1,z0,z1
+                sz[0]-sz[3]/2,sz[0]+sz[3]/2,
+                sz[1]-sz[4]/2,sz[1]+sz[4]/2,
+                sz[2]-sz[5]/2,sz[2]+sz[5]/2
+            };
+        }else{
+            sm.exclude=new float[]{ sz[0],sz[1],sz[2],sz[3]*sz[3] };   // x,y,z,r -> x,y,z,r^2
+        }
         return 1;
     }
     private static int MeshParamVerList(ComShInterpreter sh,SingleMesh sm,string val){
@@ -128,14 +140,24 @@ public static class CmdMeshes {
             var vt=vta[th];
 
             if(sm.filter!=null){
-                if( sm.filter[0]>vt.x || sm.filter[1]<vt.x 
-                 || sm.filter[2]>vt.y || sm.filter[3]<vt.y
-                 || sm.filter[4]>vt.z || sm.filter[5]<vt.z ) continue;
+                if(sm.filter.Length==6){
+                    if( sm.filter[0]>vt.x || sm.filter[1]<vt.x 
+                     || sm.filter[2]>vt.y || sm.filter[3]<vt.y
+                     || sm.filter[4]>vt.z || sm.filter[5]<vt.z ) continue;
+                }else{
+                    float x=vt.x-sm.filter[0], y=vt.y-sm.filter[1], z=vt.z-sm.filter[2];
+                    if(sm.filter[3] < x*x+y*y+z*z ) continue;
+                }
             }
             if(sm.exclude!=null){
-                if( sm.exclude[0]<=vt.x && sm.exclude[1]>=vt.x 
-                 && sm.exclude[2]<=vt.y && sm.exclude[3]>=vt.y
-                 && sm.exclude[4]<=vt.z && sm.exclude[5]>=vt.z) continue;
+                if(sm.filter.Length==6){
+                    if( sm.exclude[0]<=vt.x && sm.exclude[1]>=vt.x 
+                     && sm.exclude[2]<=vt.y && sm.exclude[3]>=vt.y
+                     && sm.exclude[4]<=vt.z && sm.exclude[5]>=vt.z) continue;
+                }else{
+                    float x=vt.x-sm.filter[0], y=vt.y-sm.filter[1], z=vt.z-sm.filter[2];
+                    if(sm.filter[3] >= x*x+y*y+z*z ) continue;
+                }
             }
 
             sh.env["_1"]=i.ToString();
@@ -400,25 +422,64 @@ public static class CmdMeshes {
         if(lr[1]=="") right=lr[0]; else { prop=lr[0]; right=lr[1]; }
         if(!mate.HasProperty(prop)) return sh.io.Error("指定されたプロパティは現在のシェーダでは無効です");
 
-        int wrap=1;
-        lr=ParseUtil.LeftAndRight(val,',');
+        int wrap=1,mode=0;
+        lr=ParseUtil.LeftAndRight(right,',');
         if(lr[1]!=""){
             right=lr[0];
-            if(!int.TryParse(lr[1],out wrap) || wrap<0 || wrap>1) return sh.io.Error("書式が不正です");
+            var opts=lr[1].Split(ParseUtil.comma);
+            if(opts.Length>=1 && (!int.TryParse(opts[0],out wrap) || wrap<0 || wrap>1)) return sh.io.Error("書式が不正です");
+            if(opts.Length>=2 && (!int.TryParse(opts[1],out mode) || mode<0 || mode>1)) return sh.io.Error("書式が不正です");
         }
 
         Camera cam;
         if(ObjUtil.objDic.TryGetValue(right,out Transform camTr) && (cam=camTr.GetComponent<Camera>())!=null){
-            var tex=cam.targetTexture;
-            tex.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
-            mate.SetTexture(prop,tex);
+            if(mode==0){
+                var tex=cam.targetTexture;
+                tex.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
+                var old=mate.GetTexture(prop);
+                if(old!=null && ReferenceEquals(old.GetType(),typeof(Texture2D))) GameObject.Destroy(old);
+                mate.SetTexture(prop,tex);
+            }else{
+                RenderTexture rt=cam.targetTexture;
+                Texture2D tx;
+                var old=mate.GetTexture(prop);
+                if(old==null) tx=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);
+                else {
+                    if(old.name=="__subcamera_pic_" && old.width==rt.width && old.height==rt.height) tx=(Texture2D)old;
+                    else{
+                        if(ReferenceEquals(old.GetType(),typeof(Texture2D))) GameObject.Destroy(old);
+                        tx=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);
+                    }
+                }
+                RenderTexture bak=RenderTexture.active;
+                RenderTexture.active=rt;
+                tx.ReadPixels(new Rect(0,0,rt.width,rt.height),0,0);
+                tx.Apply();
+                tx.name="__subcamera_pic_";
+                RenderTexture.active=bak;
+                mate.SetTexture(prop,tx);
+            }
         }else try{
-            string fname=UTIL.Suffix(right,".tex");
+            string fname=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+UTIL.Suffix(right,".png");
+            if(System.IO.File.Exists(fname)){
+                byte[] buf=UTIL.ReadAll(fname);
+                Texture2D t2d=new Texture2D(2,2);
+                t2d.LoadImage(buf);
+                t2d.name=right;
+                t2d.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
+                var old=mate.GetTexture(prop);
+                if(old!=null && ReferenceEquals(old.GetType(),typeof(Texture2D))) GameObject.Destroy(old);
+                mate.SetTexture(prop,t2d);
+                return 1;
+            }
+            fname=UTIL.Suffix(right,".tex");
             if(GameUty.IsExistFile(fname,GameUty.FileSystem)){
                 var tere=ImportCM.LoadTexture(GameUty.FileSystem,fname,false);
                 var t2d=tere.CreateTexture2D();
-                t2d.name=lr[1];
+                t2d.name=right;
                 t2d.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
+                var old=mate.GetTexture(prop);
+                if(old!=null && ReferenceEquals(old.GetType(),typeof(Texture2D))) GameObject.Destroy(old);
                 mate.SetTexture(prop,t2d);
             }else return sh.io.Error("texファイルが見つかりません");
         }catch{
@@ -435,6 +496,52 @@ public static class CmdMeshes {
         sm.mi.EditMaterial();
         sm.mi.material[sm.submeshno].renderQueue=n;
         return 1;
+    }
+    private static int MeshParamSS(ComShInterpreter sh,SingleMesh sm,string val){
+        if(val==null) return 0;
+        string fname,prop;
+        var sa=ParseUtil.LeftAndRight(val,':');
+        if(sa[1]==""){ fname=sa[0]; prop="_MainTex";} else { fname=sa[1]; prop=sa[0];}
+        if(fname=="" || fname.IndexOf('\\')>=0 || UTIL.CheckFileName(fname)<0) return sh.io.Error("ファイル名が不正です");
+        fname=ComShInterpreter.homeDir+@"ScreenShot\\"+UTIL.Suffix(val,".png");
+        return MeshParamPNGSub(sh,sm,fname,prop);
+    }
+    private static int MeshParamPNG(ComShInterpreter sh,SingleMesh sm,string val){
+        if(val==null) return 0;
+        string fname,prop;
+        var sa=ParseUtil.LeftAndRight(val,':');
+        if(sa[1]==""){ fname=sa[0]; prop="_MainTex";} else { fname=sa[1]; prop=sa[0];}
+        if(fname=="" || fname.IndexOf('\\')>=0 || UTIL.CheckFileName(fname)<0) return sh.io.Error("ファイル名が不正です");
+        fname=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+UTIL.Suffix(val,".png");
+        return MeshParamPNGSub(sh,sm,fname,prop);
+    }
+    private static int MeshParamPNGSub(ComShInterpreter sh,SingleMesh sm,string fname,string prop){
+        var tex=sm.mi.material[sm.submeshno].GetTexture(prop);
+        if(ReferenceEquals(tex.GetType(),typeof(RenderTexture))){
+            if(toPNG((RenderTexture)tex,fname)<0) return sh.io.Error("書き込みに失敗しました");
+        }else if(ReferenceEquals(tex.GetType(),typeof(Texture2D))){
+            try{
+                byte[] buf=((Texture2D)tex).EncodeToPNG();
+                System.IO.File.WriteAllBytes(fname,buf);
+            }catch{}
+        }
+        return 1;
+    }
+    private static int toPNG(RenderTexture rt,string fname){
+        try{
+            Texture2D tx=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);
+
+            RenderTexture bak=RenderTexture.active;
+            RenderTexture.active=rt;
+            tx.ReadPixels(new Rect(0,0,rt.width,rt.height),0,0);
+            tx.Apply();
+            RenderTexture.active=bak;
+
+            byte[] buf=tx.EncodeToPNG();
+            UnityEngine.Object.Destroy(tx);
+            System.IO.File.WriteAllBytes(fname,buf);
+        }catch{ return -1;}
+        return 0;
     }
 
     private class VerLoopChange {

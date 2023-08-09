@@ -13,6 +13,7 @@ public static class CmdMisc {
         Command.AddCmd("kag",new Cmd(CmdKag));
         Command.AddCmd("curve",new Cmd(CmdCurve));
         Command.AddCmd("tmpfile",new Cmd(CmdTmpFile));
+        Command.AddCmd("queue",new Cmd(CmdQueue));
     }
 
     private static int CmdBG(ComShInterpreter sh,List<string> args){
@@ -26,7 +27,8 @@ public static class CmdMisc {
         int prmstart=1;
         var code=GetCmdParamBg(args[1]);
         if(code==null){
-            SetBg(args[1]);
+            string orig=GameMain.Instance.BgMgr.GetBGName();
+            try{SetBg(args[1]);}catch{ return sh.io.Error("背景が見つかりません");}
             prmstart=2;
         }
         int ret,cnt=args.Count;
@@ -51,18 +53,33 @@ public static class CmdMisc {
         return 0;
     }
     private static CmdParam<Transform> GetCmdParamBg(string cmd){
-        if(cmd=="pos"||cmd=="position") return _CmdParamWPos;
-        if(cmd=="rot"||cmd=="rotation") return _CmdParamWRot;
+        if(cmd=="pos"||cmd=="wpos"||cmd=="position") return _CmdParamWPos;
+        if(cmd=="rot"||cmd=="wrot"||cmd=="rotation") return _CmdParamWRot;
         if(cmd=="scale") return _CmdParamScale;
         return null;
     }
     private static void SetBg(string val){
+        BGWindow bgw=GameObject.FindObjectOfType<BGWindow>();
+        ObjectManagerWindow omw=null;
+        if(bgw!=null){
+            omw=bgw.mgr.GetWindow(PhotoWindowManager.WindowType.ObjectManager) as ObjectManagerWindow;
+		    omw.RemoveTransTargetObject(GameMain.Instance.BgMgr.current_bg_object);
+        }
+
+        bool myroom=false;
         Dictionary<string,string> mrdic=MyRoomCustom.CreativeRoomManager.GetSaveDataDic();
         foreach(string k in mrdic.Keys) if(mrdic[k]==val){
             GameMain.Instance.BgMgr.ChangeBgMyRoom(k);
-            return;
+            myroom=true;
+            break;
         }
-        GameMain.Instance.BgMgr.ChangeBg(val);
+        if(!myroom) GameMain.Instance.BgMgr.ChangeBg(val);
+        GameMain.Instance.BgMgr.current_bg_object.name=val;
+
+        if(omw!=null){
+            GameObject bgobj=GameMain.Instance.BgMgr.current_bg_object;
+            omw.AddTransTargetObject(bgobj,bgobj.name,bgobj.name, PhotoTransTargetObject.Type.BG);
+        }
     }
 
     private static int CmdSound(ComShInterpreter sh,List<string> args){
@@ -160,11 +177,11 @@ public static class CmdMisc {
         return 0;
     }
 
-    private static Dictionary<string,AnimationCurve> curveDic=new Dictionary<string,AnimationCurve>();
+    public static Dictionary<string,AnimationCurve> curveDic=new Dictionary<string,AnimationCurve>();
     private static int CmdCurve(ComShInterpreter sh,List<string> args){
         AnimationCurve ac;
         if(args.Count==1){
-            foreach(string k in curveDic.Keys){
+            foreach(string k in curveDic.Keys) if (k.StartsWith(sh.ns,StringComparison.Ordinal)){
                 float tmin=float.MaxValue,tmax=float.MinValue;
                 float vmin=float.MaxValue,vmax=float.MinValue;
                 foreach(Keyframe frm in curveDic[k].keys){
@@ -180,7 +197,8 @@ public static class CmdMisc {
         if(args[1]=="add"){
             if(args.Count<5) return sh.io.Error("使い方: curve add 識別名 キーフレーム定義1 キーフレーム定義2 [...]");
             if(!UTIL.ValidName(args[2])) return sh.io.Error("その名前は使用できません");
-            if(curveDic.ContainsKey(args[2])) return sh.io.Error("その名前は既に使われています");
+            string name=sh.ns+args[2];
+            if(curveDic.ContainsKey(name)) return sh.io.Error("その名前は既に使われています");
             ac=new AnimationCurve();
             for(int i=3; i<args.Count; i++){
                 float time,value,inTan,outTan;
@@ -191,24 +209,24 @@ public static class CmdMisc {
                 ac.AddKey(new Keyframe(time/1000,value,inTan,outTan));
             }
             if(ac.length<2) return sh.io.Error("キーフレーム定義は２つ以上必要です");
-            curveDic.Add(args[2],ac);
+            curveDic.Add(name,ac);
             return 0;
         }else if(args[1]=="del"){
             if(args.Count==2) return sh.io.Error("使い方: curve del 識別名 [...]");
             for(int i=2; i<args.Count; i++){
-                if(curveDic.ContainsKey(args[i])) curveDic.Remove(args[i]);
+                if(curveDic.ContainsKey(sh.ns+args[i])) curveDic.Remove(sh.ns+args[i]);
             }
             return 0;
         }
-        if(!curveDic.ContainsKey(args[1])) return sh.io.Error("指定されたカーブは見つかりません");
-        ac=curveDic[args[1]];
+        if(!curveDic.ContainsKey(sh.ns+args[1])) return sh.io.Error("指定されたカーブは見つかりません");
+        ac=curveDic[sh.ns+args[1]];
         if(args.Count==2){
             foreach(Keyframe frm in ac.keys)
                 sh.io.Print($"{(int)(frm.time*1000)} {sh.fmt.FVal(frm.value)} {sh.fmt.FVal(frm.inTangent)} {sh.fmt.FVal(frm.outTangent)}\n");
             return 0;
         }
         if(args.Count==3){
-            if(args[2]=="del"){ curveDic.Remove(args[1]); return 0; }
+            if(args[2]=="del"){ curveDic.Remove(sh.ns+args[1]); return 0; }
             return sh.io.Error("パラメータが不正です");
         }
         return CmdParamCurve(sh,ac,args[2],args[3]);
@@ -260,6 +278,161 @@ public static class CmdMisc {
             else if(ret==-2) return sh.io.Error("ファイルの書き込みに失敗しました");
         }
         return 0;
+    }
+    public class Q {
+        public int dim;
+        public int count=0;
+        public int max=0;
+        int ip=0;
+        float[][] buf;
+        public Q(int len,int d){
+            dim=d;
+            max=len;
+            buf=new float[len][];
+        }
+        public void EnQ(float[] val){
+            float[] f=new float[dim];
+            for(int i=0; i<dim; i++) f[i]=val[i];
+            buf[ip++]=f;
+            if(ip==buf.Length) ip=0;
+            if(count<buf.Length) count++;
+        }
+        public float[] DeQ(){
+            float[] ret=Peek();
+            count--;
+            return ret;
+        }
+        public float[] Peek(){ return Peek(0); }
+        public float[] Peek(int n){
+            if(count==0) return null;
+            int op=ip-count+n;
+            if(op<0) op+=buf.Length;
+            return buf[op];
+        }
+        public void Clear(){
+            ip=0; count=0;
+        }
+        public float[][] List(){
+            var fl=new float[count][];
+            for(int i=0; i<count; i++){
+                int n=ip-count+i;
+                if(n<0) n+=buf.Length;
+                fl[i]=buf[n];
+            }
+            return fl;
+        }
+        public float[] Average(){
+            var da=new double[dim];
+            for(int i=1; i<=count; i++){
+                int n=ip-i;
+                if(n<0) n+=buf.Length;
+                for(int d=0; d<dim; d++) da[d]+=buf[n][d];
+            }
+            for(int d=0; d<dim; d++) da[d]/=count;
+            float[] f=new float[dim];
+            for(int d=0; d<dim; d++) f[d]=(float)da[d];
+            return f;
+        }
+        public float[][] BBox(){
+            var min=new float[dim];
+            var max=new float[dim];
+            for(int d=0; d<dim; d++){ min[d]=float.MaxValue; max[d]=float.MinValue; }
+
+            for(int i=1; i<=count; i++){
+                int n=ip-i;
+                if(n<0) n+=buf.Length;
+                for(int d=0; d<dim; d++){
+                    min[d]=Mathf.Min(min[d],buf[n][d]);
+                    max[d]=Mathf.Max(max[d],buf[n][d]);
+                }
+            }
+            return new float[][]{min,max};
+        }
+        public float[] Median(){
+            float[][] bb=BBox();
+            float[] f=new float[dim];
+            for(int d=0; d<dim; d++) f[d]=(bb[0][d]+bb[1][d])/2;
+            return f;
+        }
+    }
+    public static Dictionary<string,Q> queDic=new Dictionary<string,Q>();
+    private static int CmdQueue(ComShInterpreter sh,List<string> args){
+        Q q;
+        if(args.Count==1){
+            foreach(var k in queDic.Keys) if(k.StartsWith(sh.ns,StringComparison.Ordinal)){
+                q=queDic[k];
+                sh.io.PrintLn($"{k}{sh.ofs}{q.count}/{q.max}");
+            }
+            return 0;
+        }
+        if(args[1]=="add"){
+            if(args.Count!=5) return sh.io.Error("使い方: queue add 識別名 次元 要素数");
+            if(!UTIL.ValidName(args[2])) return sh.io.Error("その名前は使用できません");
+            string name=sh.ns+args[2];
+            if(queDic.ContainsKey(name)) return sh.io.Error("その名前は既に使われています");
+            if(!float.TryParse(args[3],out float d) || d<1 || d>3) return sh.io.Error("次元が不正です");
+            if(!float.TryParse(args[4],out float n) || n<2 || n>100000) return sh.io.Error("要素数が不正です");
+            q=new Q(Mathf.RoundToInt(n),Mathf.RoundToInt(d));
+            queDic[name]=q;
+            return 0;
+        }else if(args[1]=="del"){
+            for(int i=2; i<args.Count; i++) queDic.Remove(sh.ns+args[i]);
+            return 0;
+        }
+        if(!queDic.TryGetValue(sh.ns+args[1],out q)) return sh.io.Error("指定されたキューは見つかりません");
+        if(args.Count==3) return CmdParamQueue(sh,q,args[2],"");
+        else if(args.Count==4) return CmdParamQueue(sh,q,args[2],args[3]);
+        else return 0;
+    }
+    private static int CmdParamQueue(ComShInterpreter sh,Q q,string cmd,string val){
+        if(cmd=="enq"){
+            float[] fa=ParseUtil.FloatArr(val);
+            if(fa==null) return sh.io.Error(ParseUtil.error);
+            if(fa.Length!=q.dim) return sh.io.Error("値の次元がキューのものと異なります");
+            float[] f=new float[q.dim];
+            for(int i=0; i<fa.Length; i++) f[i]=fa[i];
+            q.EnQ(f);
+        } else if(cmd=="deq"){
+            float[] f=q.DeQ();
+            if(f==null) return sh.io.Error("キューが空です");
+            PrintNVec(sh,f);
+        } else if(cmd=="peek"){
+            float n;
+            if(val=="") n=0;
+            else if (!float.TryParse(val,out n) || n<0 || n>=q.count) return sh.io.Error("参照位置が不正です");
+            float[] f=q.Peek(Mathf.RoundToInt(n));
+            if(f==null) return sh.io.Error("キューが空です");
+            PrintNVec(sh,f);
+        } else if(cmd=="clear"){
+            q.Clear();
+        } else if(cmd=="list"){
+            if(q.count>0){
+                float[][] fl=q.List();
+                for(int i=0; i<fl.Length; i++){
+                    PrintNVec(sh,fl[i]);
+                    sh.io.Print("\n");
+                }
+            }
+        } else if(cmd=="count"){
+            sh.io.Print(q.count.ToString());
+        } else if(cmd=="average"){
+            if(q.count==0) return sh.io.Error("キューが空です");
+            PrintNVec(sh,q.Average());
+        } else if(cmd=="bbox"){
+            if(q.count==0) return sh.io.Error("キューが空です");
+            float[][] bb=q.BBox();
+            PrintNVec(sh,bb[0]);
+            sh.io.Print(",");
+            PrintNVec(sh,bb[1]);
+        } else if(cmd=="median"){
+            if(q.count==0) return sh.io.Error("キューが空です");
+            PrintNVec(sh,q.Median());
+        } else return sh.io.Error("パラメータが不正です");
+        return 0;
+    }
+    private static void PrintNVec(ComShInterpreter sh,float[] f){
+        sh.io.Print(sh.fmt.FVal(f[0]));
+        for(int i=1; i<f.Length; i++) sh.io.Print(","+sh.fmt.FVal(f[i]));
     }
 }
 }

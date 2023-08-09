@@ -4,7 +4,6 @@ using UnityEngine;
 using static System.StringComparison;
 using static COM3D2.ComSh.Plugin.Command;
 using System;
-using System.Text.RegularExpressions;
 
 namespace COM3D2.ComSh.Plugin {
 
@@ -38,6 +37,9 @@ public static class CmdMaidMan {
         maidParamDic.Add("scale.z",new CmdParam<Maid>(MaidParamScaleZ));
         maidParamDic.Add("motion",new CmdParam<Maid>(MaidParamMotion));
         maidParamDic.Add("motion.time",new CmdParam<Maid>(MaidParamMotionTime));
+        maidParamDic.Add("motion.timep",new CmdParam<Maid>(MaidParamMotionTimep));
+        maidParamDic.Add("motion.timel",new CmdParam<Maid>(MaidParamMotionTimeL));
+        maidParamDic.Add("motion.timelp",new CmdParam<Maid>(MaidParamMotionTimepL));
         maidParamDic.Add("motion.speed",new CmdParam<Maid>(MaidParamMotionSpeed));
         maidParamDic.Add("motion.layer",new CmdParam<Maid>(MaidParamMotionLayer));
         maidParamDic.Add("motion.length",new CmdParam<Maid>(MaidParamMotionLength));
@@ -56,6 +58,7 @@ public static class CmdMaidMan {
         maidParamDic.Add("zurashi",new CmdParam<Maid>(MaidParamZurashi));
         maidParamDic.Add("undress",new CmdParam<Maid>(MaidParamUndress));
         maidParamDic.Add("shape",new CmdParam<Maid>(MaidParamShape));
+        maidParamDic.Add("shape.verlist",new CmdParam<Maid>(MaidParamShapeVerList));
         maidParamDic.Add("style",new CmdParam<Maid>(MaidParamStyle));
         maidParamDic.Add("face",new CmdParam<Maid>(MaidParamFace));
         maidParamDic.Add("blink",new CmdParam<Maid>(MaidParamBlink));
@@ -78,6 +81,8 @@ public static class CmdMaidMan {
         maidParamDic.Add("select",new CmdParam<Maid>(MaidParamSelect));
         maidParamDic.Add("later",new CmdParam<Maid>(MaidParamLater));
 
+        maidParamDic.Add("shape.rename",new CmdParam<Maid>(MaidParamShapeRename));
+
         maidParamDic.Add("l2w",new CmdParam<Maid>(MaidParamL2W));
         maidParamDic.Add("w2l",new CmdParam<Maid>(MaidParamW2L));
 
@@ -92,7 +97,8 @@ public static class CmdMaidMan {
     private static Dictionary<string,CmdParam<Maid>> manParamDic=new Dictionary<string,CmdParam<Maid>>();
     private static string[] manParams={
         "position","rotation","scale","pos","rot",
-        "motion","shape","iid","list","motion.time","motion.speed","motion.layer","motion.length","motion.weight",
+        "motion","shape","iid","list","motion.time","motion.speed","motion.layer","motion.length",
+        "motion.weight","motion.timep","motion.timel","motion.timelp",
         "attach","detach","lookat","ik",
         "wpos","wrot","lpos","lrot","opos","orot","lquat","wquat",
 
@@ -519,7 +525,13 @@ public static class CmdMaidMan {
         }
     }
 
+    private static int MaidParamMotionTimeL(ComShInterpreter sh,Maid m,string val){
+        return MaidParamMotionTimeSub(sh,m,val,true);
+    }
     private static int MaidParamMotionTime(ComShInterpreter sh,Maid m,string val){
+        return MaidParamMotionTimeSub(sh,m,val,false);
+    }
+    private static int MaidParamMotionTimeSub(ComShInterpreter sh,Maid m,string val,bool fullq){
         var anm=m.body0.m_Animation;
         if(val==null){
             bool multi=false;
@@ -529,7 +541,8 @@ public static class CmdMaidMan {
                     sh.io.PrintLn(st.layer.ToString()+':'+sh.fmt.FInt((st.time%st.length)*1000));
             }else{
                 foreach(AnimationState st in anm) if(anm.IsPlaying(st.name)){
-                    sh.io.PrintLn(sh.fmt.FInt((st.time%st.length)*1000));
+                    if(fullq) sh.io.PrintLn(sh.fmt.FInt(st.time*1000));
+                    else sh.io.PrintLn(sh.fmt.FInt((st.time%st.length)*1000));
                     break;
                 }
             }
@@ -551,6 +564,51 @@ public static class CmdMaidMan {
             }
             foreach(AnimationState st in anm) if(anm.IsPlaying(st.name)){
                 if(lno<0 || lno==st.layer) st.time=(f/1000)%st.length;
+            }
+        }
+        return 1;
+    }
+    private static int MaidParamMotionTimepL(ComShInterpreter sh,Maid m,string val){
+        return MaidParamMotionTimepSub(sh,m,val,true);
+    }
+    private static int MaidParamMotionTimep(ComShInterpreter sh,Maid m,string val){
+        return MaidParamMotionTimepSub(sh,m,val,false);
+    }
+    private static int MaidParamMotionTimepSub(ComShInterpreter sh,Maid m,string val,bool fullq){
+        var anm=m.body0.m_Animation;
+        if(val==null){
+            bool multi=false;
+            foreach(AnimationState st in anm) if(anm.IsPlaying(st.name)){ if(st.layer>0){multi=true; break;} }
+            if(multi){
+                foreach(AnimationState st in anm) if(anm.IsPlaying(st.name)){
+                    if(fullq) sh.io.PrintLn(st.layer.ToString()+':'+sh.fmt.FInt(st.time/st.length));
+                    else sh.io.PrintLn(st.layer.ToString()+':'+sh.fmt.FInt((st.time%st.length)/st.length));
+                }
+            }else{
+                foreach(AnimationState st in anm) if(anm.IsPlaying(st.name)){
+                    if(fullq) sh.io.PrintLn(sh.fmt.FInt(st.time/st.length));
+                    else sh.io.PrintLn(sh.fmt.FInt((st.time%st.length)/st.length));
+                    break;
+                }
+            }
+            return 0;
+        }
+        string[] sa;
+        if(val.IndexOf('\n')>=0) sa=val.Split(ParseUtil.cr);
+        else sa=val.Split(ParseUtil.comma);
+        for(int i=0; i<sa.Length; i++){
+            int lno;
+            float f;
+            var lr=ParseUtil.LeftAndRight(sa[i],':');
+            if(lr[1]==""){
+                lno=-1;
+                if(!float.TryParse(lr[0],out f) || f<-1 || f>1) return sh.io.Error("数値の指定が不正です");
+            }else{
+                if(!int.TryParse(lr[0],out lno) || lno<0) return sh.io.Error("レイヤ番号が不正です");
+                if(!float.TryParse(lr[1],out f) || f<-1 || f>1) return sh.io.Error("数値の指定が不正です");
+            }
+            foreach(AnimationState st in anm) if(anm.IsPlaying(st.name)){
+                if(lno<0 || lno==st.layer) st.time=f*st.length;
             }
         }
         return 1;
@@ -620,7 +678,7 @@ public static class CmdMaidMan {
     }
     private static int MaidParamMotionLength(ComShInterpreter sh,Maid m,string val){
         var anm=m.body0.m_Animation;
-        foreach(AnimationState st in anm) if(anm.IsPlaying(st.name)){
+        foreach(AnimationState st in anm) if(anm.IsPlaying(st.name) && st.layer==0){
             sh.io.Print(sh.fmt.FInt(st.length*1000));
             break;
         }
@@ -862,11 +920,48 @@ public static class CmdMaidMan {
         }
         return 1;
     }
+    private static int MaidParamShapeVerList(ComShInterpreter sh,Maid m,string val){
+        if(val==null) return 0;
+        for(int i=0; i<m.body0.goSlot.Count; i++){
+            TBodySkin skin=m.body0.goSlot[i];
+            if(skin.morph==null || !skin.morph.hash.ContainsKey(val)) continue;
+            int idx=(int)skin.morph.hash[val];
+            var bd=skin.morph.BlendDatas[idx];
+            if(bd.v_index.Length>0) sh.io.Print($"{((TBody.SlotID)i).ToString()}:{bd.v_index[0].ToString()}");
+            for(int j=1; j<bd.v_index.Length; j++) sh.io.Print(","+bd.v_index[j].ToString());
+            sh.io.PrintLn("");
+        }
+        return 0;
+    }
+    private static int MaidParamShapeRename(ComShInterpreter sh,Maid m,string val){
+        if(val==null) return 0;
+        if(m.body0==null || m.body0.goSlot==null || m.body0.goSlot.Count<2) return 1;
+        string[] arr=val.Split(',');
+        if(arr.Length!=3) return sh.io.Error("書式が不正です");
+        string slot=arr[0],name1=arr[1],name2=arr[2];
+        for(int i=0; i<arr.Length; i++){
+            int idx=m.body0.GetSlotNo(slot);
+            var skin=m.body0.goSlot[idx];
+            if(skin!=null && skin.morph!=null && skin.morph.BlendDatas!=null){
+                foreach(var bd in skin.morph.BlendDatas)
+                    if(bd!=null && bd.name!=null && bd.name==name1){
+                        int v=(int)skin.morph.hash[name1];
+                        skin.morph.hash.Remove(name1);
+                        bd.name=name2;
+                        skin.morph.hash[name2]=v;
+                    }
+            }
+        }
+        return 1;
+    }
     private static int MaidParamStyle(ComShInterpreter sh,Maid m,string val){
         if(val==null){
             for(int i=0; i<MaidUtil.mpnBody.Length; i++){
                 MaidProp mp=m.GetProp(MaidUtil.mpnBody[i]);
-                if(mp!=null) sh.io.PrintLn2(MaidUtil.mpnBody[i]+":",sh.fmt.F0to1(mp.value));
+                if(mp!=null){
+                    int v=(mp.boTempDut||mp.boTempExecuted)?mp.temp_value:mp.value;
+                    sh.io.PrintLn2(MaidUtil.mpnBody[i]+":",sh.fmt.F0to1(v));
+                }
             }
             return 0;
         }
@@ -876,7 +971,7 @@ public static class CmdMaidMan {
             string lk=k.ToLower();
             int i; for(i=0; i<MaidUtil.mpnBody.Length; i++) if(lk==MaidUtil.mpnBody[i].ToString().ToLower()) break;
             if(i==MaidUtil.mpnBody.Length) return sh.io.Error("MPNが不正です");
-            m.SetProp(MaidUtil.mpnBody[i],(int)kvs[k],true);
+            MaidUtil.SetPropTemp(m,MaidUtil.mpnBody[i],(int)kvs[k]);
         }
         m.AllProcProp();
         return 1;
@@ -1197,14 +1292,14 @@ public static class CmdMaidMan {
         }else if(val=="bone"){
             CharacterMgr cm=GameMain.Instance.CharacterMgr;
             if(cm.TryGetCacheObject(m.body0.goSlot[0].m_strModelFileName,out GameObject go)){
-                UTIL.TraverseTr(go.transform,(Transform tr)=>{
+                UTIL.TraverseTr(go.transform,(Transform tr,int d)=>{
                     if(!tr.name.StartsWith("_BO_",Ordinal)) ls.Add(tr.name);
                     return 0;
                 });
             }
         }else if(val=="all"){
             // 絶対長いのでログへ。ソートもしない
-            UTIL.TraverseTr(m.transform,(Transform tr)=>{ ls.Add(tr.name); return 0; });
+            UTIL.TraverseTr(m.transform,(Transform tr,int d)=>{ ls.Add(tr.name); return 0; });
         }else return sh.io.Error("ap、boneのいずれかを指定してください");
         ls.Sort();
         foreach(string s in ls) sh.io.PrintLn(s);
@@ -1299,7 +1394,7 @@ public static class CmdMaidMan {
     private static int MaidParamLater(ComShInterpreter sh,Maid m,string val){
         if(val==null) return 0;
 
-        var subsh=new ComShInterpreter(null,sh.env,sh.func);
+        var subsh=new ComShInterpreter(null,sh.env,sh.func,sh.ns);
         subsh.env[ComShInterpreter.SCRIPT_ERR_ON]="1";
         var psr=subsh.parser;
         int r=psr.Parse(val); // パースだけしておく
@@ -1573,11 +1668,17 @@ public static class MaidUtil {
         return -1;
     }
 
+    // 上限下限チェックなし
+    public static void SetPropTemp(Maid m,MPN mpn,int value){
+        MaidProp mp=m.GetProp(mpn);
+        mp.temp_value=value;
+        mp.boDut=false;
+        mp.boTempDut=true;
+    }
     public static string GetCloth(Maid m,MPN mpn){
         MaidProp mp=m.GetProp(mpn);
-        string name=mp.strTempFileName;
-        if(name=="") name=mp.strFileName;
-        if (name==""||mp.strFileName.EndsWith("_del.menu",Ordinal)) return string.Empty;
+        string name=(!string.IsNullOrEmpty(mp.strTempFileName) && mp.nTempFileNameRID!=0)?mp.strTempFileName:mp.strFileName;
+        if (name=="" || mp.strFileName.EndsWith("_del.menu",Ordinal)) return string.Empty;
         return name;
     }
     public static MPN[] mpnBody={       // 身体系MPN
@@ -1915,5 +2016,7 @@ public static class MaidUtil {
             }
         return "";
     }
+
+
 }
 }

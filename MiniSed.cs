@@ -73,7 +73,7 @@ public class MiniSed {
         int i;
         // address
         if(cmd[0]=='/'){
-            i=GetPattern(cmd,0,out rex);
+            i=GetPattern(cmd,0,out rex,'/');
             if(i<0 || rex==""){ error="パターンが不正です"; return;}
             try{ rrex=new Regex(rex); }catch(Exception e){ error=e.Message; return; }
             i++;
@@ -134,18 +134,23 @@ public class MiniSed {
         return i;
     }
     private static int GetPattern(string cmd,int pos,out string pattern){
+        if(cmd.Length<pos){ pattern=""; return -1; }
+        char sep=cmd[pos];
+        return GetPattern(cmd,pos,out pattern,sep);
+    }
+    private static int GetPattern(string cmd,int pos,out string pattern,char sep){
         pattern="";
-        if(cmd[pos]!='/') return -1;
+        if(cmd[pos]!=sep) return -1;
         int i,bi=0;
         char[] buf=new char[cmd.Length];
         bool escape=false;
         for(i=pos+1; i<cmd.Length; i++){
             if(escape){
                 escape=false;
-                if(cmd[i]=='/') buf[bi-1]='/'; else buf[bi++]=cmd[i];
+                if(cmd[i]==sep) buf[bi-1]=sep; else buf[bi++]=cmd[i];
             }else{
                 if(cmd[i]=='\\') escape=true;
-                if(cmd[i]=='/') break;
+                else if(cmd[i]==sep) break;
                 buf[bi++]=cmd[i];
             }
         }

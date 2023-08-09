@@ -3,7 +3,7 @@ using System.IO;
 using System.Text;
 using System.Collections.Generic;
 using UnityEngine;
-using System.Text.RegularExpressions;
+using static System.StringComparison;
 
 namespace COM3D2.ComSh.Plugin {
 
@@ -24,12 +24,15 @@ public partial class ComShInterpreter {
     public delegate void Output(string str,int code);
     public ComShPanel panel=null;
     public string ofs=" ";
+    public string ns="";
 
-	public ComShInterpreter(Output op=null, VarDic parentEnv=null,Dictionary<string,ScriptStatus> parentFunc=null) {
+
+	public ComShInterpreter(Output op=null, VarDic parentEnv=null,Dictionary<string,ScriptStatus> parentFunc=null,string ns="") {
         env=(parentEnv!=null)?new VarDic(parentEnv):new VarDic();
         env["`"]=string.Empty;
         func=(parentFunc!=null)?new Dictionary<string,ScriptStatus>(parentFunc):new Dictionary<string,ScriptStatus>();
         io=new IO(this,op);
+        this.ns=ns;
         OnEnvChanged();
         Command.Init();
 	}
@@ -94,7 +97,7 @@ public partial class ComShInterpreter {
             var f=func[tokens[0]];
             f.rewind();
             var sbo=new SubShOutput();
-            ComShInterpreter child = new ComShInterpreter(new Output(sbo.Output),env,func);
+            ComShInterpreter child = new ComShInterpreter(new Output(sbo.Output),env,func,ns);
             ret=child.Exec(tokens,f);
             if(ret<0) ret=io.Error(child.io.errorMessage,ret);
             else io.Print(sbo.GetSubShResult());
@@ -103,7 +106,7 @@ public partial class ComShInterpreter {
             if(fname=="") ret=io.Error("コマンドが存在しません");
             else{
                 var sbo=new SubShOutput();
-                ComShInterpreter child = new ComShInterpreter(new Output(sbo.Output),env,func);
+                ComShInterpreter child = new ComShInterpreter(new Output(sbo.Output),env,func,ns);
                 ret=child.Exec(tokens,fname);
                 if(ret<0) ret=io.Error(child.io.errorMessage,ret);
                 else io.Print(sbo.GetSubShResult());
@@ -425,6 +428,7 @@ public partial class ComShInterpreter {
         public string FPos(float x,float y,float z){ return FVal(x)+","+FVal(y)+","+FVal(z);}
         public string FEuler(Vector3 v){ return FInt(v.x)+","+FInt(v.y)+","+FInt(v.z);}
         public string FQuat(Quaternion v){ return FVal(v.x)+","+FVal(v.y)+","+FVal(v.z)+","+FVal(v.w);}
+        public string FQuat(float[] v){ return FVal(v[0])+","+FVal(v[1])+","+FVal(v[2])+","+FVal(v[3]);}
         public string FMul(Vector3 v){ return FInt(v.x)+","+FInt(v.y)+","+FInt(v.z);}
         public string FEA2(Vector3 v){ return FVal(v.x)+","+FVal(v.y); }
         public string FXY(Vector2 v){ return FVal(v.x)+","+FVal(v.y); }

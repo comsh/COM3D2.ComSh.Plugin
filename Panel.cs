@@ -308,7 +308,7 @@ public class ComShPanel {
     private static string[] items0={""};
     private static ComboItems MakeItems(ComShInterpreter sh,ComShParser plst,char dlmt){
         var sbo=new ComShInterpreter.SubShOutput();
-        ComShInterpreter child = new ComShInterpreter(new ComShInterpreter.Output(sbo.Output),sh.env,sh.func);
+        ComShInterpreter child = new ComShInterpreter(new ComShInterpreter.Output(sbo.Output),sh.env,sh.func,sh.ns);
         plst.Reset();
         int ret=child.InterpretParser(plst);
         if(ret<0) return new ComboItems(items0,items0);
