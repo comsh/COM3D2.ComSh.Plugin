@@ -348,12 +348,6 @@ public static class CmdMisc {
             }
             return new float[][]{min,max};
         }
-        public float[] Median(){
-            float[][] bb=BBox();
-            float[] f=new float[dim];
-            for(int d=0; d<dim; d++) f[d]=(bb[0][d]+bb[1][d])/2;
-            return f;
-        }
     }
     public static Dictionary<string,Q> queDic=new Dictionary<string,Q>();
     private static int CmdQueue(ComShInterpreter sh,List<string> args){
@@ -424,9 +418,6 @@ public static class CmdMisc {
             PrintNVec(sh,bb[0]);
             sh.io.Print(",");
             PrintNVec(sh,bb[1]);
-        } else if(cmd=="median"){
-            if(q.count==0) return sh.io.Error("キューが空です");
-            PrintNVec(sh,q.Median());
         } else return sh.io.Error("パラメータが不正です");
         return 0;
     }
