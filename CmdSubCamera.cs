@@ -180,7 +180,7 @@ public static class CmdSubCamera {
         if(toPNG(cam.targetTexture,fname)<0) return sh.io.Error("書き込みに失敗しました");
         return 1;
     }
-    private static int toPNG(RenderTexture rt,string fname){
+    public static int toPNG(RenderTexture rt,string fname){
         try{
             Texture2D tx=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);
 

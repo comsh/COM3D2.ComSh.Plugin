@@ -896,9 +896,7 @@ public static class CmdObjects {
             tr.transform.LookAt(tgt.position,tr.up);
         }else{
             float[] xyz=ParseUtil.Xyz(val);
-            if(xyz==null){
-                return sh.io.Error(ParseUtil.error);
-            }
+            if(xyz==null) return sh.io.Error(ParseUtil.error);
             tr.transform.LookAt(new Vector3(xyz[0],xyz[1],xyz[2]),tr.up);
         }
         return 1;

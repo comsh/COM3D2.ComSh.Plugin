@@ -503,7 +503,7 @@ public static class CmdMeshes {
         var sa=ParseUtil.LeftAndRight(val,':');
         if(sa[1]==""){ fname=sa[0]; prop="_MainTex";} else { fname=sa[1]; prop=sa[0];}
         if(fname=="" || fname.IndexOf('\\')>=0 || UTIL.CheckFileName(fname)<0) return sh.io.Error("ファイル名が不正です");
-        fname=ComShInterpreter.homeDir+@"ScreenShot\\"+UTIL.Suffix(val,".png");
+        fname=ComShInterpreter.homeDir+@"ScreenShot\\"+UTIL.Suffix(fname,".png");
         return MeshParamPNGSub(sh,sm,fname,prop);
     }
     private static int MeshParamPNG(ComShInterpreter sh,SingleMesh sm,string val){
@@ -512,13 +512,14 @@ public static class CmdMeshes {
         var sa=ParseUtil.LeftAndRight(val,':');
         if(sa[1]==""){ fname=sa[0]; prop="_MainTex";} else { fname=sa[1]; prop=sa[0];}
         if(fname=="" || fname.IndexOf('\\')>=0 || UTIL.CheckFileName(fname)<0) return sh.io.Error("ファイル名が不正です");
-        fname=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+UTIL.Suffix(val,".png");
+        fname=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+UTIL.Suffix(fname,".png");
         return MeshParamPNGSub(sh,sm,fname,prop);
     }
     private static int MeshParamPNGSub(ComShInterpreter sh,SingleMesh sm,string fname,string prop){
         var tex=sm.mi.material[sm.submeshno].GetTexture(prop);
+        if(tex==null) return sh.io.Error("テクスチャがありません");
         if(ReferenceEquals(tex.GetType(),typeof(RenderTexture))){
-            if(toPNG((RenderTexture)tex,fname)<0) return sh.io.Error("書き込みに失敗しました");
+            if(CmdSubCamera.toPNG((RenderTexture)tex,fname)<0) return sh.io.Error("書き込みに失敗しました");
         }else if(ReferenceEquals(tex.GetType(),typeof(Texture2D))){
             try{
                 byte[] buf=((Texture2D)tex).EncodeToPNG();
@@ -526,22 +527,6 @@ public static class CmdMeshes {
             }catch{}
         }
         return 1;
-    }
-    private static int toPNG(RenderTexture rt,string fname){
-        try{
-            Texture2D tx=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);
-
-            RenderTexture bak=RenderTexture.active;
-            RenderTexture.active=rt;
-            tx.ReadPixels(new Rect(0,0,rt.width,rt.height),0,0);
-            tx.Apply();
-            RenderTexture.active=bak;
-
-            byte[] buf=tx.EncodeToPNG();
-            UnityEngine.Object.Destroy(tx);
-            System.IO.File.WriteAllBytes(fname,buf);
-        }catch{ return -1;}
-        return 0;
     }
 
     private class VerLoopChange {
