@@ -904,7 +904,7 @@ public static class CmdMaidMan {
             var dic=new SortedDictionary<string,float>();  // 重複削除とソート
             foreach (TBodySkin skin in m.body0.goSlot) if (skin!=m.body0.Face && skin.morph != null)
                 foreach (string mk in skin.morph.hash.Keys) if(!dic.ContainsKey(mk))
-                    dic.Add(mk,skin.morph.GetBlendValues((int)skin.morph.hash[mk]));
+                    dic[mk]=skin.morph.GetBlendValues((int)skin.morph.hash[mk]);
             foreach(string mk in dic.Keys) sh.io.PrintLn2(mk+":",sh.fmt.F0to1(dic[mk]));
             return 0;
         }
@@ -939,18 +939,17 @@ public static class CmdMaidMan {
         string[] arr=val.Split(',');
         if(arr.Length!=3) return sh.io.Error("書式が不正です");
         string slot=arr[0],name1=arr[1],name2=arr[2];
-        for(int i=0; i<arr.Length; i++){
-            int idx=m.body0.GetSlotNo(slot);
-            var skin=m.body0.goSlot[idx];
-            if(skin!=null && skin.morph!=null && skin.morph.BlendDatas!=null){
-                foreach(var bd in skin.morph.BlendDatas)
-                    if(bd!=null && bd.name!=null && bd.name==name1){
-                        int v=(int)skin.morph.hash[name1];
-                        skin.morph.hash.Remove(name1);
-                        bd.name=name2;
-                        skin.morph.hash[name2]=v;
-                    }
-            }
+        if(!m.body0.IsSlotNo(slot)) return sh.io.Error("スロット名が不正です");
+        int idx=m.body0.GetSlotNo(slot);
+        var skin=m.body0.goSlot[idx];
+        if(skin!=null && skin.morph!=null && skin.morph.BlendDatas!=null){
+            foreach(var bd in skin.morph.BlendDatas)
+                if(bd!=null && bd.name!=null && bd.name==name1){
+                    int v=(int)skin.morph.hash[name1];
+                    skin.morph.hash.Remove(name1);
+                    bd.name=name2;
+                    skin.morph.hash[name2]=v;
+                }
         }
         return 1;
     }
@@ -1116,7 +1115,10 @@ public static class CmdMaidMan {
             if(p!="+" && p!="-"){ p="+"; } else t=t.Substring(0,t.Length-1);
             string[] lr=ParseUtil.LeftAndRight(t,'.');
             if(lr[1]=="") m.body0.SetVisibleNodeSlot("body",p[0]=='+',lr[0]);
-            else m.body0.SetVisibleNodeSlot(lr[0],p[0]=='+',ParseUtil.CompleteBoneName(lr[1],false,false));
+            else{
+                if(!m.body0.IsSlotNo(lr[0])) return sh.io.Error("スロット名が不正です");
+                m.body0.SetVisibleNodeSlot(lr[0],p[0]=='+',ParseUtil.CompleteBoneName(lr[1],false,false));
+            }
         }
         m.body0.FixMaskFlag();
         m.body0.FixVisibleFlag();

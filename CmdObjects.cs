@@ -344,7 +344,7 @@ public static class CmdObjects {
             if(oi==null||oi.data.morph==null) return 0;
             var sd=new SortedDictionary<string,float>();    // セットメニューで読んだブツには重複もある
             foreach(TMorph m in oi.data.morph) foreach (string mk in m.hash.Keys)
-                sd.Add(mk,m.GetBlendValues((int)m.hash[mk]));
+                sd[mk]=m.GetBlendValues((int)m.hash[mk]);
             foreach(var kv in sd) sh.io.PrintLn($"{kv.Key}:{sh.fmt.F0to1(kv.Value)}");
             return 0;
         }
