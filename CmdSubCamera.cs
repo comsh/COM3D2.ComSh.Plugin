@@ -179,7 +179,7 @@ public static class CmdSubCamera {
         string file="";
         if(val!="" && val.IndexOf('\\')<0){
             if(val[0]=='*'){
-                var tf=new DataFiles.TmpFile(val.Substring(1),"");
+                var tf=DataFiles.CreateTempFile(val.Substring(1),"");
                 file=tf.filename;
             }else if(UTIL.CheckFileName(val)>=0){
                 file=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+UTIL.Suffix(val,".png");

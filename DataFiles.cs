@@ -69,7 +69,7 @@ public static class DataFiles {
     public static TmpFile CreateTempFile(string id,string src){
         try{
             if(tmpfiledic.TryGetValue(id,out TmpFile tf)){
-                tf.Copy(src);
+                if(!string.IsNullOrEmpty(src)) tf.Copy(src);
                 return tf;
             }else return new TmpFile(id,src);
         }catch{}

@@ -539,7 +539,7 @@ public static class CmdMeshes {
         string file="";
         if(fname!="" && fname.IndexOf('\\')<0){
             if(fname[0]=='*'){
-                var tf=new DataFiles.TmpFile(fname.Substring(1),"");
+                var tf=DataFiles.CreateTempFile(fname.Substring(1),"");
                 file=tf.filename;
             }else if(UTIL.CheckFileName(fname)>=0){
                 file=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+UTIL.Suffix(fname,".png");
