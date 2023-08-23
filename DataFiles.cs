@@ -29,6 +29,12 @@ public static class DataFiles {
                         File.Copy(file,this.filename,true);
                         return;
                     }
+                } else if(orig.EndsWith(".png",Ordinal)){
+                    string file=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+orig;
+                    if(File.Exists(file)){
+                        File.Copy(file,this.filename,true);
+                        return;
+                    }
                 }
                 byte[] buf=UTIL.AReadAll(orig);
                 if(buf==null) throw new Exception();

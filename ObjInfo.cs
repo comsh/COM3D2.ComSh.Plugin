@@ -16,7 +16,6 @@ public class ObjInfo : MonoBehaviour{
             if(this.data.workMate!=null) foreach(var mate in this.data.workMate) UnityEngine.Object.Destroy(mate);
         }
     }
-
     public static ObjInfo AddObjInfo(Transform tr,string src,List<TMorph> morph=null){
         var oi=tr.gameObject.AddComponent<ObjInfo>();
         oi.source=src;
@@ -39,7 +38,7 @@ public class ObjInfo : MonoBehaviour{
     }
     public static ObjInfo GetObjInfo(Transform tr){
         var oi=tr.GetComponentInParent<ObjInfo>();          // 親方向で最初に見つかるもの
-        if(oi!=null && oi.data.FindBone(tr)==null) return null;  // 子に自分が含まれてなければ無関係
+        if(oi!=null && oi.data!=null && oi.data.FindBone(tr)==null) return null;  // 子に自分が含まれてなければ無関係
         return oi;
     }
 }
@@ -58,7 +57,7 @@ public class ObjInfoData {
             }
         }else{
             var ta=transform.GetComponentsInChildren<Transform>();
-            if(ta!=null) bones=new List<Transform>(ta);
+            if(ta!=null) for(int i=0; i<ta.Length; i++) bones.Add(ta[i]);
         }
     }
     public Transform FindBone(Transform tr){
@@ -100,25 +99,33 @@ public class ObjInfoData {
         foreach(var b in bones){
             var r=b.GetComponent<Renderer>();
             if(r==null) continue;
-            if(ReferenceEquals(r.GetType(), typeof(SkinnedMeshRenderer))) {
+            if(ReferenceEquals(r.GetType(),typeof(SkinnedMeshRenderer))) {
                 var smr = (SkinnedMeshRenderer)r;
+                if(smr.sharedMesh==null) continue;
+
                 originalMesh.Add(new MeshList.Entry { no=meshno,submeshcount=smr.sharedMesh.subMeshCount,mesh=smr.sharedMesh });
                 int n=smr.sharedMesh.subMeshCount;
                 meshno+=n;
 
                 Material[] mate=smr.sharedMaterials;
-                n=(n>mate.Length)?mate.Length:n;    // 1サブメッシュ1マテリアルのみ対応
-                for(int j=0; j<n; j++) originalMate.Add(mate[j]);
+                for(int j=0; j<n; j++){
+                    if(j>mate.Length-1) originalMate.Add(new Material(Shader.Find("Standard")));
+                    else originalMate.Add(mate[j]);
+                }
             }else{
                 MeshFilter mf=r.transform.GetComponent<MeshFilter>();
                 if(mf==null) continue;
+                if(mf.sharedMesh==null) continue;
+
                 originalMesh.Add(new MeshList.Entry { no=meshno,submeshcount=mf.sharedMesh.subMeshCount,mesh=mf.sharedMesh });
                 int n=mf.sharedMesh.subMeshCount;
                 meshno+=n;
 
                 Material[] mate=r.sharedMaterials;
-                n=(n>mate.Length)?mate.Length:n;    // 1サブメッシュ1マテリアルのみ対応
-                for(int j=0; j<n; j++) originalMate.Add(mate[j]);
+                for(int j=0; j<n; j++){
+                    if(j>mate.Length-1) originalMate.Add(new Material(Shader.Find("Standard")));
+                    else originalMate.Add(mate[j]);
+                }
             }
         }
         originalMesh.submeshCount=meshno;

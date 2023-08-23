@@ -823,9 +823,10 @@ public static class CmdObjects {
         return 0;
     }
     private static int ObjParamComponent(ComShInterpreter sh,Transform tr,string val){
-        Component[] ca=tr.GetComponentsInChildren<Component>();
+        Component[] ca=tr.GetComponentsInChildren<Component>(false);
         for(int i=0; i<ca.Length; i++){
             if(ReferenceEquals(ca[i].GetType(),typeof(Transform))) continue;
+            if(ca[i] is UnityEngine.MonoBehaviour && !((MonoBehaviour)ca[i]).enabled) continue;
             sh.io.PrintLn(ca[i].GetType().FullName+sh.ofs+ca[i].transform.name);
         }
         return 0;
@@ -836,7 +837,7 @@ public static class CmdObjects {
         if(mi.count==0) return sh.io.Error("メッシュが見つかりません");
         if(val==null){
             for(int i=0; i<mi.count; i++){
-                sh.io.Print($"{i}{sh.ofs}count={mi.oid.originalMesh.GetIndices(i).Length/3}");
+                sh.io.Print($"{i}");
                 if(mi.material.Count>i) sh.io.Print($"{sh.ofs}mate={mi.material[i].name}{sh.ofs}shader={mi.material[i].shader.name}");
                 sh.io.PrintLn("");
             }
@@ -1034,8 +1035,10 @@ public static class ObjUtil {
         if(o==null){
             if(dummyMaid==null){ // LoadSkinMesh_Rを呼ぶためだけのニセMaid
                 dummyMaid=new GameObject().AddComponent<FakeMaid>();
+                dummyMaid.enabled=false;
                 dummyMaid.m_goOffset=new GameObject("Offset");
                 dummyMaid.body0=dummyMaid.gameObject.AddComponent<TBody>();
+                dummyMaid.body0.enabled=false;
                 dummyMaid.body0.maid=dummyMaid;
                 dummyMaid.body0.m_hitFloorPlane=null;
                 dummyMaid.body0.boMAN=dummyMaid.boMAN=false;
@@ -1093,6 +1096,13 @@ public static class ObjUtil {
         go.transform.localPosition=Vector3.zero;
         go.transform.rotation=orot;
         go.transform.localScale=oscl;
+
+        UTIL.TraverseTr(go.transform,(Transform tr,int d)=>{
+            ObjInfo inf=tr.GetComponent<ObjInfo>();
+            if(inf!=null) inf.enabled=false;
+            return 0;
+        });
+
         ObjInfo.AddObjInfo(b.transform,oi==null?"":oi.source,morph);
         b.transform.SetParent(pr);
         return b;

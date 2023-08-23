@@ -170,31 +170,24 @@ public static class CmdSubCamera {
         if(val==null) return 0;
         if(val=="" || val.IndexOf('\\')>=0 || UTIL.CheckFileName(val)<0) return sh.io.Error("ファイル名が不正です");
         string fname=ComShInterpreter.homeDir+@"ScreenShot\\"+UTIL.Suffix(val,".png");
-        if(toPNG(cam.targetTexture,fname)<0) return sh.io.Error("書き込みに失敗しました");
+        if(TextureUtil.Rt2Png(cam.targetTexture,fname)<0) return sh.io.Error("書き込みに失敗しました");
         return 1;
     }
     private static int SubCamParamPng(ComShInterpreter sh,Camera cam,string val){
         if(val==null) return 0;
-        if(val=="" || val.IndexOf('\\')>=0 || UTIL.CheckFileName(val)<0) return sh.io.Error("ファイル名が不正です");
-        string fname=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+UTIL.Suffix(val,".png");
-        if(toPNG(cam.targetTexture,fname)<0) return sh.io.Error("書き込みに失敗しました");
+
+        string file="";
+        if(val!="" && val.IndexOf('\\')<0){
+            if(val[0]=='*'){
+                var tf=new DataFiles.TmpFile(val.Substring(1),"");
+                file=tf.filename;
+            }else if(UTIL.CheckFileName(val)>=0){
+                file=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+UTIL.Suffix(val,".png");
+            }
+        }
+        if(file=="") return sh.io.Error("ファイル名が不正です");
+        if(TextureUtil.Rt2Png(cam.targetTexture,file)<0) return sh.io.Error("書き込みに失敗しました");
         return 1;
-    }
-    public static int toPNG(RenderTexture rt,string fname){
-        try{
-            Texture2D tx=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);
-
-            RenderTexture bak=RenderTexture.active;
-            RenderTexture.active=rt;
-            tx.ReadPixels(new Rect(0,0,rt.width,rt.height),0,0);
-            tx.Apply();
-            RenderTexture.active=bak;
-
-            byte[] buf=tx.EncodeToPNG();
-            UnityEngine.Object.Destroy(tx);
-            System.IO.File.WriteAllBytes(fname,buf);
-        }catch{ return -1;}
-        return 0;
     }
 }
 }

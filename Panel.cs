@@ -570,9 +570,9 @@ public class WindowStyle {
         window=new GUIStyle(GUI.skin.window);
 
         var bg=GUI.skin.window.onNormal.background;
-        if(bg!=null) winBg0=CloneTex(bg);
+        if(bg!=null) winBg0=TextureUtil.CloneBitmap(bg);
         bg=GUI.skin.window.normal.background;
-        if(bg!=null) winBg1=CloneTex(bg);
+        if(bg!=null) winBg1=TextureUtil.CloneBitmap(bg);
     }
     private Vector2 CalcCbSize(){ cbSize=closebtn.CalcSize(cbCont); return cbSize; }
 
@@ -616,23 +616,6 @@ public class WindowStyle {
         }
         t.Apply();
         return t;
-    }
-    // デフォ背景テクスチャを加工用に複製
-    private Texture2D CloneTex(Texture2D bg){ 
-        RenderTexture rt=RenderTexture.GetTemporary(bg.width,bg.height);
-        Graphics.Blit(bg,rt);
-        var bak=RenderTexture.active;
-        RenderTexture.active=rt;
-        var ret=new Texture2D(rt.width,rt.height);
-        ret.wrapMode=bg.wrapMode;
-        ret.anisoLevel=0;
-        ret.mipMapBias=0;
-        ret.filterMode=FilterMode.Point;
-        ret.ReadPixels(new Rect(0,0,rt.width,rt.height),0,0);
-        ret.Apply();
-        RenderTexture.active=bak;
-        RenderTexture.ReleaseTemporary(rt);
-        return ret;
     }
 } 
 

@@ -32,8 +32,10 @@ public static class CmdMeshes {
             if(tr==null) return sh.io.Error("オブジェクトが存在しません");
             var mi=new MeshInfo(tr);
             for(int i=0; i<mi.count; i++){
-                sh.io.Print($"{i}{sh.ofs}count={mi.oid.originalMesh.GetIndices(i).Length/3}");
-                if(mi.material.Count>i) sh.io.Print($"{sh.ofs}mate={mi.material[i].name}{sh.ofs}shader={mi.material[i].shader.name}");
+                sh.io.Print($"{i}");
+                if(mi.material.Count>i){
+                    sh.io.Print($"{sh.ofs}mate={mi.material[i].name}{sh.ofs}shader={mi.material[i].shader.name}");
+                }
                 sh.io.PrintLn("");
             }
             return 0;
@@ -411,6 +413,7 @@ public static class CmdMeshes {
         return 1;
     }
 
+    private static HashSet<Texture> texiid=new HashSet<Texture>();
     private static int MeshParamTexture(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null || val=="") return 0;
 
@@ -437,7 +440,7 @@ public static class CmdMeshes {
                 var tex=cam.targetTexture;
                 tex.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
                 var old=mate.GetTexture(prop);
-                if(old!=null && ReferenceEquals(old.GetType(),typeof(Texture2D))) GameObject.Destroy(old);
+                if(old!=null && texiid.Remove(old)) GameObject.Destroy(old); 
                 mate.SetTexture(prop,tex);
             }else{
                 RenderTexture rt=cam.targetTexture;
@@ -447,7 +450,7 @@ public static class CmdMeshes {
                 else {
                     if(old.name=="__subcamera_pic_" && old.width==rt.width && old.height==rt.height) tx=(Texture2D)old;
                     else{
-                        if(ReferenceEquals(old.GetType(),typeof(Texture2D))) GameObject.Destroy(old);
+                        if(old!=null && texiid.Remove(old)) GameObject.Destroy(old); 
                         tx=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);
                     }
                 }
@@ -458,32 +461,53 @@ public static class CmdMeshes {
                 tx.name="__subcamera_pic_";
                 RenderTexture.active=bak;
                 mate.SetTexture(prop,tx);
+                texiid.Add(tx);
             }
-        }else try{
-            string fname=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+UTIL.Suffix(right,".png");
-            if(System.IO.File.Exists(fname)){
-                byte[] buf=UTIL.ReadAll(fname);
-                Texture2D t2d=new Texture2D(2,2);
-                t2d.LoadImage(buf);
-                t2d.name=right;
-                t2d.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
+        }else {
+            Texture tex0=Resources.Load<Texture>("SceneCreativeRoom/Debug/Textures/"+right);
+            if(tex0==null) tex0=Resources.Load<Texture>("Texture/"+right);
+            if(tex0!=null && ReferenceEquals(tex0.GetType(),typeof(Texture2D))){
+                Texture2D tex=TextureUtil.CloneTexture((Texture2D)tex0);
+                tex.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
                 var old=mate.GetTexture(prop);
-                if(old!=null && ReferenceEquals(old.GetType(),typeof(Texture2D))) GameObject.Destroy(old);
-                mate.SetTexture(prop,t2d);
+                if(old!=null && texiid.Remove(old)) GameObject.Destroy(old); 
+                mate.SetTexture(prop,tex);
+                texiid.Add(tex);
                 return 1;
             }
-            fname=UTIL.Suffix(right,".tex");
-            if(GameUty.IsExistFile(fname,GameUty.FileSystem)){
-                var tere=ImportCM.LoadTexture(GameUty.FileSystem,fname,false);
-                var t2d=tere.CreateTexture2D();
-                t2d.name=right;
-                t2d.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
-                var old=mate.GetTexture(prop);
-                if(old!=null && ReferenceEquals(old.GetType(),typeof(Texture2D))) GameObject.Destroy(old);
-                mate.SetTexture(prop,t2d);
-            }else return sh.io.Error("texファイルが見つかりません");
-        }catch{
-            return sh.io.Error("texファイルの読み込みに失敗しました");
+            try{
+                string fname="";
+                if(right.Length>0 && right[0]=='*'){
+                    var tf=DataFiles.GetTempFile(right.Substring(1));
+                    if(tf!=null) fname=tf.filename;
+                }else{
+                    fname=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+UTIL.Suffix(right,".png");
+                }
+                if(System.IO.File.Exists(fname)){
+                    byte[] buf=UTIL.ReadAll(fname);
+                    Texture2D t2d=new Texture2D(2,2);
+                    t2d.LoadImage(buf);
+                    t2d.name=right;
+                    t2d.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
+                    var old=mate.GetTexture(prop);
+                    if(old!=null && texiid.Remove(old)) GameObject.Destroy(old); 
+                    mate.SetTexture(prop,t2d);
+                    texiid.Add(t2d);
+                    return 1;
+                }
+                fname=UTIL.Suffix(right,".tex");
+                if(GameUty.IsExistFile(fname,GameUty.FileSystem)){
+                    var tere=ImportCM.LoadTexture(GameUty.FileSystem,fname,false);
+                    var t2d=tere.CreateTexture2D();
+                    t2d.name=right;
+                    t2d.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
+
+                    var old=mate.GetTexture(prop);
+                    if(old!=null && texiid.Remove(old)) GameObject.Destroy(old); 
+                    mate.SetTexture(prop,t2d);
+                    texiid.Add(t2d);
+                }else return sh.io.Error("texファイルが見つかりません");
+            }catch{ return sh.io.Error("texファイルの読み込みに失敗しました"); }
         }
         return 1;
     }
@@ -511,15 +535,24 @@ public static class CmdMeshes {
         string fname,prop;
         var sa=ParseUtil.LeftAndRight(val,':');
         if(sa[1]==""){ fname=sa[0]; prop="_MainTex";} else { fname=sa[1]; prop=sa[0];}
-        if(fname=="" || fname.IndexOf('\\')>=0 || UTIL.CheckFileName(fname)<0) return sh.io.Error("ファイル名が不正です");
-        fname=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+UTIL.Suffix(fname,".png");
-        return MeshParamPNGSub(sh,sm,fname,prop);
+
+        string file="";
+        if(fname!="" && fname.IndexOf('\\')<0){
+            if(fname[0]=='*'){
+                var tf=new DataFiles.TmpFile(fname.Substring(1),"");
+                file=tf.filename;
+            }else if(UTIL.CheckFileName(fname)>=0){
+                file=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+UTIL.Suffix(fname,".png");
+            }
+        }
+        if(file=="") return sh.io.Error("ファイル名が不正です");
+        return MeshParamPNGSub(sh,sm,file,prop);
     }
     private static int MeshParamPNGSub(ComShInterpreter sh,SingleMesh sm,string fname,string prop){
         var tex=sm.mi.material[sm.submeshno].GetTexture(prop);
         if(tex==null) return sh.io.Error("テクスチャがありません");
         if(ReferenceEquals(tex.GetType(),typeof(RenderTexture))){
-            if(CmdSubCamera.toPNG((RenderTexture)tex,fname)<0) return sh.io.Error("書き込みに失敗しました");
+            if(TextureUtil.Rt2Png((RenderTexture)tex,fname)<0) return sh.io.Error("書き込みに失敗しました");
         }else if(ReferenceEquals(tex.GetType(),typeof(Texture2D))){
             try{
                 byte[] buf=((Texture2D)tex).EncodeToPNG();
@@ -528,6 +561,8 @@ public static class CmdMeshes {
         }
         return 1;
     }
+
+
 
     private class VerLoopChange {
         public int idx;
@@ -554,7 +589,8 @@ public static class CmdMeshes {
         public MeshInfo(Transform tr){
             transform=tr;
             oi=ObjInfo.GetObjInfo(tr);
-            oid=(oi==null)?new ObjInfoData(tr):oi.data;
+            if(oi==null) oid=new ObjInfoData(tr);
+            else if(oi.data==null) oi.data=oid=new ObjInfoData(tr); else oid=oi.data;
 
             if(oid.workMesh==null){
                 oid.Backup();
@@ -623,5 +659,43 @@ public static class CmdMeshes {
             return 0;
         }
     }
+}
+public static class TextureUtil {
+    public static Texture2D CloneTexture(Texture2D src){ return CloneTexture(src,src.anisoLevel,src.mipMapBias,src.filterMode); }
+    public static Texture2D CloneBitmap(Texture2D src){ return CloneTexture(src,0,0,FilterMode.Point); }
+    public static Texture2D CloneTexture(Texture2D src,int anisolv,float mmb,FilterMode flt){ 
+        RenderTexture rt=RenderTexture.GetTemporary(src.width,src.height);
+        Graphics.Blit(src,rt);
+        var bak=RenderTexture.active;
+        RenderTexture.active=rt;
+        var ret=new Texture2D(rt.width,rt.height);
+        ret.wrapMode=src.wrapMode;
+        ret.anisoLevel=anisolv;
+        ret.mipMapBias=mmb;
+        ret.filterMode=flt;
+        ret.ReadPixels(new Rect(0,0,rt.width,rt.height),0,0);
+        ret.Apply();
+        RenderTexture.active=bak;
+        RenderTexture.ReleaseTemporary(rt);
+        return ret;
+    }
+
+    public static int Rt2Png(RenderTexture rt,string fname){
+        try{
+            Texture2D tx=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);
+
+            RenderTexture bak=RenderTexture.active;
+            RenderTexture.active=rt;
+            tx.ReadPixels(new Rect(0,0,rt.width,rt.height),0,0);
+            tx.Apply();
+            RenderTexture.active=bak;
+
+            byte[] buf=tx.EncodeToPNG();
+            UnityEngine.Object.Destroy(tx);
+            System.IO.File.WriteAllBytes(fname,buf);
+        }catch{ return -1;}
+        return 0;
+    }
+
 }
 }

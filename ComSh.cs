@@ -560,7 +560,7 @@ try{
             if(r<0) return cui.io.exitStatus;   // パース時点でエラー
             r=cui.InterpretParser();                  // パースできたコマンドを達を処理
             if(cui.exitq){ cui.exitq=false; return 1;} // ターミナルでexit→ターミナルを閉じる
-}catch(Exception e){ Debug.Log(e.Message+"\n"+e.StackTrace.ToString()); return -1;}
+}catch(Exception e){ Debug.Log(e.ToString()); return -1; }
             return cui.io.exitStatus;
 		}
 		public int InterpretBg(string line) {   // メニュー(select)からの呼び出し用
