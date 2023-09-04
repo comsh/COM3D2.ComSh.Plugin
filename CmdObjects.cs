@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using UnityEngine;
@@ -58,6 +59,9 @@ public static class CmdObjects {
         objParamDic.Add("lookat",new CmdParam<Transform>(ObjParamLookAt));
         objParamDic.Add("locik",new CmdParam<Transform>(ObjParamLocIK));
         objParamDic.Add("locik-",new CmdParam<Transform>(ObjParamLocIKMinus));
+        objParamDic.Add("locik3",new CmdParam<Transform>(ObjParamLocIK3));
+        objParamDic.Add("locik3-",new CmdParam<Transform>(ObjParamLocIK3Minus));
+        objParamDic.Add("shadow",new CmdParam<Transform>(ObjParamShadow));
         
         objParamDic.Add("l2w",new CmdParam<Transform>(_CmdParamL2W));
         objParamDic.Add("w2l",new CmdParam<Transform>(_CmdParamW2L));
@@ -487,7 +491,10 @@ public static class CmdObjects {
         if(p[0]=='_'){
             if(op.render==null || op.render.sharedMaterial==null) return 0;
             string err;
-            if(v=="on"){
+            if(p=="_MainTex"){
+                mate=op.EditMaterial();
+                if((err=CmdMeshes.SetTexProp(mate,p,v))!="") return sh.io.Error(err);
+            }else if(v=="on"){
                 mate=op.EditMaterial();
                 mate.EnableKeyword(p);
             }else if(v=="off"){
@@ -508,8 +515,6 @@ public static class CmdObjects {
             mate=op.EditMaterial();
             mate.shader=shader;
             break;
-        case "speedlimit":
-            return sh.io.Error("パーティクルが旧形式のため設定できません");
         case "damping":
             if(op.anim==null) return 0;
             if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
@@ -520,8 +525,6 @@ public static class CmdObjects {
             if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
             op.anim.sizeGrow=f;
             break;
-        case "gravity":
-            return sh.io.Error("パーティクルが旧形式のため設定できません");
         case "color":
             if(op.anim==null) return 0;
             float[] rgba=ParseUtil.Rgb(v);
@@ -535,8 +538,6 @@ public static class CmdObjects {
             op.anim.colorAnimation=ca;
             op.anim.doesAnimateColor=true;
             break;
-        case "max":
-            return sh.io.Error("パーティクルが旧形式のため設定できません");
         case "lifetime":
             if(op.emit==null) return 0;
             fa=ParseUtil.MinMax(v);
@@ -585,20 +586,20 @@ public static class CmdObjects {
             else if(d==1) op.emit.useWorldSpace=true;
             else return sh.io.Error("値の範囲が不正です");
             break;
-        case "loop":
-            return sh.io.Error("パーティクルが旧形式のため設定できません");
-        case "scale":
-            return sh.io.Error("パーティクルが旧形式のため設定できません");
         case "duration":
             if(op.emit==null) return 0;
             if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
             op.emit.maxEnergy=f;
             break;
+        case "scale":
+        case "loop":
+        case "max":
+        case "gravity":
+        case "speedlimit":
         case "delay":
-            return sh.io.Error("パーティクルが旧形式のため設定できません");
         case "simspeed":
-            return sh.io.Error("パーティクルが旧形式のため設定できません");
         case "shape":
+        case "stretch":
             return sh.io.Error("パーティクルが旧形式のため設定できません");
         default:
             return sh.io.Error("パラメータ名が不正です");
@@ -661,7 +662,10 @@ public static class CmdObjects {
         if(p[0]=='_'){
             if(par.render==null || par.render.sharedMaterial==null) return 0;
             string err;
-            if(v=="on"){
+            if(p=="_MainTex"){
+                mate=par.EditMaterial();
+                if((err=CmdMeshes.SetTexProp(mate,p,v))!="") return sh.io.Error(err);
+            }else if(v=="on"){
                 mate=par.EditMaterial();
                 mate.EnableKeyword(p);
             }else if(v=="off"){
@@ -809,8 +813,25 @@ public static class CmdObjects {
                     shape.randomDirectionAmount=0;
                     if(!float.TryParse(sa[2],out f)||f<0||f>90) return sh.io.Error("数値の指定が不正です");
                     shape.angle=f;
+                }else if(sa[0]=="coneshell"){
+                    if(!float.TryParse(sa[1],out f)||f<0) return sh.io.Error("数値の指定が不正です");
+                    shape.radius=f;
+                    shape.arc=360.0f;
+                    shape.shapeType=ParticleSystemShapeType.ConeShell;
+                    shape.arcMode=ParticleSystemShapeMultiModeValue.Random;
+                    shape.radiusMode=ParticleSystemShapeMultiModeValue.Random;
+                    shape.randomDirectionAmount=0;
+                    if(!float.TryParse(sa[2],out f)||f<0||f>90) return sh.io.Error("数値の指定が不正です");
+                    shape.angle=f;
                 }else return sh.io.Error("shapeの指定が不正です");
             }else return sh.io.Error("shapeの指定が不正です");
+            break;
+        case "stretch":
+            if(par.render.renderMode==ParticleSystemRenderMode.Billboard){
+                if(v=="1") par.render.renderMode=ParticleSystemRenderMode.Stretch;
+            }else if(par.render.renderMode==ParticleSystemRenderMode.Stretch){
+                if(v=="0") par.render.renderMode=ParticleSystemRenderMode.Billboard;
+            }else return sh.io.Error("このパーティクルには対応していません");
             break;
         default:
             return sh.io.Error("パラメータ名が不正です");
@@ -908,34 +929,117 @@ public static class CmdObjects {
     private static int ObjParamLocIKMinus(ComShInterpreter sh,Transform tr,string val){
         return ObjParamLocIKSub(sh,tr,val,-1);
     }
+    private static int ObjParamLocIK3(ComShInterpreter sh,Transform tr,string val){
+        return ObjParamLocIK3Sub(sh,tr,val,1);
+    }
+    private static int ObjParamLocIK3Minus(ComShInterpreter sh,Transform tr,string val){
+        return ObjParamLocIK3Sub(sh,tr,val,-1);
+    }
 
     private static int ObjParamLocIKSub(ComShInterpreter sh,Transform tr,string val,int dir){
         if(val==null) return 0;
-
         float[] xyz=ParseUtil.Xyz(val);
-        if(xyz==null) return sh.io.Error(ParseUtil.error);
+        if(xyz==null) return sh.io.Error("座標の指定が不正です");
 
-        Transform p1=null,p2=null;
-        if(tr.name=="Bip01" || tr.name=="ManBip") return sh.io.Error("親ボーンが足りません");
-        if(tr.parent!=null) p1=tr.parent;
-        if(p1==null || p1.name=="Bip01" || p1.name=="ManBip") return sh.io.Error("親ボーンが足りません");
-        if(p1.parent!=null) p2=p1.parent;
-        if(p2==null) return sh.io.Error("親ボーンが足りません");
+        Transform p=tr;
+        if(p.name=="Bip01" || p.name=="ManBip") return sh.io.Error("親ボーンが足りません");
+        p=p.parent;
+        if(p==null || p.name=="Bip01" || p.name=="ManBip") return sh.io.Error("親ボーンが足りません");
+        p=p.parent;
+        if(p==null) return sh.io.Error("親ボーンが足りません");
 
-        Vector3 p=new Vector3(xyz[0],xyz[1],xyz[2]);
-        float a=(p - p2.position).sqrMagnitude;
-        if(Mathf.Approximately(a,0)) return sh.io.Error("ボーンの長さが0です");
-        float b=(p1.position-tr.position).sqrMagnitude;
-        if(Mathf.Approximately(b,0)) return sh.io.Error("ボーンの長さが0です");
+        int ret=LocIK(new Vector3(xyz[0],xyz[1],xyz[2]),tr.parent.parent,tr.parent,tr,dir);
+        if(ret<0) return sh.io.Error("ボーンの長さが0です");
+        return 1;
+    }
+    private static int ObjParamLocIK3Sub(ComShInterpreter sh,Transform tr,string val,int dir){
+        if(val==null) return 0;
+        float[] xyzs=new float[4];
+        int n=ParseUtil.XyzSub(val,xyzs);
+        if(n==3) xyzs[3]=0; 
+        else if(n==4){
+            if(xyzs[3]<-1 || xyzs[3]>1) return sh.io.Error("値の指定が不正です");
+        }else return sh.io.Error("座標の指定が不正です");
+
+        Transform p=tr;
+        if(p.name=="Bip01" || p.name=="ManBip") return sh.io.Error("親ボーンが足りません");
+        p=p.parent;
+        if(p==null || p.name=="Bip01" || p.name=="ManBip") return sh.io.Error("親ボーンが足りません");
+        p=p.parent;
+        if(p==null || p.name=="Bip01" || p.name=="ManBip") return sh.io.Error("親ボーンが足りません");
+        p=p.parent;
+        if(p==null) return sh.io.Error("親ボーンが足りません");
+
+        int ret=LocIK3(new Vector3(xyzs[0],xyzs[1],xyzs[2]),
+            tr.parent.parent.parent,tr.parent.parent,tr.parent,tr,
+            dir,Mathf.Abs(xyzs[3]),Mathf.Sign(xyzs[3])*dir);
+        if(ret<0) return sh.io.Error("ボーンの長さが0です");
+        return 1;
+    }
+    private static int LocIK(Vector3 t,Transform p0,Transform p1,Transform p2,float dir){
+        float a=(t - p0.position).sqrMagnitude;
+        if(Mathf.Approximately(a,0)) return -1;
+        float b=(p1.position-p0.position).sqrMagnitude;
+        if(Mathf.Approximately(b,0)) return -1;
         float c=(p2.position-p1.position).sqrMagnitude;
-        if(Mathf.Approximately(c,0)) return sh.io.Error("ボーンの長さが0です");
+        if(Mathf.Approximately(c,0)) return -1;
         float co=(a-b-c)/-2/Mathf.Sqrt(b*c); // the law of cosine
         p1.localRotation=Quaternion.Euler(0,0,180-dir*Mathf.Acos(co)*Mathf.Rad2Deg);
-        var w2l=p2.worldToLocalMatrix;
-        var lpt=w2l.MultiplyPoint3x4(p);
-        var lpw=w2l.MultiplyPoint3x4(tr.position);
-        var lps=w2l.MultiplyPoint3x4(p2.position);
-        p2.localRotation=p2.localRotation*Quaternion.FromToRotation((lpw-lps).normalized,(lpt-lps).normalized);
+        var w2l=p0.worldToLocalMatrix;
+        var lpt=w2l.MultiplyPoint3x4(t);
+        var lpw=w2l.MultiplyPoint3x4(p2.position);
+        p0.localRotation=p0.localRotation*Quaternion.FromToRotation(lpw.normalized,lpt.normalized);
+        return 1;
+    }
+    private static int LocIK3(Vector3 t,Transform p0,Transform p1,Transform p2,Transform p3,float dir,float s,float dir2){
+        // まず p0,p1,p3*s+p2*(1-s) で２ボーンIK
+        float l23=(p3.position-p2.position).magnitude;
+        float l12=(p2.position-p1.position).magnitude;
+        float l=l23*(1-s)+l12;
+        float a=(t - p0.position).sqrMagnitude;
+        if(Mathf.Approximately(a,0)) return -1;
+        float b=(p1.position-p0.position).sqrMagnitude;
+        if(Mathf.Approximately(b,0)) return -1;
+        float c=l*l;
+        if(Mathf.Approximately(c,0)) return -1;
+        float co=(a-b-c)/-2/Mathf.Sqrt(b*c);
+        p2.localRotation=Quaternion.identity;
+        p1.localRotation=Quaternion.Euler(0,0,180-dir*Mathf.Acos(co)*Mathf.Rad2Deg);
+        var w2l=p0.worldToLocalMatrix;
+        var lpt=w2l.MultiplyPoint3x4(t).normalized;
+        var lpw=w2l.MultiplyPoint3x4(Vector3.Lerp(p3.position,p2.position,s)).normalized;
+        p0.localRotation=p0.localRotation*Quaternion.FromToRotation(lpw,lpt);
+
+        // 次いで p1,p2,p3 で２ボーンIK
+        return LocIK(t,p1,p2,p3,dir2);
+    }
+    private static int ObjParamShadow(ComShInterpreter sh,Transform tr,string val){
+        if(val==null) return 0;
+        var sa=val.Split(ParseUtil.comma);
+        if(sa==null || sa.Length==0 || sa.Length>2 || sa[0]=="") return sh.io.Error("書式が不正です");
+
+        UnityEngine.Rendering.ShadowCastingMode cast;
+        switch(sa[0]){
+        case "0": cast=UnityEngine.Rendering.ShadowCastingMode.Off; break;
+        case "1": cast=UnityEngine.Rendering.ShadowCastingMode.On; break;
+        case "2": cast=UnityEngine.Rendering.ShadowCastingMode.TwoSided; break;
+        case "3": cast=UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly; break;
+        default: return sh.io.Error("数値が不正です");
+        }
+
+        bool rcv=false;
+        if(sa.Length==2){
+            if(sa[1]=="0") rcv=false;
+            else if(sa[1]=="1") rcv=true;
+            else return sh.io.Error("数値が不正です");
+        }
+        
+        var ra=tr.GetComponentsInChildren<Renderer>();
+        if(ra==null || ra.Length==0) return 1;
+        for(int i=0; i<ra.Length; i++){
+            ra[i].shadowCastingMode=cast;
+            if(sa.Length==2) ra[i].receiveShadows=rcv;
+        }
         return 1;
     }
 }
@@ -1190,8 +1294,7 @@ public static class ObjUtil {
                             o.name=o.name.Substring(4); // "_SM_"付きだとコロン記法でボーンを辿れない
                     }
                     tbs.listDEL.Clear();
-                    if(mo.material.TryGetValue(slot,out List<Material> mlist)) foreach(var mate in mlist)
-                        SetMaterial(o.transform,mate.no,mate.name,mate.shader);
+                    if(mo.material.TryGetValue(slot,out List<Material> mlist)) SetMaterial(o.transform,mlist);
                     if(mo.anmFile.TryGetValue(slot,out MenuObj.Anm anm)){
                         var a=o.GetComponent<Animation>();
                         if(a==null) a=o.AddComponent<Animation>();
@@ -1201,6 +1304,23 @@ public static class ObjUtil {
                 }  
             }
             return ret;
+        }
+        private static int SetMaterial(Transform tr,List<Material> mlist){
+            var smr=tr.gameObject.GetComponentInChildren<SkinnedMeshRenderer>(true);
+            if(smr==null) return -1;
+
+            UnityEngine.Material[] ma=smr.sharedMaterials;
+            try{
+                foreach(var m in mlist) if(m.no<ma.Length){
+                    ImportCM.LoadMaterial(UTIL.Suffix(m.name,".mate"),null,ma[m.no]);
+                    if(m.shader!=null){
+                        Shader sh=Shader.Find(m.shader);
+                        if(sh!=null) ma[m.no].shader=sh;
+                    }
+                }
+                smr.sharedMaterials=ma;
+            }catch{ return -1; }
+            return 0;
         }
     }
     private static char[] menuWhite={' ','\t','\u3000'};
@@ -1232,17 +1352,17 @@ public static class ObjUtil {
                     if(cmd=="end") return ret;
                     else if(cmd=="additem"){
                         string slot="";
-                        if(args.Count>=3) slot=args[2];
+                        if(args.Count>=3) slot=args[2].ToLower();
                         if(args.Count>=2) ret.modelName[slot]=UTIL.Suffix(args[1],".model");
                     }else if(cmd=="アイテム"){
                         if(args.Count>=2) ReadMenuObj(UTIL.Suffix(args[1],".menu"),ret);
                     }else if(cmd=="マテリアル変更"){
-                        if(args.Count>=4) ret.AddMaterial(args[1],int.Parse(args[2]),UTIL.Suffix(args[3],".mate"));
+                        if(args.Count>=4) ret.AddMaterial(args[1].ToLower(),int.Parse(args[2]),UTIL.Suffix(args[3],".mate"));
                     }else if(cmd=="shader"){
-                        if(args.Count>=4) ret.ChgShader(args[1],int.Parse(args[2]),args[3]);
+                        if(args.Count>=4) ret.ChgShader(args[1].ToLower(),int.Parse(args[2]),args[3]);
                     }else if(cmd=="anime"){
                         string slot="";
-                        if(args.Count>=2) slot=args[1];
+                        if(args.Count>=2) slot=args[1].ToLower();
                         if(args.Count>=3){ ret.anmFile[slot]=new MenuObj.Anm(UTIL.Suffix(args[2],".anm")); }
                         if(args.Count>=4 && args[3]=="loop") ret.anmFile[slot].loopq=true;
                     }
@@ -1250,22 +1370,6 @@ public static class ObjUtil {
             }
         }catch{}
         return ret;
-    }
-    public static int SetMaterial(Transform tr,int no,string fname,string shader=null){
-        string mate=UTIL.Suffix(fname,".mate");
-        foreach(var r in tr.GetComponentsInChildren<Renderer>()){
-            var sma=r.sharedMaterials;
-            if (sma!=null && no<sma.Length)
-                try{
-                    sma[no]=ImportCM.LoadMaterial(mate,null,sma[no]);
-                    if(shader!=null){
-                        Shader sh=Shader.Find(shader);
-                        if(sh!=null) sma[no].shader=sh;
-                    }
-                    r.sharedMaterials=sma;
-                }catch{ return -1; }
-        }
-        return 0;
     }
     public static int ChgMaterial(Transform tr,int no,string fname,string shader=null){
         string mate=UTIL.Suffix(fname,".mate");

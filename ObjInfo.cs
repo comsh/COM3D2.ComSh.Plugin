@@ -37,7 +37,14 @@ public class ObjInfo : MonoBehaviour{
         return oi;
     }
     public static ObjInfo GetObjInfo(Transform tr){
-        var oi=tr.GetComponentInParent<ObjInfo>();          // 親方向で最初に見つかるもの
+        Transform t=tr;
+        ObjInfo oi=null;
+        while(t!=null){
+            oi=t.GetComponentInParent<ObjInfo>();          // 親方向で最初に見つかるもの
+            if(oi==null) return null;
+            if(oi.enabled==false){ t=oi.transform.parent; continue; }
+            break;
+        }
         if(oi!=null && oi.data!=null && oi.data.FindBone(tr)==null) return null;  // 子に自分が含まれてなければ無関係
         return oi;
     }
@@ -51,13 +58,16 @@ public class ObjInfoData {
     public void UpdateBones(Transform transform){
         bones.Clear();
         if(transform.parent!=null && transform.parent.name=="Offset"){ // メイド
-            var ta=transform.GetComponentsInChildren<Transform>();
-            if(ta!=null) for(int i=0; i<ta.Length; i++){
-                if(!ta[i].name.StartsWith("_SM_",Ordinal)) bones.Add(ta[i]);
-            }
+            UTIL.TraverseTr(transform,(Transform tr,int i)=>{
+                if(!tr.name.StartsWith("_SM_",Ordinal)) return 1;
+                bones.Add(tr);
+                return 0;
+            });
         }else{
-            var ta=transform.GetComponentsInChildren<Transform>();
-            if(ta!=null) for(int i=0; i<ta.Length; i++) bones.Add(ta[i]);
+            UTIL.TraverseTr(transform,(Transform tr,int i)=>{
+                bones.Add(tr);
+                return 0;
+            });
         }
     }
     public Transform FindBone(Transform tr){
@@ -108,10 +118,9 @@ public class ObjInfoData {
                 meshno+=n;
 
                 Material[] mate=smr.sharedMaterials;
-                for(int j=0; j<n; j++){
-                    if(j>mate.Length-1) originalMate.Add(new Material(Shader.Find("Standard")));
-                    else originalMate.Add(mate[j]);
-                }
+                int j;
+                for(j=0; j<mate.Length; j++) originalMate.Add(mate[j]);
+                for(; j<n; j++) originalMate.Add(new Material(Shader.Find("Standard"))); // 一応
             }else{
                 MeshFilter mf=r.transform.GetComponent<MeshFilter>();
                 if(mf==null) continue;
@@ -122,10 +131,9 @@ public class ObjInfoData {
                 meshno+=n;
 
                 Material[] mate=r.sharedMaterials;
-                for(int j=0; j<n; j++){
-                    if(j>mate.Length-1) originalMate.Add(new Material(Shader.Find("Standard")));
-                    else originalMate.Add(mate[j]);
-                }
+                int j;
+                for(j=0; j<mate.Length; j++) originalMate.Add(mate[j]);
+                for(; j<n; j++) originalMate.Add(new Material(Shader.Find("Standard"))); // 一応
             }
         }
         originalMesh.submeshCount=meshno;

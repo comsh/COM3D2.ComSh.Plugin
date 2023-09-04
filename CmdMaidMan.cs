@@ -4,6 +4,7 @@ using UnityEngine;
 using static System.StringComparison;
 using static COM3D2.ComSh.Plugin.Command;
 using System;
+using System.Reflection;
 
 namespace COM3D2.ComSh.Plugin {
 
@@ -80,6 +81,10 @@ public static class CmdMaidMan {
         maidParamDic.Add("node",new CmdParam<Maid>(MaidParamNode));
         maidParamDic.Add("select",new CmdParam<Maid>(MaidParamSelect));
         maidParamDic.Add("later",new CmdParam<Maid>(MaidParamLater));
+        maidParamDic.Add("evenlater",new CmdParam<Maid>(MaidParamEvenLater));
+        maidParamDic.Add("muneparam",new CmdParam<Maid>(MaidParamMuneParam));
+        maidParamDic.Add("bbox",new CmdParam<Maid>(MaidParamBBox));
+        maidParamDic.Add("floor",new CmdParam<Maid>(MaidParamFloor));
 
         maidParamDic.Add("shape.rename",new CmdParam<Maid>(MaidParamShapeRename));
 
@@ -112,7 +117,7 @@ public static class CmdMaidMan {
         "wrot.x","wrot.y","wrot.z",
         "scale.x","scale.y","scale.z",
         "prot","pquat",
-        "ap","handle","describe","select","later",
+        "ap","handle","describe","select","later","evenlater","bbox",
         "l2w","w2l"
     };
 
@@ -170,6 +175,8 @@ public static class CmdMaidMan {
                 }
                 foreach(Maid m in ml) pw.DeActiveMaid(m);
             }
+            Resources.UnloadUnusedAssets();
+            System.GC.Collect();
             return 0;
         }else if(args[1]=="list"){
 			CharacterMgr cm=GameMain.Instance.CharacterMgr;
@@ -1284,8 +1291,32 @@ public static class CmdMaidMan {
         }else return sh.io.Error("アタッチされていません");
         return 1;
     }
+
+/*  private static FieldInfo fldLaySlot=null;
+    private static int MaidParamFaceTest(ComShInterpreter sh,Maid m,string val){
+        if(fldLaySlot==null) try{ fldLaySlot=typeof(TBody).GetField("m_dicLaySlot",BindingFlags.Instance | BindingFlags.NonPublic); }catch{ return 0; }
+        var s2m=(Dictionary<string,TBody.TexLay.Mat>)fldLaySlot.GetValue(m.body0);
+        if(s2m.TryGetValue("head",out TBody.TexLay.Mat mat)){
+            var n2p=mat.dicPropInMat;
+            if(n2p.TryGetValue(5,out TBody.TexLay.Prop prop)){
+                var p2l=prop.dicLayInProp;
+                int sno=(int)TBody.hashSlotName["head"];
+                Renderer r=m.body0.goSlot[sno].obj.GetComponentInChildren<Renderer>();
+                Material m5=r.sharedMaterials[5];
+                if(p2l.TryGetValue("_MainTex",out TBody.TexLay.Lay lay)){
+                    var rt=lay.rtBase;
+                }
+                if(p2l.TryGetValue("_ShadowTex",out lay)){
+                    var rt=lay.rtBase;
+                }
+            }
+        }
+        return 1;
+    } */
+
     private static int MaidParamList(ComShInterpreter sh,Maid m,string val){
         List<string> ls=new List<string>();
+        bool sortq=true;
         if(val=="ap"){
             foreach(TBodySkin skin in m.body0.goSlot){
                 if(skin.morph==null) continue;
@@ -1295,15 +1326,17 @@ public static class CmdMaidMan {
             CharacterMgr cm=GameMain.Instance.CharacterMgr;
             if(cm.TryGetCacheObject(m.body0.goSlot[0].m_strModelFileName,out GameObject go)){
                 UTIL.TraverseTr(go.transform,(Transform tr,int d)=>{
-                    if(!tr.name.StartsWith("_BO_",Ordinal)) ls.Add(tr.name);
+                    if(tr.name=="ST_Root") return 1;
+                    ls.Add(tr.name);
                     return 0;
-                });
+                },false);
             }
         }else if(val=="all"){
-            // 絶対長いのでログへ。ソートもしない
+            // 絶対長いのでログへ
             UTIL.TraverseTr(m.transform,(Transform tr,int d)=>{ ls.Add(tr.name); return 0; });
+            sortq=false;
         }else return sh.io.Error("ap、boneのいずれかを指定してください");
-        ls.Sort();
+        if(sortq) ls.Sort();
         foreach(string s in ls) sh.io.PrintLn(s);
         return 0;
     }
@@ -1393,7 +1426,38 @@ public static class CmdMaidMan {
             return MaidSelectStudio(pw,m,m.status.lastName,m.status.firstName);
         }
     }
+
+    private static Dictionary<int,Action> lateDic=new Dictionary<int, Action>();
     private static int MaidParamLater(ComShInterpreter sh,Maid m,string val){
+        if(val==null) return 0;
+
+        var subsh=new ComShInterpreter(null,sh.env,sh.func,sh.ns);
+        subsh.env[ComShInterpreter.SCRIPT_ERR_ON]="1";
+        var psr=subsh.parser;
+        int r=psr.Parse(val); // パースだけしておく
+        if(r<0) return sh.io.Error(psr.error);
+
+        System.Action act;
+        int iid=m.GetInstanceID();
+        if(lateDic.TryGetValue(iid,out act)){
+            if(m.body0!=null) m.body0.OnLateUpdate-=act;
+            lateDic.Remove(iid);
+        }
+
+        if(r==0) return 1; // 空→登録削除のみ
+
+        int ret=0;
+        long stime=DateTime.UtcNow.Ticks;
+        act=()=>{
+            subsh.env["1"]=((DateTime.UtcNow.Ticks-stime)/TimeSpan.TicksPerMillisecond).ToString();
+            psr.Reset();
+            ret=subsh.InterpretParser();
+        };
+        m.body0.OnLateUpdate+=act;
+        lateDic[iid]=act;
+        return 1;
+    }
+    private static int MaidParamEvenLater(ComShInterpreter sh,Maid m,string val){
         if(val==null) return 0;
 
         var subsh=new ComShInterpreter(null,sh.env,sh.func,sh.ns);
@@ -1421,6 +1485,76 @@ public static class CmdMaidMan {
             m.body0.OnLateUpdateEnd+=act;
             return 0;
         });
+        return 1;
+    }
+    private static int MaidParamMuneParam(ComShInterpreter sh,Maid m,string val){
+        if(val==null){
+            sh.io.PrintJoin(",",
+                sh.fmt.FInt(m.body0.jbMuneL.bGravity),
+                sh.fmt.FInt(m.body0.jbMuneL.targetDistance),
+                sh.fmt.FInt(m.body0.jbMuneL.bStiffness[0]),
+                sh.fmt.FInt(m.body0.jbMuneL.bStiffness[1])
+            );
+            return 0;
+        }
+        var sa=val.Split(',');
+        float f;
+        if(sa.Length>=1 && float.TryParse(sa[0],out f)){
+            m.body0.jbMuneL.bGravity=f;
+            m.body0.jbMuneR.bGravity=f;
+        }
+        if(sa.Length>=2 && float.TryParse(sa[1],out f)){
+            m.body0.jbMuneL.targetDistance=f;
+            m.body0.jbMuneR.targetDistance=f;
+        }
+        if(sa.Length>=3 && float.TryParse(sa[2],out f)){
+            m.body0.jbMuneL.bStiffness[0]=f;
+            m.body0.jbMuneR.bStiffness[0]=f;
+        }
+        if(sa.Length>=4 && float.TryParse(sa[3],out f)){
+            m.body0.jbMuneL.bStiffness[1]=f;
+            m.body0.jbMuneR.bStiffness[1]=f;
+        }
+        return 1;
+    }
+    private static int MaidParamBBox(ComShInterpreter sh,Maid m,string val){
+        Vector3 min=new Vector3(float.MaxValue,float.MaxValue,float.MaxValue);
+        Vector3 max=new Vector3(float.MinValue,float.MinValue,float.MinValue);
+        var ls=new List<string>();
+        CharacterMgr cm=GameMain.Instance.CharacterMgr;
+        if(cm.TryGetCacheObject(m.body0.goSlot[0].m_strModelFileName,out GameObject go)){
+            Transform bip=go.transform.Find(m.boMAN?"ManBip":"Bip01");
+            if(bip==null) return 0;
+            UTIL.TraverseTr(bip,(Transform tr,int d)=>{
+                if(tr.name.StartsWith("_IK",Ordinal)) return 1;
+                if(tr.name.EndsWith("Footsteps",Ordinal)) return 1;
+                ls.Add(tr.name);
+                return 0;
+            });
+        }
+        foreach(var k in ls){
+            if(!m.body0.m_dicTrans.TryGetValue(k,out Transform t)){ Debug.Log(k+" not found"); continue;}
+            Vector3 pos=t.position;
+            if(max.x<pos.x) max.x=pos.x;
+            if(max.y<pos.y) max.y=pos.y;
+            if(max.z<pos.z) max.z=pos.z;
+            if(min.x>pos.x) min.x=pos.x;
+            if(min.y>pos.y) min.y=pos.y;
+            if(min.z>pos.z) min.z=pos.z;
+        }
+        sh.io.PrintJoin(sh.ofs,sh.fmt.FPos(min),sh.fmt.FPos(max));
+        return 0;
+    }
+    private static int MaidParamFloor(ComShInterpreter sh,Maid m,string val){
+        if(m.body0==null) return 1;
+        if(val==null){
+            sh.io.Print(sh.fmt.FVal(m.body0.m_trFloorPlane.position.y));
+            return 0;
+        }
+        if(!float.TryParse(val,out float y)) return sh.io.Error("数値の指定が不正です");
+        var p=m.body0.m_trFloorPlane.position;
+        p.y=y;
+        m.body0.m_trFloorPlane.position=p;
         return 1;
     }
 

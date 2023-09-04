@@ -28,7 +28,11 @@ public static class CmdMisc {
         var code=GetCmdParamBg(args[1]);
         if(code==null){
             string orig=GameMain.Instance.BgMgr.GetBGName();
-            try{SetBg(args[1]);}catch{ return sh.io.Error("背景が見つかりません");}
+            try{
+                SetBg(args[1]);
+                Resources.UnloadUnusedAssets();
+                System.GC.Collect();
+            }catch{ return sh.io.Error("背景が見つかりません");}
             prmstart=2;
         }
         int ret,cnt=args.Count;
@@ -348,6 +352,21 @@ public static class CmdMisc {
             }
             return new float[][]{min,max};
         }
+        public float Distance(){
+            var fa=new float[dim];
+            float l=0;
+            for(int i=1; i<=count; i++){
+                int n=ip-i;
+                if(n<0) n+=buf.Length;
+                if(dim==1) l+=buf[n][0];
+                else{
+                    float t=0;
+                    for(int d=0; d<dim; d++) t+=buf[n][d]*buf[n][d];
+                    l+=Mathf.Sqrt(t);
+                }
+            }
+            return l;
+        }
     }
     public static Dictionary<string,Q> queDic=new Dictionary<string,Q>();
     private static int CmdQueue(ComShInterpreter sh,List<string> args){
@@ -412,6 +431,9 @@ public static class CmdMisc {
         } else if(cmd=="average"){
             if(q.count==0) return sh.io.Error("キューが空です");
             PrintNVec(sh,q.Average());
+        } else if(cmd=="distance"){
+            if(q.count==0) return sh.io.Error("キューが空です");
+            sh.io.Print(sh.fmt.FVal(q.Distance()));
         } else if(cmd=="bbox"){
             if(q.count==0) return sh.io.Error("キューが空です");
             float[][] bb=q.BBox();

@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 using static COM3D2.ComSh.Plugin.Command;
 
@@ -425,17 +426,13 @@ public static class CmdMeshes {
         if(lr[1]=="") right=lr[0]; else { prop=lr[0]; right=lr[1]; }
         if(!mate.HasProperty(prop)) return sh.io.Error("指定されたプロパティは現在のシェーダでは無効です");
 
-        int wrap=1,mode=0;
-        lr=ParseUtil.LeftAndRight(right,',');
-        if(lr[1]!=""){
-            right=lr[0];
-            var opts=lr[1].Split(ParseUtil.comma);
-            if(opts.Length>=1 && (!int.TryParse(opts[0],out wrap) || wrap<0 || wrap>1)) return sh.io.Error("書式が不正です");
-            if(opts.Length>=2 && (!int.TryParse(opts[1],out mode) || mode<0 || mode>1)) return sh.io.Error("書式が不正です");
-        }
-
+        string msg=SetTexProp(mate,prop,right);
+        if(msg!="") return sh.io.Error(msg);
+        return 1;
+    }
+    private static string SetTex(string prop,string name,int mode,int wrap,Material mate){
         Camera cam;
-        if(ObjUtil.objDic.TryGetValue(right,out Transform camTr) && (cam=camTr.GetComponent<Camera>())!=null){
+        if(ObjUtil.objDic.TryGetValue(name,out Transform camTr) && (cam=camTr.GetComponent<Camera>())!=null){
             if(mode==0){
                 var tex=cam.targetTexture;
                 tex.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
@@ -464,8 +461,8 @@ public static class CmdMeshes {
                 texiid.Add(tx);
             }
         }else {
-            Texture tex0=Resources.Load<Texture>("SceneCreativeRoom/Debug/Textures/"+right);
-            if(tex0==null) tex0=Resources.Load<Texture>("Texture/"+right);
+            Texture tex0=Resources.Load<Texture>("SceneCreativeRoom/Debug/Textures/"+name);
+            if(tex0==null) tex0=Resources.Load<Texture>("Texture/"+name);
             if(tex0!=null && ReferenceEquals(tex0.GetType(),typeof(Texture2D))){
                 Texture2D tex=TextureUtil.CloneTexture((Texture2D)tex0);
                 tex.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
@@ -473,43 +470,56 @@ public static class CmdMeshes {
                 if(old!=null && texiid.Remove(old)) GameObject.Destroy(old); 
                 mate.SetTexture(prop,tex);
                 texiid.Add(tex);
-                return 1;
+                return "";
             }
             try{
                 string fname="";
-                if(right.Length>0 && right[0]=='*'){
-                    var tf=DataFiles.GetTempFile(right.Substring(1));
+                if(name.Length>0 && name[0]=='*'){
+                    var tf=DataFiles.GetTempFile(name.Substring(1));
                     if(tf!=null) fname=tf.filename;
                 }else{
-                    fname=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+UTIL.Suffix(right,".png");
+                    fname=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+UTIL.Suffix(name,".png");
                 }
                 if(System.IO.File.Exists(fname)){
                     byte[] buf=UTIL.ReadAll(fname);
                     Texture2D t2d=new Texture2D(2,2);
                     t2d.LoadImage(buf);
-                    t2d.name=right;
+                    t2d.name=name;
                     t2d.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
                     var old=mate.GetTexture(prop);
                     if(old!=null && texiid.Remove(old)) GameObject.Destroy(old); 
                     mate.SetTexture(prop,t2d);
                     texiid.Add(t2d);
-                    return 1;
+                    return "";
                 }
-                fname=UTIL.Suffix(right,".tex");
+                fname=UTIL.Suffix(name,".tex");
                 if(GameUty.IsExistFile(fname,GameUty.FileSystem)){
                     var tere=ImportCM.LoadTexture(GameUty.FileSystem,fname,false);
                     var t2d=tere.CreateTexture2D();
-                    t2d.name=right;
+                    t2d.name=name;
                     t2d.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
 
                     var old=mate.GetTexture(prop);
                     if(old!=null && texiid.Remove(old)) GameObject.Destroy(old); 
                     mate.SetTexture(prop,t2d);
                     texiid.Add(t2d);
-                }else return sh.io.Error("texファイルが見つかりません");
-            }catch{ return sh.io.Error("texファイルの読み込みに失敗しました"); }
+                }else return "texファイルが見つかりません";
+            }catch{ return "texファイルの読み込みに失敗しました"; }
         }
-        return 1;
+        return "";
+    }
+    public static string SetTexProp(Material m, string key, string val){
+        if(!m.HasProperty(key)) return "指定されたプロパティは現在のシェーダでは無効です";
+        int wrap=1,mode=0;
+        string right=val;
+        string[] lr=ParseUtil.LeftAndRight(right,',');
+        if(lr[1]!=""){
+            right=lr[0];
+            var opts=lr[1].Split(ParseUtil.comma);
+            if(opts.Length>=1 && (!int.TryParse(opts[0],out wrap) || wrap<0 || wrap>1)) return "書式が不正です";
+            if(opts.Length>=2 && (!int.TryParse(opts[1],out mode) || mode<0 || mode>1)) return "書式が不正です";
+        }
+        return SetTex(key,right,mode,wrap,m);
     }
     private static int MeshParamRQ(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null){
@@ -551,18 +561,24 @@ public static class CmdMeshes {
     private static int MeshParamPNGSub(ComShInterpreter sh,SingleMesh sm,string fname,string prop){
         var tex=sm.mi.material[sm.submeshno].GetTexture(prop);
         if(tex==null) return sh.io.Error("テクスチャがありません");
+        
         if(ReferenceEquals(tex.GetType(),typeof(RenderTexture))){
             if(TextureUtil.Rt2Png((RenderTexture)tex,fname)<0) return sh.io.Error("書き込みに失敗しました");
         }else if(ReferenceEquals(tex.GetType(),typeof(Texture2D))){
+            Texture2D t2d=null;
             try{
-                byte[] buf=((Texture2D)tex).EncodeToPNG();
-                System.IO.File.WriteAllBytes(fname,buf);
-            }catch{}
+                t2d=TextureUtil.CloneBitmap(tex); // readableじゃない時はこれが必要
+                System.IO.File.WriteAllBytes(fname, t2d.EncodeToPNG());
+            }catch{
+                return sh.io.Error("書き込みに失敗しました");
+            }finally{
+                if(t2d!=null) UnityEngine.Object.Destroy(t2d);
+            }
+        }else{
+            return sh.io.Error("未対応の形式です");
         }
         return 1;
     }
-
-
 
     private class VerLoopChange {
         public int idx;
@@ -617,18 +633,18 @@ public static class CmdMeshes {
             Mesh newMesh;
             if (ReferenceEquals(ra[midx].GetType(), typeof(SkinnedMeshRenderer))) {
                 var smr=(SkinnedMeshRenderer)ra[midx];
-                newMesh=Object.Instantiate(oid.originalMesh[midx].mesh);
+                newMesh=UnityEngine.Object.Instantiate(oid.originalMesh[midx].mesh);
                 var oldMesh=smr.sharedMesh;
                 smr.sharedMesh=newMesh;
                 oid.UpdateMorph(smr.transform,oldMesh,newMesh);
             }else{
                 MeshFilter mf=ra[midx].transform.GetComponent<MeshFilter>();
                 if(mf==null) return -1;
-                newMesh=Object.Instantiate(oid.originalMesh[midx].mesh);
+                newMesh=UnityEngine.Object.Instantiate(oid.originalMesh[midx].mesh);
                 mf.mesh=newMesh;
             }
             var e=oid.workMesh[midx];
-            Object.Destroy(e.mesh);
+            UnityEngine.Object.Destroy(e.mesh);
             e.mesh=newMesh;
             oid.workMesh[midx]=e;
             return 0;
@@ -648,8 +664,8 @@ public static class CmdMeshes {
             Renderer[] ra=oid.FindComponentsToArray<Renderer>();
             if(ra==null || ra.Length<midx) return -1;
 
-            Material newMaterial=Object.Instantiate(oid.originalMate[submeshno]);
-            Object.Destroy(oid.workMate[submeshno]);
+            Material newMaterial=UnityEngine.Object.Instantiate(oid.originalMate[submeshno]);
+            UnityEngine.Object.Destroy(oid.workMate[submeshno]);
             oid.workMate[submeshno]=newMaterial;
 
             var ma=ra[midx].materials;
@@ -661,19 +677,20 @@ public static class CmdMeshes {
     }
 }
 public static class TextureUtil {
-    public static Texture2D CloneTexture(Texture2D src){ return CloneTexture(src,src.anisoLevel,src.mipMapBias,src.filterMode); }
-    public static Texture2D CloneBitmap(Texture2D src){ return CloneTexture(src,0,0,FilterMode.Point); }
-    public static Texture2D CloneTexture(Texture2D src,int anisolv,float mmb,FilterMode flt){ 
-        RenderTexture rt=RenderTexture.GetTemporary(src.width,src.height);
+    public static Texture2D CloneTexture(Texture src){ return CloneTexture(src,src.anisoLevel,src.mipMapBias,src.filterMode); }
+    public static Texture2D CloneBitmap(Texture src){ return CloneTexture(src,0,0,FilterMode.Point); }
+    public static Texture2D CloneTexture(Texture src,int anisolv,float mmb,FilterMode flt){ 
+        int w=src.width, h=src.height;
+        RenderTexture rt=RenderTexture.GetTemporary(w,h,0);
         Graphics.Blit(src,rt);
         var bak=RenderTexture.active;
         RenderTexture.active=rt;
-        var ret=new Texture2D(rt.width,rt.height);
+        var ret=new Texture2D(w,h,TextureFormat.RGBA32,false);
         ret.wrapMode=src.wrapMode;
         ret.anisoLevel=anisolv;
         ret.mipMapBias=mmb;
         ret.filterMode=flt;
-        ret.ReadPixels(new Rect(0,0,rt.width,rt.height),0,0);
+        ret.ReadPixels(new Rect(0,0,w,h),0,0,false);
         ret.Apply();
         RenderTexture.active=bak;
         RenderTexture.ReleaseTemporary(rt);
@@ -681,21 +698,26 @@ public static class TextureUtil {
     }
 
     public static int Rt2Png(RenderTexture rt,string fname){
+        Texture2D tx=null;
         try{
-            Texture2D tx=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);
-
+            int w=rt.width,h=rt.height;
+            tx=new Texture2D(w,h,TextureFormat.RGBA32,false);
+            tx.wrapMode=rt.wrapMode;
+            tx.anisoLevel=0;
+            tx.mipMapBias=0;
+            tx.filterMode=FilterMode.Point;
             RenderTexture bak=RenderTexture.active;
             RenderTexture.active=rt;
-            tx.ReadPixels(new Rect(0,0,rt.width,rt.height),0,0);
+            tx.ReadPixels(new Rect(0,0,w,h),0,0,false);
             tx.Apply();
             RenderTexture.active=bak;
-
-            byte[] buf=tx.EncodeToPNG();
-            UnityEngine.Object.Destroy(tx);
-            System.IO.File.WriteAllBytes(fname,buf);
-        }catch{ return -1;}
+            System.IO.File.WriteAllBytes(fname,tx.EncodeToPNG());
+        }catch{
+            return -1;
+        }finally{
+            if(tx!=null) UnityEngine.Object.Destroy(tx);
+        }
         return 0;
     }
-
 }
 }
