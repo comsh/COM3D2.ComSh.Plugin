@@ -27,6 +27,7 @@ public static class CmdCamera {
         cameraParamDic.Add("w2s",new CmdParam<CameraMain>(CameraParamW2S));
         cameraParamDic.Add("screensize",new CmdParam<CameraMain>(CameraParamScreenSize));
         cameraParamDic.Add("speed",new CmdParam<CameraMain>(CameraParamSpeed));
+        cameraParamDic.Add("distance",new CmdParam<CameraMain>(CameraParamDistance));
 
         CmdParamPosRotCp(cameraParamDic,"pos","position");
         CmdParamPosRotCp(cameraParamDic,"rot","rotation");
@@ -289,6 +290,16 @@ public static class CmdCamera {
         }
         if(!float.TryParse(val,out float f) || f<=0) return sh.io.Error("数値が不正です");
         uc.moveSpeed=f;
+        return 1;
+    }
+    private static int CameraParamDistance(ComShInterpreter sh,CameraMain mc,string val){
+        if(val==null){
+            sh.io.Print(sh.fmt.FVal(mc.GetDistance()));
+            return 0;
+        }
+        ChgCameraType(mc,CameraMain.CameraType.Target);
+        if(!float.TryParse(val,out float f) || f<=0) return sh.io.Error("数値が不正です");
+        mc.SetDistance(f);
         return 1;
     }
 

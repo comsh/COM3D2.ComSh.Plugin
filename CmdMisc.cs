@@ -261,26 +261,36 @@ public static class CmdMisc {
             if( ((args.Count!=3&&args.Count!=4)||args[2]=="") || (args.Count==4 && args[3]=="") )
                 return sh.io.Error("使い方: tmpfile add 識別名 [ファイル名|*識別名]");
             if(DataFiles.CreateTempFile(args[2],(args.Count==4)?args[3]:null)==null) return sh.io.Error("作成に失敗しました");
-
         }else if(args[1]=="del"){
             if(args.Count<3) return sh.io.Error("使い方: tmpfile del 識別名...");
             for(int i=2; i<args.Count; i++) DataFiles.DeleteTempFile(args[i]);
-        }else if(args[1]=="export"){
-            if((args.Count!=3&&args.Count!=4)||args[2]=="") return sh.io.Error("使い方: tmpfile export 識別名 [出力ファイル名]");
-            string name=(args.Count==4)?args[3]:args[2];
-            if(UTIL.CheckFileName(name)<0) return sh.io.Error("出力ファイル名が不正です");
-            int ret=DataFiles.ExportTmpFile(args[2],name,ComShInterpreter.scriptFolder+"export\\");
-            if(ret==-1) return sh.io.Error("未登録です");
-            else if(ret==-2) return sh.io.Error("ファイルの書き込みに失敗しました");
-        }else if(args[1]=="mypose"){
-            if((args.Count!=3&&args.Count!=4)||args[2]=="") return sh.io.Error("使い方: tmpfile mypose 識別名 [出力ファイル名]");
-            string name=(args.Count==4)?args[3]:args[2];
-            if(UTIL.CheckFileName(name)<0) return sh.io.Error("出力ファイル名が不正です");
-            name=UTIL.Suffix(name,".anm");
-            int ret=DataFiles.ExportTmpFile(args[2],name,ComShInterpreter.myposeDir);
-            if(ret==-1) return sh.io.Error("未登録です");
-            else if(ret==-2) return sh.io.Error("ファイルの書き込みに失敗しました");
-        }
+        }else if(args.Count>=3){
+            // 初期は tmpfile export 識別名 の順になっていたので、後方互換性のためその順番でも通す
+            int ididx=2,cmdidx=1;
+            if(DataFiles.IsTempFile(args[1])){ ididx=1; cmdidx=2;}
+            string id=args[ididx];
+            if(args[cmdidx]=="export"){
+                if((args.Count!=3&&args.Count!=4)||id=="") return sh.io.Error("使い方: tmpfile 識別名 export [出力ファイル名]");
+                string name=(args.Count==4)?args[3]:id;
+                if(UTIL.CheckFileName(name)<0) return sh.io.Error("出力ファイル名が不正です");
+                int ret=DataFiles.ExportTmpFile(id,name,ComShInterpreter.scriptFolder+"export\\");
+                if(ret==-1) return sh.io.Error("未登録です");
+                else if(ret==-2) return sh.io.Error("ファイルの書き込みに失敗しました");
+            }else if(args[cmdidx]=="mypose"){
+                if((args.Count!=3&&args.Count!=4)||id=="") return sh.io.Error("使い方: tmpfile 識別名 mypose [出力ファイル名]");
+                string name=(args.Count==4)?args[3]:id;
+                if(UTIL.CheckFileName(name)<0) return sh.io.Error("出力ファイル名が不正です");
+                name=UTIL.Suffix(name,".anm");
+                int ret=DataFiles.ExportTmpFile(id,name,ComShInterpreter.myposeDir);
+                if(ret==-1) return sh.io.Error("未登録です");
+                else if(ret==-2) return sh.io.Error("ファイルの書き込みに失敗しました");
+            }else if(args[cmdidx]=="append"){
+                if(args.Count!=4||id=="") return sh.io.Error("使い方: tmpfile 識別名 append 文字列");
+                int ret=DataFiles.AppendTmpFile(id,args[3]);
+                if(ret==-1) return sh.io.Error("未登録です");
+                else if(ret==-2) return sh.io.Error("ファイルの書き込みに失敗しました");
+            }else return sh.io.Error("パラメータが不正です");
+        }else return sh.io.Error("パラメータが不正です");
         return 0;
     }
     public class Q {

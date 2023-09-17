@@ -119,7 +119,7 @@ public partial class ComShInterpreter {
         private StringBuilder sb=new StringBuilder();
         public void Output(string str,int code){
             if(code==0) sb.Append(str).Append('\n'); // lfのみ
-            else Debug.Log(str);
+            else if(str!="") Debug.Log(str);
         }
         public string GetSubShResult(){
             string ret=sb.ToString().TrimEnd(ParseUtil.lf);
@@ -415,8 +415,9 @@ public partial class ComShInterpreter {
         }
         private string GetFromEnv(string key,VarDic e){
             string v=Variables.Value(e,key);
-            if(!int.TryParse(v,out int n)||n<0||n>50) return string.Empty;
-            return "F"+v;
+            if(!int.TryParse(v,out int n)||n>50) return string.Empty;
+            if(n>=0) return "F"+v;
+            return "0."+new string('#',-n);
         }
         public string F0to1(float f){ return f.ToString(fmt_01); } // 0.0～1.0の値
         public string F0to1(double f){ return f.ToString(fmt_01); } // 0.0～1.0の値

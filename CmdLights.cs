@@ -91,6 +91,29 @@ public static class CmdLights {
             if(!float.TryParse(val,out float f)) return sh.io.Error(ParseUtil.error);
             lm.SetShadowStrength(f);
             return 1;
+        }else if(cmd=="shadowtype"){
+            Light lt=lm.GetComponent<Light>();
+            if(lt==null) return 0;
+            if(val==null){
+                if(lt.shadows==LightShadows.Hard) sh.io.Print("hard");
+                else if(lt.shadows==LightShadows.Soft) sh.io.Print("soft");
+                else if(lt.shadows==LightShadows.None) sh.io.Print("none");
+                return 0;
+            }
+            if(val=="h" || val=="hard") lt.shadows=LightShadows.Hard;
+            else if(val=="s" || val=="soft") lt.shadows=LightShadows.Soft;
+            else if(val=="n" || val=="none") lt.shadows=LightShadows.None;
+            else return sh.io.Error("shwdowtypeはhard/soft/noneで指定してください");
+            return 1;
+        }else if(cmd=="shadowrange"){
+            if(val==null){
+                sh.io.Print(QualitySettings.shadowDistance.ToString());
+                return 0;
+            }
+            if(!float.TryParse(val,out float f)) return sh.io.Error(ParseUtil.error);
+            if(f<0) return sh.io.Error("値の範囲が不正です");
+            QualitySettings.shadowDistance=f;
+            return 1;
         }else return sh.io.Error("パラメータが不正です");
     }
     private static int EnvLight(ComShInterpreter sh,List<string> args){

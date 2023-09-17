@@ -56,6 +56,7 @@ public static class DataFiles {
             this.filename=null;
         }
     }
+    public static bool IsTempFile(string name){ return tmpfiledic.ContainsKey(name); }
     public static TmpFile GetTempFile(string name){
         if(tmpfiledic.TryGetValue(name,out TmpFile tmpfile)) return tmpfile;
         return null;
@@ -80,6 +81,15 @@ public static class DataFiles {
         string dst=path+name;
         try{
             if(File.Exists(tf.filename)) File.Copy(tf.filename,dst,true);
+        }catch{
+            return -2;
+        }
+        return 0;
+    }
+    public static int AppendTmpFile(string id,string txt){
+        if(!tmpfiledic.TryGetValue(id,out TmpFile tf)) return -1;
+        try{
+            if(File.Exists(tf.filename)) File.AppendAllText(tf.filename,txt);
         }catch{
             return -2;
         }

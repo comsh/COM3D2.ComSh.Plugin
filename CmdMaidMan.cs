@@ -37,6 +37,7 @@ public static class CmdMaidMan {
         maidParamDic.Add("scale.y",new CmdParam<Maid>(MaidParamScaleY));
         maidParamDic.Add("scale.z",new CmdParam<Maid>(MaidParamScaleZ));
         maidParamDic.Add("motion",new CmdParam<Maid>(MaidParamMotion));
+        maidParamDic.Add("motion.frame",new CmdParam<Maid>(MaidParamMotionFrame));
         maidParamDic.Add("motion.time",new CmdParam<Maid>(MaidParamMotionTime));
         maidParamDic.Add("motion.timep",new CmdParam<Maid>(MaidParamMotionTimep));
         maidParamDic.Add("motion.timel",new CmdParam<Maid>(MaidParamMotionTimeL));
@@ -103,7 +104,7 @@ public static class CmdMaidMan {
     private static string[] manParams={
         "position","rotation","scale","pos","rot",
         "motion","shape","iid","list","motion.time","motion.speed","motion.layer","motion.length",
-        "motion.weight","motion.timep","motion.timel","motion.timelp",
+        "motion.weight","motion.timep","motion.timel","motion.timelp","motion.frame",
         "attach","detach","lookat","ik",
         "wpos","wrot","lpos","lrot","opos","orot","lquat","wquat",
 
@@ -468,7 +469,11 @@ public static class CmdMaidMan {
             foreach(AnimationState state in anim)
                 if(!anim.IsPlaying(state.name)||state.layer>0||state.name.IndexOf(" - Queued Clone",Ordinal)>=0)
                     remove.Add(state.name);
-            foreach(var name in remove) anim.RemoveClip(name);
+            foreach(var name in remove){
+                var ac=anim.GetClip(name);
+                anim.RemoveClip(name);
+                UnityEngine.Object.Destroy(ac);
+            }
         }
 
         bool updated=false;
@@ -556,7 +561,7 @@ public static class CmdMaidMan {
             return 0;
         }
         string[] sa;
-        if(val.IndexOf('\n')>=0) sa=val.Split(ParseUtil.cr);
+        if(val.IndexOf('\n')>=0) sa=val.Split(ParseUtil.lf);
         else sa=val.Split(ParseUtil.comma);
         for(int i=0; i<sa.Length; i++){
             int lno;
@@ -570,7 +575,7 @@ public static class CmdMaidMan {
                 if(!float.TryParse(lr[1],out f)) return sh.io.Error("数値の指定が不正です");
             }
             foreach(AnimationState st in anm) if(anm.IsPlaying(st.name)){
-                if(lno<0 || lno==st.layer) st.time=(f/1000)%st.length;
+                if(lno<0 || lno==st.layer) st.time=f/1000;   // 強制的に%st.lengthされちゃう
             }
         }
         return 1;
@@ -601,7 +606,7 @@ public static class CmdMaidMan {
             return 0;
         }
         string[] sa;
-        if(val.IndexOf('\n')>=0) sa=val.Split(ParseUtil.cr);
+        if(val.IndexOf('\n')>=0) sa=val.Split(ParseUtil.lf);
         else sa=val.Split(ParseUtil.comma);
         for(int i=0; i<sa.Length; i++){
             int lno;
@@ -609,15 +614,38 @@ public static class CmdMaidMan {
             var lr=ParseUtil.LeftAndRight(sa[i],':');
             if(lr[1]==""){
                 lno=-1;
-                if(!float.TryParse(lr[0],out f) || f<-1 || f>1) return sh.io.Error("数値の指定が不正です");
+                if(!float.TryParse(lr[0],out f)) return sh.io.Error("数値の指定が不正です");
             }else{
                 if(!int.TryParse(lr[0],out lno) || lno<0) return sh.io.Error("レイヤ番号が不正です");
-                if(!float.TryParse(lr[1],out f) || f<-1 || f>1) return sh.io.Error("数値の指定が不正です");
+                if(!float.TryParse(lr[1],out f)) return sh.io.Error("数値の指定が不正です");
             }
             foreach(AnimationState st in anm) if(anm.IsPlaying(st.name)){
                 if(lno<0 || lno==st.layer) st.time=f*st.length;
             }
         }
+        return 1;
+    }
+    private static int MaidParamMotionFrame(ComShInterpreter sh,Maid m,string val){
+        var anm=m.body0.m_Animation;
+
+        AnimationState main=null;
+        {
+            int mainlno=int.MaxValue;
+            foreach(AnimationState st in anm)
+                if(anm.IsPlaying(st.name) && !Mathf.Approximately(st.speed,0) && !Mathf.Approximately(st.weight,0))
+                    if(st.layer<mainlno){ mainlno=st.layer; main=st; }
+            if(main==null) return sh.io.Error("有効なモーションがありません");
+        }
+
+        if(val==null){
+            sh.io.PrintJoin("/",((int)((main.time%main.length)/main.speed*60)).ToString(),((int)(main.time/main.speed*60)).ToString(),((int)(main.length/main.speed*60)).ToString());
+            return 0;
+        }
+        if(!float.TryParse(val,out float f)) return sh.io.Error("数値の指定が不正です");
+        f=Mathf.Round(f);
+        foreach(AnimationState st in anm)
+            if(anm.IsPlaying(st.name) && !Mathf.Approximately(st.speed,0) && !Mathf.Approximately(st.weight,0))
+                st.time=st.speed*(f/60);
         return 1;
     }
     private static int MaidParamMotionSpeed(ComShInterpreter sh,Maid m,string val){
@@ -637,7 +665,7 @@ public static class CmdMaidMan {
             return 0;
         }
         string[] sa;
-        if(val.IndexOf('\n')>=0) sa=val.Split(ParseUtil.cr);
+        if(val.IndexOf('\n')>=0) sa=val.Split(ParseUtil.lf);
         else sa=val.Split(ParseUtil.comma);
         for(int i=0; i<sa.Length; i++){
             int lno;
@@ -664,7 +692,7 @@ public static class CmdMaidMan {
             return 0;
         }
         string[] sa;
-        if(val.IndexOf('\n')>=0) sa=val.Split(ParseUtil.cr);
+        if(val.IndexOf('\n')>=0) sa=val.Split(ParseUtil.lf);
         else sa=val.Split(ParseUtil.comma);
         for(int i=0; i<sa.Length; i++){
             int lno;

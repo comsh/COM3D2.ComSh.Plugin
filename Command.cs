@@ -555,7 +555,12 @@ public static class Command {
                 var tf=DataFiles.GetTempFile(prm.Substring(1));
                 if(tf==null) return sh.io.Error("一時ファイル名が未定義です");
                 prm=tf.filename;
-            }else if(prm.IndexOf('\\')>=0) return sh.io.Error("文字「\\」は使用できません");
+            }else if(prm.IndexOf('\\')>=0) return sh.io.Error("パス区切り文字は使用できません");
+            else{
+                int sl=prm.IndexOf('/');
+                if(sl>0 || (sl==0 && prm.Length>=2 && prm.IndexOf('/',1)>0))
+                    return sh.io.Error("パス区切り文字は使用できません");
+            }
             sb.Append(" ").Append(prm);
         }
         string ret=CmdSystemSub(args[1],sb.ToString());
