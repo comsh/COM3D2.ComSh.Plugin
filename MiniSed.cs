@@ -30,7 +30,7 @@ public class MiniSed {
     delegate void MiniSedAct(Line l,bool adrq);
 
     public string Process(string txt){
-        StringBuilder sb=new StringBuilder();
+        StringBuilder sb=new StringBuilder(4096);
         if(cmd=='d'){
             Filter(txt,(Line l,bool adrq)=>{ if(!adrq) sb.Append(txt,l.head,l.LengthLn); });
         }else if(cmd=='s'){

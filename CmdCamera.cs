@@ -28,6 +28,8 @@ public static class CmdCamera {
         cameraParamDic.Add("screensize",new CmdParam<CameraMain>(CameraParamScreenSize));
         cameraParamDic.Add("speed",new CmdParam<CameraMain>(CameraParamSpeed));
         cameraParamDic.Add("distance",new CmdParam<CameraMain>(CameraParamDistance));
+        cameraParamDic.Add("range",new CmdParam<CameraMain>(CameraParamRange));
+        cameraParamDic.Add("shadowrange",new CmdParam<CameraMain>(CameraParamShadowRange));
 
         CmdParamPosRotCp(cameraParamDic,"pos","position");
         CmdParamPosRotCp(cameraParamDic,"rot","rotation");
@@ -44,7 +46,7 @@ public static class CmdCamera {
 
     private static Dictionary<string,CmdParam<CameraMain>> cameraParamDic=new Dictionary<string,CmdParam<CameraMain>>();
 
-    private const float minDist=0.05f;
+    private const float minDist=0.1f;
     private static int CmdMainCamera(ComShInterpreter sh,List<string> args){
         CameraMain mc=GameMain.Instance.MainCamera;
         if(args.Count==1){
@@ -300,6 +302,45 @@ public static class CmdCamera {
         ChgCameraType(mc,CameraMain.CameraType.Target);
         if(!float.TryParse(val,out float f) || f<=0) return sh.io.Error("数値が不正です");
         mc.SetDistance(f);
+        return 1;
+    }
+    private static int CameraParamRange(ComShInterpreter sh,CameraMain mc,string val){
+        Camera cam=mc.camera;
+        if(val==null){
+            sh.io.Print(sh.fmt.FXY(cam.nearClipPlane,cam.farClipPlane));
+            return 0;
+        }
+        float f,n;
+        var sa=ParseUtil.LeftAndRight(val,',');
+        if(sa[1]==""){
+            if(!float.TryParse(sa[0],out f)||f<=0) return sh.io.Error("数値が不正です");
+            cam.farClipPlane=f;
+        }else{
+            mc.m_bCalcNearClip=false;
+            if( (!float.TryParse(sa[0],out n)||n<=0)
+              ||(!float.TryParse(sa[1],out f)||f<=0) ) return sh.io.Error("数値が不正です");
+            cam.nearClipPlane=n;
+            cam.farClipPlane=f;
+            ComShBg.cron.AddJob("cmdcamera/range",0,0,(long t)=>{
+                // mc.m_bCalcNearClip=false;で変更した直後は値が変わらないようなので次フレームに
+                cam.nearClipPlane=n;
+                cam.farClipPlane=f;
+                return -1;
+            },0);
+        }
+        return 1;
+    }
+    private static int CameraParamShadowRange(ComShInterpreter sh,CameraMain mc,string val){
+        return ShadowRange(sh,val);
+    }
+    public static int ShadowRange(ComShInterpreter sh,string val){
+        if(val==null){
+            sh.io.Print(QualitySettings.shadowDistance.ToString());
+            return 0;
+        }
+        if(!float.TryParse(val,out float f)) return sh.io.Error(ParseUtil.error);
+        if(f<0) return sh.io.Error("値の範囲が不正です");
+        QualitySettings.shadowDistance=f;
         return 1;
     }
 

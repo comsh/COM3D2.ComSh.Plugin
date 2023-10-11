@@ -156,9 +156,9 @@ namespace COM3D2.ComSh.Plugin {
 		public byte type = 0;   // 100-106 4元数＋移動xyzの7種類
         public int fcnt = 0;
 
-		public AnmFrameList() {}
-		public AnmFrameList(byte type) { this.type=type; }
-		public AnmFrameList(BinaryReader r) { read(r); }
+		public AnmFrameList():base(64) {}
+		public AnmFrameList(byte type):base(64) { this.type=type; }
+		public AnmFrameList(BinaryReader r):base(64) { read(r); }
 
 		public void read(BinaryReader r) {
 			type=r.ReadByte();

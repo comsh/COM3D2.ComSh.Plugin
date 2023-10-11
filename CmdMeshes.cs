@@ -31,7 +31,9 @@ public static class CmdMeshes {
             if(args.Count!=2) return sh.io.Error("メッシュ番号が不正です");
             Transform tr=ObjUtil.FindObj(sh,cd);
             if(tr==null) return sh.io.Error("オブジェクトが存在しません");
-            var mi=new MeshInfo(tr);
+            Transform tr0=ObjUtil.FindObjRoot(sh,cd);
+            if(tr==null) return sh.io.Error("オブジェクトが存在しません");
+            var mi=new MeshInfo(tr,tr0);
             for(int i=0; i<mi.count; i++){
                 sh.io.Print($"{i}");
                 if(mi.material.Count>i){
@@ -46,7 +48,9 @@ public static class CmdMeshes {
     public static int CmdMeshSub(ComShInterpreter sh,ParseUtil.ColonDesc cd,List<string> args,int startpos){
         Transform tr=ObjUtil.FindObj(sh,cd);
         if(tr==null) return sh.io.Error("オブジェクトが存在しません");
-        var mi=new MeshInfo(tr);
+        Transform tr0=ObjUtil.FindObjRoot(sh,cd);
+        if(tr==null) return sh.io.Error("オブジェクトが存在しません");
+        var mi=new MeshInfo(tr,tr0);
         if(mi.count<=cd.meshno) return sh.io.Error("指定されたメッシュが存在しません");
         if(args.Count==startpos){
             sh.io.Print($"count:{mi.oid.originalMesh.GetIndices(cd.meshno).Length/3}");
@@ -106,16 +110,7 @@ public static class CmdMeshes {
         return 1;
     }
     private static int MeshParamVerLoop(ComShInterpreter sh,SingleMesh sm,string val){
-        var psr=new ComShParser(sh.lastParser.lineno);
-        int ret=psr.Parse(val);
-        if(ret<0) return sh.io.Error(psr.error);
-        if(ret==0) return sh.io.Error("コマンドが空です");
-
-        // 現シェルでの実行だが、出力だけはサブシェル実行と同じ形にする
-        ComShInterpreter.Output orig=sh.io.output;
-        var subout=new ComShInterpreter.SubShOutput();
-        sh.io.output=new ComShInterpreter.Output(subout.Output);
-        ret=0;
+        if(val==null || val=="") return 0;
 
         uint[] idx;
         if(sm.list!=null){
@@ -131,6 +126,15 @@ public static class CmdMeshes {
 
         Mesh m=sm.mi.mesh.FindMesh(sm.submeshno);
         if(m==null) return sh.io.Error("メッシュ番号が不正です");
+
+        var psr=EvalParser(sh,Command.currentArgNo+1);
+        if(psr==null) return -1;
+
+        ComShInterpreter.Output orig=sh.io.output;
+        var subout=new ComShInterpreter.SubShOutput();
+        sh.io.output=new ComShInterpreter.Output(subout.Output);
+
+        int ret=0;
 
         var vta=m.vertices;
         var nma=m.normals;
@@ -601,12 +605,19 @@ public static class CmdMeshes {
         public ObjInfoData oid=null;
         public List<Material> material;
         public Transform transform;
+        public Transform transform0;
         public ObjInfoData.MeshList mesh;
         public MeshInfo(Transform tr){
             transform=tr;
             oi=ObjInfo.GetObjInfo(tr);
-            if(oi==null) oid=new ObjInfoData(tr);
-            else if(oi.data==null) oi.data=oid=new ObjInfoData(tr); else oid=oi.data;
+            if(oi!=null) transform0=oi.transform;
+        }
+        public MeshInfo(Transform tr,Transform tr0){
+            transform=tr;
+            transform0=tr0;
+            oi=ObjInfo.GetObjInfo(tr);
+            if(oi==null) oid=new ObjInfoData(tr0);
+            else if(oi.data==null) oi.data=oid=new ObjInfoData(oi.transform); else oid=oi.data;
 
             if(oid.workMesh==null){
                 oid.Backup();
@@ -620,7 +631,7 @@ public static class CmdMeshes {
         public void EditMesh(){
             if(oi==null){
                 // 編集すると後始末が必要になるので、ComShで追加したオブジェト以外にもObjInfoを付ける
-                oi=ObjInfo.AddObjInfo(transform,oid,"",null);
+                oi=ObjInfo.AddObjInfo(transform0,oid,"",null);
             }
             oid.CloneMesh();
             mesh=oid.workMesh;
@@ -652,7 +663,7 @@ public static class CmdMeshes {
         public void EditMaterial(){
             if(oi==null){
                 // 編集すると後始末が必要になるので、ComShで追加したオブジェト以外にもObjInfoを付ける
-                oi=ObjInfo.AddObjInfo(transform,oid,"",null);
+                oi=ObjInfo.AddObjInfo(transform0,oid,"",null);
             }
             oid.CloneMaterial();
             material=oid.workMate;

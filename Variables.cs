@@ -3,7 +3,7 @@
 namespace COM3D2.ComSh.Plugin {
 
 public static class Variables {
-    public static Dictionary<string,string> g=new Dictionary<string,string>();
+    public static Dictionary<string,string> g=new Dictionary<string,string>(32);
     public static string Get(string key,VarDic ldic,Dictionary<string,string> sdic){
         if(key[0]=='/'){
             if(!g.TryGetValue(key,out string val)) return "";
@@ -45,6 +45,8 @@ public static class Variables {
 }
 
 public class VarDic : Dictionary<string,ReferredVal> {
+    public string output="";
+    public List<string> args=new List<string>();
 
     // インデクサだけ <string,string> 仕様にする
     public new string this[string key]{  
@@ -53,12 +55,19 @@ public class VarDic : Dictionary<string,ReferredVal> {
             else rv.Set(value);
         }
         get{
+            if(key.Length==0) return "";
+            if(key[0]=='`') return output;
+            if(int.TryParse(key,out int n) && n>0){
+                if(args.Count<n || args[n-1]==null) return "";
+                return args[n-1];
+            }
             if(!TryGetValue(key,out ReferredVal rv)) return "";
             return rv.Get();
         }
     }
-    public VarDic(){}
-    public VarDic(VarDic vd) {
+    public VarDic():base(32) {}
+    public VarDic(int cap):base(cap) {}
+    public VarDic(VarDic vd):base(vd.Count>32?vd.Count:32) {
         foreach(var kv in vd){
             if(kv.Value.dic==null) this.Add(kv.Key,new ReferredVal(kv.Value.val));
             else this.Add(kv.Key,kv.Value);
@@ -74,7 +83,6 @@ public class VarDic : Dictionary<string,ReferredVal> {
         if(rkey[0]=='/'){
             if(!this.TryGetValue(key,out rv)) this.Add(key,new ReferredVal(rkey,Variables.g)); 
             else rv.SetRef(rkey,Variables.g);
-            
         }else{
             if(!this.TryGetValue(key,out rv)) this.Add(key,new ReferredVal(rkey,this)); 
             else rv.SetRef(rkey,this);

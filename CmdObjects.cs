@@ -62,6 +62,7 @@ public static class CmdObjects {
         objParamDic.Add("locik3",new CmdParam<Transform>(ObjParamLocIK3));
         objParamDic.Add("locik3-",new CmdParam<Transform>(ObjParamLocIK3Minus));
         objParamDic.Add("shadow",new CmdParam<Transform>(ObjParamShadow));
+        objParamDic.Add("join",new CmdParam<Transform>(ObjParamJoin));
         
         objParamDic.Add("l2w",new CmdParam<Transform>(_CmdParamL2W));
         objParamDic.Add("w2l",new CmdParam<Transform>(_CmdParamW2L));
@@ -152,10 +153,11 @@ public static class CmdObjects {
             }
             return 0;
         }
-        return CmdObjectSub(sh,args[1].Split(ParseUtil.colon),args,2);
+        //return CmdObjectSub(sh,args[1].Split(ParseUtil.colon),args,2);
+        return CmdObjectSub(sh,new ParseUtil.ColonDesc(args[1]),args,2);
     }
     public static List<Transform> GetObjList(ComShInterpreter sh){
-        var ret=new List<Transform>();
+        var ret=new List<Transform>(64);
         var oset=new HashSet<string>(); // 重複削除
         Transform pftr;
         if(sh.objRef.Length>0){ // スタジオモード分参照
@@ -176,7 +178,7 @@ public static class CmdObjects {
                 ret.Add(tr);
             }
         }
-        List<string> remove=new List<string>();
+        List<string> remove=new List<string>(ObjUtil.objDic.Count);
         foreach(var kv in ObjUtil.objDic){
             Transform tr=kv.Value;
             if(tr==null){ remove.Add(kv.Key); continue; }
@@ -193,17 +195,9 @@ public static class CmdObjects {
         if(!UTIL.ValidName(ret)) ret="object_"+seq;
         return ret;
     }
-    public static int CmdObjectSub(ComShInterpreter sh,string[] sa,List<string> args,int startpos){
-        Transform tr=ObjUtil.FindObj(sh,sa);
-        if(tr==null) return sh.io.Error("オブジェクトが存在しません");
-        if(args.Count==startpos){
-            sh.io.PrintLn2("iid:",tr.gameObject.GetInstanceID().ToString());
-            UTIL.PrintTrInfo(sh,tr);
-            return 0;
-        }
-        return ParamLoop(sh,tr,objParamDic,args,startpos);
-    }
+    private static ParseUtil.ColonDesc colonDesc;
     public static int CmdObjectSub(ComShInterpreter sh,ParseUtil.ColonDesc cd,List<string> args,int startpos){
+        colonDesc=cd;
         Transform tr=ObjUtil.FindObj(sh,cd);
         if(tr==null) return sh.io.Error("オブジェクトが存在しません");
         if(args.Count==startpos){
@@ -220,10 +214,7 @@ public static class CmdObjects {
         return 0;
     }
     private static int ObjParamAttach(ComShInterpreter sh,Transform tr,string val){
-        if(val==null){
-            sh.io.Print(tr.parent.name);
-            return 0;
-        }
+        if(val==null) return 0;
         Transform to;
         int opt,jmpq=0;
         if((opt=val.IndexOf(','))>=0){
@@ -256,6 +247,40 @@ public static class CmdObjects {
         }
         if(jmpq==2) UTIL.ResetTr(tr);
         tr.SetParent(to,jmpq==0);
+        return 1;
+    }
+    private static int ObjParamJoin(ComShInterpreter sh,Transform tr,string val){
+        if(val==null) return 0;
+        int opt,jmpq=0;
+        if((opt=val.IndexOf(','))>=0){
+            if(!int.TryParse(val.Substring(opt+1),out jmpq)) return sh.io.Error("数値の形式が不正です");
+            val=val.Substring(0,opt);
+        }
+        var cd=new ParseUtil.ColonDesc(val);
+        if(cd.type!="obj") return sh.io.Error("join対象にはオブジェクトのみ指定可能です");
+       
+        // アッタッチ先(根)
+        var to0=ObjUtil.FindObj(sh,cd.id);
+        if(to0==null) return sh.io.Error("対象が見つかりません");
+        // アタッチ先(末端)
+        var to=ObjUtil.FindObj(sh,cd);
+        if(to==null) return sh.io.Error("対象が見つかりません");
+
+        var ms=MaidUtil.GetParentMaidList(to,tr);
+        if(ms==null) return sh.io.Error("親子関係がループになるため、アタッチできません");
+
+        var oi2=to0.GetComponent<ObjInfo>();
+        if(oi2==null) oi2=ObjInfo.AddObjInfo(to0,"");
+        var oi=ObjInfo.GetObjInfo(tr);
+        if(jmpq==2) UTIL.ResetTr(tr);
+        tr.SetParent(to,jmpq==0);
+        oi2.data.UpdateBones();
+        if(oi!=null){
+            if(System.Object.ReferenceEquals(oi.transform,tr)){
+                oi.enabled=false;
+                ObjUtil.objDic.Remove(tr.name);
+            }else oi.data.UpdateBones();
+        }
         return 1;
     }
     private static int ObjParamDetach(ComShInterpreter sh,Transform tr,string val){
@@ -332,7 +357,10 @@ public static class CmdObjects {
         if (fromrdr==null || fromrdr.sharedMaterial==null || fromidx>=fromrdr.sharedMaterials.Length)
             return sh.io.Error("マテリアルが見つかりません");
  
-        var mi=new CmdMeshes.MeshInfo(tr);
+        var tr0=ObjUtil.FindObjRoot(sh,colonDesc);
+        if(tr0==null)  return sh.io.Error("オブジェクトが見つかりません");
+
+        var mi=new CmdMeshes.MeshInfo(tr,tr0);
         if(mi==null) return sh.io.Error("マテリアルが見つかりません");
         if(mi.material.Count<=idx) return sh.io.Error("マテリアル番号の指定が不正です");
         mi.EditMaterial();
@@ -854,7 +882,10 @@ public static class CmdObjects {
     }
 
     private static int ObjParamMesh(ComShInterpreter sh,Transform tr,string val){
-        var mi=new CmdMeshes.MeshInfo(tr);
+        var tr0=ObjUtil.FindObjRoot(sh,colonDesc);
+        if(tr0==null)  return sh.io.Error("オブジェクトが見つかりません");
+
+        var mi=new CmdMeshes.MeshInfo(tr,tr0);
         if(mi.count==0) return sh.io.Error("メッシュが見つかりません");
         if(val==null){
             for(int i=0; i<mi.count; i++){
@@ -1077,7 +1108,6 @@ public static class ObjUtil {
     public static Transform FindObj(ComShInterpreter sh,string[] sa){
         if(sa.Length==0) return null;
         Transform tr=null;
-
         if(sa.Length==1) return FindObj(sh,sa[0]);
         if(sa.Length==2&&sa[0]=="obj") return FindObj(sh,sa[1]);
 
@@ -1103,6 +1133,11 @@ public static class ObjUtil {
         if(tr==null) return null;
         if(cd.path!="") return tr.Find(cd.path);
         return tr;
+    }
+    public static Transform FindObjRoot(ComShInterpreter sh,ParseUtil.ColonDesc cd){
+        if(cd.num==0 && cd.id!="") return FindObj(sh,cd.id);
+        if(cd.type=="obj") return FindObj(sh,cd.id);
+        return BoneUtil.FindBone(sh,cd.type,cd.id,"/");
     }
 
     public static void RenameTr(Transform tr, string name){
@@ -1146,7 +1181,7 @@ public static class ObjUtil {
                 dummyMaid.body0.maid=dummyMaid;
                 dummyMaid.body0.m_hitFloorPlane=null;
                 dummyMaid.body0.boMAN=dummyMaid.boMAN=false;
-                dummyMaid.body0.goSlot=new List<TBodySkin>();
+                dummyMaid.body0.goSlot=new List<TBodySkin>(1);
                 dummyMaid.body0.goSlot.Add(new TBodySkin(dummyMaid.body0,"body",0,false));
             }
             string fname=Path.GetFileNameWithoutExtension(src);
@@ -1159,12 +1194,13 @@ public static class ObjUtil {
                 }
             }
             if(mo==null) mo=new MenuObj(fname+".model");
-            morph=new List<TMorph>();
+            morph=new List<TMorph>(32);
             var ga=MenuObj.ToObject(mo,morph);
             if(ga.Count>0){
                 o=new GameObject("");
                 foreach(var g in ga) g.transform.SetParent(o.transform);
             }
+            if(morph.Count==0) morph=null;
             instanceq=false; // この場合は既にインスタンス化されてる
         }
         if(o==null) return null;
@@ -1277,7 +1313,7 @@ public static class ObjUtil {
         }
 
         public static List<GameObject> ToObject(MenuObj mo,List<TMorph> morph){
-            List<GameObject> ret=new List<GameObject>();
+            List<GameObject> ret=new List<GameObject>(32);
             foreach(var kv in mo.modelName){
                 string slot=kv.Key;
                 string file=kv.Value;

@@ -63,10 +63,9 @@ public static class CmdMisc {
         return null;
     }
     private static void SetBg(string val){
-        BGWindow bgw=GameObject.FindObjectOfType<BGWindow>();
         ObjectManagerWindow omw=null;
-        if(bgw!=null){
-            omw=bgw.mgr.GetWindow(PhotoWindowManager.WindowType.ObjectManager) as ObjectManagerWindow;
+        if(StudioMode.pwm!=null){
+            omw=StudioMode.GetWindow<ObjectManagerWindow>(PhotoWindowManager.WindowType.ObjectManager);
 		    omw.RemoveTransTargetObject(GameMain.Instance.BgMgr.current_bg_object);
         }
 

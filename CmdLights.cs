@@ -106,14 +106,7 @@ public static class CmdLights {
             else return sh.io.Error("shwdowtypeはhard/soft/noneで指定してください");
             return 1;
         }else if(cmd=="shadowrange"){
-            if(val==null){
-                sh.io.Print(QualitySettings.shadowDistance.ToString());
-                return 0;
-            }
-            if(!float.TryParse(val,out float f)) return sh.io.Error(ParseUtil.error);
-            if(f<0) return sh.io.Error("値の範囲が不正です");
-            QualitySettings.shadowDistance=f;
-            return 1;
+            return CmdCamera.ShadowRange(sh,val);
         }else return sh.io.Error("パラメータが不正です");
     }
     private static int EnvLight(ComShInterpreter sh,List<string> args){

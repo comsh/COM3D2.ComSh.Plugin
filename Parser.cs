@@ -8,102 +8,119 @@ namespace COM3D2.ComSh.Plugin {
 // パーサ
 public class ComShParser {
 
+    public class Statement {
+        public bool noerr=false;
+        public int offset=0;
+        public List<Token> tokens=new List<Token>();
+        public char eol=';';
+        public Token redirect=null;
+        public bool append=false;
+        public static Statement zero=new Statement();
+    }
+    public class Token {
+        public int head=-1;
+        public int len=0;
+        public string txt=null;
+        public Assign assign=null;
+        public int varies=0;
+        public ComShParser parser=null;
+        public Token(int h){head=h; len=0;}
+        public Token(int h,int l){head=h; len=l;}
+        public Token(char[] ch,int h,int l){head=h;len=l;txt=new string(ch,h,l);}
+    }
+    public class Assign {
+        public string key;
+        public string value;
+        public bool append=false;
+        public Assign(string k,string v,bool a){key=k;value=v;append=a;}
+    }
+    public List<Statement> sta=new List<Statement>();
+    private char[] cha;
+    private byte[] qm;
+    private int chalen=0;
+
 	public const byte trash = 1;		// 出力しない文字
 	public const byte escaped = 2;	    // エスケープされた文字。単一引用符内もこれ
     public const byte varname = 4;      // 変数置換記述の変数名
+    public const byte eos = 8;          // 文終端
+    public const byte redirect = 16;        // 文終端
 
     public string error;                // パース時にエラーがあればエラーメッセージが入る
     public char prevEoL;                // 直前に取り出した行の行末記号(;/|)
-    public char currentEoL;             // 最後に取り出した行の行末記号(;/|)
-    public bool envChanged;             // 環境変数に変更があればtrue
-
-    private int head, tail;             // 入力文字列全体の先頭と末尾
-    private char[] cha;
-    private byte[] qm;
-    public int nextHead;
+    public bool envChanged=false;
+    public Statement currentStatement=Statement.zero;
 
     public int lineno=0;
+    private int sno=-1;
 
     public ComShParser(){}
-    public ComShParser(int l){ lineno=l; }
+    public ComShParser(int l){lineno=l;}
 
     public int Parse(string text){
-        error=null;
-        prevEoL=currentEoL=';'; envChanged=false;
-        this.cha=text.ToCharArray();
-        int r=Analyze();
-        nextHead=head;
-        return r;
+        sta.Clear();
+        Reset();
+        return Analyze(text);
     }
     public void Reset(){
         error=null;
-        prevEoL=currentEoL=';'; envChanged=false;
-        nextHead=head;
+        prevEoL=';'; envChanged=false;
+        sno=-1;
+        currentStatement=Statement.zero;
     }
-    // escapedでない'|'/';'で区切られた複数の行を１行ずつ取り出す
-    public List<string> Next(VarDic lvars, Dictionary<string,string> svars){
+
+    private VarDic lvars;
+    private Dictionary<string,string> svars;
+    public List<string> Next(VarDic lv, Dictionary<string,string> sv){
+        if(++sno>=sta.Count) return null;
+        lvars=lv; svars=sv;
         envChanged=false;
-        if(nextHead>tail) return null;
-		int i,start=nextHead,curhead;
-		for(i=start; i<=tail; i++) if((cha[i]==';'||cha[i]=='|'||cha[i]=='>')&&(qm[i]&escaped)==0) {
-            prevEoL=currentEoL;
-            currentEoL=cha[i];
-            curhead=nextHead;
-            if(i<tail&&cha[i]=='>'&&cha[i+1]=='>') nextHead=i+2; else nextHead=i+1;;
-            if (i>start){
-                if(prevEoL=='>'){
-                    bool appendq=(curhead-2>=0 && cha[curhead-2]=='>');
-                    return Redirect(start,i-1,lvars,svars,appendq);
-                }
-                return SingleLine(start, i-1,lvars,svars);
-            }
-            start=nextHead;
-		}
-        prevEoL=currentEoL;
-        currentEoL=';';     // 改行だけどこれにしておく
-        curhead=nextHead;
-        if(i<tail&&cha[i]=='>'&&cha[i+1]=='>') nextHead=i+2; else nextHead=i+1;;
-        if(i>start){
-            if(prevEoL=='>'){
-                bool appendq=(curhead-2>=0 && cha[curhead-2]=='>');
-                return Redirect(start,i-1,lvars,svars,appendq);
-            }
-            return SingleLine(start,i-1,lvars,svars);
-        }
-        return null;
+        prevEoL=currentStatement.eol;
+        currentStatement=sta[sno];
+        return SingleLine(currentStatement);
     }
-    private int Analyze() {          // trimとquotemap作成。入力文字列の正味の長さを返す
-        qm=new byte[cha.Length];
-        head=-1; tail=cha.Length;
-        while(--tail>=0) if(cha[tail]!='\n'&&cha[tail]!='\r') break;      // TrimEnd('\n','\r')
-        while(++head<=tail) if(cha[head]!=' '&&cha[head]!='\t') break;    // TrimStart(' ','\t')
-        if(head>tail) return 0;               // 正味の入力行が空
-        if(cha[head]=='#') return 0;
+    private int Analyze(string txt){
+        if(txt.Length==0) return 0;
+        {
+            int head=-1,tail=txt.Length;
+            while(++head<=tail) if(txt[head]!=' '&&txt[head]!='\t') break; // TrimStart(' ','\t')
+            if(txt[head]=='#') return 0;
+            while(--tail>=0) if(txt[tail]!='\n'&&txt[tail]!='\r') break;   // TrimEnd('\n','\r')
+            if(head>tail) return 0;
+            cha=new char[tail-head+1+1];
+            txt.CopyTo(head,cha,0,tail-head+1);
+            cha[tail-head+1]=';'; // 終端
+            qm=new byte[cha.Length];
+        }
 
         // バックスラッシュおよび引用符の処理
         bool backslash=false;
         int quote=0;
         int blv=0;
-        int i=head;
-        if(cha[i]=='{'){ quote=3; blv=1; qm[i++]=trash; }
-        for(; i<=tail; i++){
+        char prev_ch='\0';
+        byte prev_qm=0;
+        chalen=cha.Length;
+        for(int i=0; i<cha.Length; i++){
             if(quote==0){                 // 引用符外
                 if(backslash){
                     if(cha[i]=='n') cha[i]='\n';
+                    else if(cha[i]=='t') cha[i]='\t';
                     qm[i]=escaped;
                     backslash=false; 
                 } else if(cha[i]=='\\'){ backslash=true; qm[i]=trash; }
-                else if(cha[i]=='\t') cha[i]=' ';  // タブは空白文字にしてしまう
+                else if(cha[i]=='\t') cha[i]=' ';
                 else if(cha[i]=='\''){ quote=1; qm[i]=trash; }
                 else if(cha[i]=='"') { quote=2; qm[i]=trash; }
-                else if(cha[i]=='{'&&(qm[i-1]==escaped||cha[i-1]!='$')){ quote=3; blv=1; qm[i]=trash; }
-                else if(cha[i]=='#'&&qm[i-1]!=escaped&&IsSeam(cha[i-1])){ tail=i-1; break; }
+                else if(cha[i]=='{'&&(prev_qm==escaped||prev_ch!='$')){ quote=3; blv=1; qm[i]=trash; }
+                else if(cha[i]=='#'&&prev_qm!=escaped&&IsSeam(prev_ch)){ cha[i]=';'; qm[i]=eos; chalen=i+1; break; }
+                else if(cha[i]=='>'){ qm[i]=redirect; }
+                else if(cha[i]=='|'||cha[i]==';'){ qm[i]=eos; }
             }else if(quote==1){           // 単一引用符内
                 if(cha[i]=='\''){ quote=0; qm[i]=trash; }
                 else qm[i]=escaped;
             }else if(quote==2){           // 二重引用符内
                 if(backslash){
                     if(cha[i]=='n') {cha[i]='\n'; qm[i-1]=trash;}
+                    else if(cha[i]=='t'){ cha[i]='\t'; qm[i-1]=trash;}
                     qm[i]=escaped; backslash=false;
                     if(cha[i]=='"' || cha[i]=='$' || cha[i]=='\\') qm[i-1]=trash;
                 }else{
@@ -117,47 +134,264 @@ public class ComShParser {
                 if(cha[i]=='{') blv++; else if(cha[i]=='}') blv--;
                 if(blv==0){ quote=0; qm[i]=trash; } else qm[i]=escaped;
             }
+            prev_ch=cha[i]; prev_qm=qm[i];
         }   
         if(quote==1){error="単一引用符が閉じられていません"; return -1; }
         if(quote==2){error="二重引用符が閉じられていません"; return -1; }
         if(quote==3){error="{～}が閉じられていません"; return -1; }
         if(backslash){ error="バックスラッシュに続く文字がありません"; return -1; }
 
-        // 末尾にescapedでない空白文字が残っていれば末尾更新
-        while(tail>=head) if(cha[tail]==' '&&(qm[tail]&escaped)==0) tail--; else break;
-        if(head>tail) return 0;               // 入力行が空
+        for(int i=chalen-1; i>=0; i--) if(cha[i]==' '&&(qm[i]&escaped)==0) chalen--; else break;
+        if(chalen==0) return 0;
 
-        // escapedでない'$'に続く(かもしれない)変数置換
-        for (i=head; i<tail; i++) if (cha[i]=='$' && (qm[i]&escaped)==0) {   // 文末$は置換しようがないのでi<tail
-            int j=i+1;  // この時点ではまだただの'$'かもしれない
-            if(cha[j]=='{'){ // ${\(w+)}
-                qm[i]=trash; qm[j]|=trash;        // '{'が来た時点で'$'は変数置換用と確定
-                if(j++==tail) { error="${～}が閉じられていません"; return -1; }
-                if(ParseUtil.IsVar1Char(cha[j])) qm[j++]|=varname; else j=MarkWord(cha,qm,j,tail);
-                if(j>tail) { error="${～}が閉じられていません"; return -1; }
-                if(cha[j]!='}' || j==i+2){ error="${～}の書式が不正です"; return -1; }
-                qm[j]|=trash; i=j;
-            }else{                            // $(\w+)
-                if(ParseUtil.IsVar1Char(cha[j])) qm[j++]|=varname; else j=MarkWord(cha,qm,j,tail);
-                if(j>i+1){ qm[i]|=trash; i=j-1; } // 変数名があれば'$'は変数置換用と確定
+        return Tokenize();
+	}
+    private bool IsSeam(char c){ return (c==' '||c==';'||c=='|'||c=='?'); }
+    private int Tokenize(){
+        int start=0;
+        int rd=-1;
+        for(int i=0; i<chalen; i++) if((qm[i]&escaped)==0){
+            if(cha[i]=='>') rd=i;
+            else if(cha[i]==';'||cha[i]=='|'){
+                if(TokenizeStatement(start,i,rd)<0) return -1;
+                start=i+1;
+                rd=-1;
             }
         }
-        // redirect "^>\s*\w+\s*(;|$)" $変数置換は不可(変数の内容次第で実行時エラーとなるため)
-        for (i=head; i<tail; i++) if (cha[i]=='>' && (qm[i]&escaped)==0) {
-            if(cha[++i]=='>') i++; // >>を認識
+        return (sta.Count>0)?1:0;
+    }
+    private int TokenizeStatement(int head,int tail,int rd){
+        Statement st=new Statement();
+        int tail2=rd<0?tail:rd;
+        st.eol=cha[tail2];
+        bool whiteq=true;
+        Token token=null;
+        for(int i=head; i<=tail2; i++) if((qm[i]&escaped)==0){
+            if(cha[i]==' '||cha[i]==';'||cha[i]=='|'||cha[i]=='>'){
+                if(!whiteq){
+                    if(token!=null){ token.len=i-token.head; token=null; }
+                    whiteq=true;
+                }
+            }else{
+                if(whiteq){
+                    token=new Token(i);
+                    st.tokens.Add(token);
+                    whiteq=false;
+                }
+            }
+        }
+        if(rd>=0){
+            st.append=false;
+            int i=rd;
+            if(cha[++i]=='>'){ i++; st.append=true;}    // >>を認識
             for(; i<=tail; i++) if(cha[i]!=' ') break;
             if(i>tail){ error="リダイレクトの書式が不正です";return -1; }
             int start=i;
-            i=MarkWord(cha,qm,i,tail);
+            i=MarkWord(i,tail);
             if(start==i){ error="リダイレクトの書式が不正です";return -1; }
+            st.redirect=new Token(cha,start,i-start);
             for(; i<=tail; i++) if((cha[i]==';') && (qm[i]&escaped)==0) break; else{
                 if((qm[i]&escaped)!=0||cha[i]!=' '){ error="リダイレクトの書式が不正です";return -1; }
             }
         }
+
+        // 変数置換
+        foreach(var tok in st.tokens){
+            tok.varies=0;
+            int toktail=tok.head+tok.len-1;
+            int varcnt=0;
+            for(int i=tok.head; i<toktail; i++){
+                if(cha[i]=='$' && (qm[i]&escaped)==0) {
+                    int j=i+1;  // この時点ではまだただの'$'かもしれない
+                    if(cha[j]=='{'){ // ${\(w+)}
+                        qm[i]=trash; qm[j]|=trash;  // '{'が来た時点で'$'は変数置換用と確定
+                        tok.varies=1; varcnt++;
+                        if(j++==tail) { error="${～}が閉じられていません"; return -1; }
+                        if(ParseUtil.IsVar1Char(cha[j])) qm[j++]|=varname; else j=MarkWord(j,tail);
+                        if(j>tail) { error="${～}が閉じられていません"; return -1; }
+                        if(cha[j]!='}' || j==i+2){ error="${～}の書式が不正です"; return -1; }
+                        qm[j]|=trash; i=j;
+                    }else{                          // $(\w+)
+                        if(ParseUtil.IsVar1Char(cha[j])) qm[j++]|=varname; else j=MarkWord(j,tail);
+                        if(j>i+1){ // 変数名があれば'$'は変数置換用と確定
+                            tok.varies=1; varcnt++;
+                            qm[i]|=trash; i=j-1; 
+                        }
+                    }
+                }
+            }
+            if(tok.varies==1 && varcnt==1){
+                tok.varies=2;
+                for(int i=tok.head; i<tok.head+tok.len-1; i++)
+                    if((qm[i]&(varname|trash))==0){tok.varies=1; break;}
+            }
+        }
+        if(st.tokens.Count>0) sta.Add(st);
+        return 0;
+    }
+
+    /*
+    private int Analyze2(string txt) {          // trimとquotemap作成。入力文字列の正味の長さを返す
+        int head=-1,tail=txt.Length;
+        while(--tail>=0) if(txt[tail]!='\n'&&txt[tail]!='\r') break;      // TrimEnd('\n','\r')
+        while(++head<=tail) if(txt[head]!=' '&&txt[head]!='\t') break;    // TrimStart(' ','\t')
+        if(head>tail) return 0;               // 正味の入力行が空
+        if(txt[head]=='#') return 0;
+
+        cha=new char[tail-head+1];
+        qm=new byte[cha.Length];
+
+        // バックスラッシュおよび引用符の処理
+        bool backslash=false;
+        int quote=0;
+        int blv=0;
+        bool whiteq=true;
+        char pre_ch='\0';
+        byte pre_qm=0;
+        int ci=0,n;
+        Statement st=new Statement();
+        Token tok=null;
+        for(int i=head; i<=tail; i++){
+            char c=txt[i];
+            if(c=='\r') continue;
+            if(quote==0){ // 引用符外
+                n=White(txt,i,tail);
+                if(n>0){
+                    if(!whiteq){ // 非空白->空白
+                        if(tok!=null){tok.len=ci-tok.head;tok=null;}
+                        whiteq=true;
+                    }
+                    pre_qm=0; pre_ch=' ';
+                    i+=n-1;
+                    continue;
+                }
+                if(whiteq){ // 空白->非空白
+                    if(c=='#') break;
+                    if(c!=';'&&c!='|'&&c!='>') st.tokens.Add(tok=new Token(ci));
+                    whiteq=false;
+                }
+                if(backslash){
+                    if(c=='n') c='\n'; else if(c=='t') c='\t';
+                    qm[ci]=escaped; backslash=false; 
+                } else if(c=='\\'){ backslash=true; c='\0'; }
+                else if(c=='\''){ quote=1; c='\0'; }
+                else if(c=='"'){ quote=2; c='\0'; }
+                else if(c=='{'&&(pre_qm==escaped||pre_ch!='$')){quote=3; blv=1; c='\0';}
+                else if(c=='>'){
+                    if(st.tokens.Count>0){
+                        var rt=RedirectVarName(txt,i,tail);
+                        if(rt.next<0) return -1;
+                        st.eol='>'; st.append=rt.append;
+                        SetTokenText(st.redirect=new Token(ci),rt.varname);
+                        sta.Add(st);
+                        i=rt.next-1;
+                    }
+                    c='\0';
+                    st=new Statement();
+                }else if(c=='|'||c==';'){
+                    if(st.tokens.Count>0){
+                        st.eol=c; 
+                        sta.Add(st);
+                    }
+                    c='\0';
+                    st=new Statement();
+                }
+            }else if(quote==1){           // 単一引用符内
+                if(c=='\''){ quote=0; c='\0'; }
+                else qm[ci]=escaped;
+            }else if(quote==2){           // 二重引用符内
+                if(backslash){
+                    if(c=='n') c='\n'; else if(c=='t') c='\t';
+                    qm[ci]=escaped; backslash=false;
+                }else if(c=='\\'){ backslash=true; c='\0';}
+                else if(c=='"'){quote=0; c='\0';}
+                else if(c!='$') qm[ci]=escaped;
+            }else if(quote==3){         // {～}内
+                if(c=='{') blv++; else if(c=='}') blv--;
+                if(blv==0){ quote=0; c='\0'; } else qm[ci]=escaped;
+            }
+            if(c!='\0'){ 
+                pre_qm=qm[ci]; pre_ch=cha[ci++]=c;
+            }
+        }
+        if(quote==1){error="単一引用符が閉じられていません"; return -1; }
+        if(quote==2){error="二重引用符が閉じられていません"; return -1; }
+        if(quote==3){error="{～}が閉じられていません"; return -1; }
+        if(backslash){ error="バックスラッシュに続く文字がありません"; return -1; }
+        chalen=ci;
+        if(tok!=null && tok.head>=0 && tok.len==0) tok.len=ci-tok.head;
+        if(st.tokens.Count>0){ st.eol=';'; sta.Add(st); }
+        if(sta.Count==0) return 0;
+
+        for(int l=0; l<sta.Count; l++){
+            // 変数置換
+            for(int t=0; t<sta[l].tokens.Count; t++){
+                var token=sta[l].tokens[t];
+                token.varies=false;
+                for (int i=token.head,e=i+token.len-1; i<e; i++) if (cha[i]=='$' && (qm[i]&escaped)==0){
+                    int j=i+1;  // この時点ではまだただの'$'かもしれない
+                    if(cha[j]=='{'){ // ${\(w+)}
+                        qm[i]=trash; qm[j]|=trash;        // '{'が来た時点で'$'は変数置換用と確定
+                        token.varies=true;
+                        if(j++==tail) { error="${～}が閉じられていません"; return -1; }
+                        if(ParseUtil.IsVar1Char(cha[j])) qm[j++]|=varname; else j=MarkWord(j,e);
+                        if(j>tail) { error="${～}が閉じられていません"; return -1; }
+                        if(cha[j]!='}' || j==i+2){ error="${～}の書式が不正です"; return -1; }
+                        qm[j]|=trash; i=j;
+                    }else{                            // $(\w+)
+                        if(ParseUtil.IsVar1Char(cha[j])) qm[j++]|=varname; else j=MarkWord(j,e);
+                        if(j>i+1){ qm[i]|=trash; token.varies=true; i=j-1;} // 変数名があれば'$'は変数置換用と確定
+                    }
+                }
+            }
+        }
         return 1;
 	}
-    private bool IsSeam(char c){ return (c==' '||c==';'||c=='|'||c=='?'); }
-    private int GetWord(char[] cha,int i0,int tail){
+    struct RedirectTuple {
+        public string varname;
+        public bool append;
+        public int next;
+        public RedirectTuple(string nm=null,bool a=false,int n=-1){varname=nm;append=a;next=n;}
+        public static RedirectTuple zero=new RedirectTuple();
+    }
+    private RedirectTuple RedirectVarName(string txt,int i0,int tail){
+        int i=i0;
+        bool append=false;
+        if(txt[++i]=='>'){ i++; append=true; }
+        for(; i<=tail; i++) if(txt[i]!=' '&&txt[i]!='\t') break;
+        int e=GetWord(txt,i,tail);
+        if(i==e){ error="リダイレクトの書式が不正です"; return RedirectTuple.zero; }
+        string varname=txt.Substring(i,e-i);
+        for(i=e; i<=tail; i++){ // 変数名後に余計なものが付いてたらエラー
+            char c=txt[i];
+            if(c==' '||c=='\t') continue;
+            if(c==':'||c=='|'){ i++; break;}
+            if(c=='#'){i=tail+1; break;}
+            error="リダイレクトの書式が不正です"; return RedirectTuple.zero;
+        }
+        return new RedirectTuple(varname,append,i);
+    }
+    private int White(string txt,int i0,int tail){
+        int i;
+        for(i=i0; i<=tail; i++) if(txt[i]!=' '&&txt[i]!='\t') break;
+        return i-i0;
+    }
+    */
+    private int GetWord(string txt,int i0,int tail){
+        int i;
+        if(txt[i0]=='.'){   // \.\w+
+            for(i=i0+1; i<=tail; i++) if(!ParseUtil.IsWordChar(txt[i])) break;
+            if(i==i0+1) return i0; else return i;
+        }else if(txt[i0]=='/'){  // /[\w/]*\w+
+            int w=i0;
+            for(i=i0+1; i<=tail; i++) if(ParseUtil.IsWordChar(txt[i])) w=i; else if(txt[i]!='/') break;
+            if(w==i0) return i0; else return w+1;
+        }else{
+            for(i=i0; i<=tail; i++) if(!ParseUtil.IsWordChar(txt[i])) break;
+            return i;
+        }
+    }
+    private int GetWord(int i0,int tail){
         int i;
         if(cha[i0]=='.'){   // \.\w+
             for(i=i0+1; i<=tail; i++) if(!ParseUtil.IsWordChar(cha[i])) break;
@@ -171,64 +405,74 @@ public class ComShParser {
             return i;
         }
     }
-    private int MarkWord(char[] cha,byte[] qm,int i0,int tail){
-        int e=GetWord(cha,i0,tail);
+    private int MarkWord(int i0,int tail){
+        int e=GetWord(i0,tail);
         for(int i=i0; i<e; i++) qm[i]|=varname;
         return e;
     }
 
     // escapedでない空白文字で区切られたトークン達を得る
-	private List<string> SingleLine(int from, int to,VarDic lvars,Dictionary<string,string> svars) {
-		List<string> tokens=new List<string>();
-        bool kvq=true;              // key-value形式は、行頭から連続する限りは有効
-		int i, start = from;
-		for (i=from; i<=to; i++) if(cha[i]==' ' && (qm[i]&escaped)==0) {
-            if (i>start) if(!kvq||!(kvq=Keyval(start,i-1,lvars,svars))) tokens.Add(Unquote(start,i-1,lvars,svars));
-			start=i+1;
-		}
-		if (i>start) if(!kvq||!Keyval(start,i-1,lvars,svars)) tokens.Add(Unquote(start,i-1,lvars,svars));
-		return tokens;
-	}
-    private List<string> emptyList=new List<string>();
-	private List<string> Redirect(int from, int to,VarDic lvars,Dictionary<string,string> svars,bool appendq) {
-        if(lvars==null) return emptyList;
-		int i;  // Analyzeで処理してるので細かい考慮は要らない
-		for (i=from; i<=to; i++) if((qm[i]&varname)>0) break;
-        int start=i;
-		for (; i<=to; i++) if((qm[i]&varname)==0) break;
-        string key=new string(cha,start,i-start);
-        string val=(string)lvars["`"];
-        if(appendq) Variables.Append(key,val,lvars,svars); else Variables.Set(key,val,lvars,svars);
-        lvars["`"]="";
-        if(cha[start]!='/'&&cha[start]!='.') envChanged=true;
-        return emptyList;
+	private List<string> SingleLine(Statement st) {
+		List<string> tokens=new List<string>(st.tokens.Count);
+        int i; for(i=0; i<st.tokens.Count; i++) if(!Keyval(st.tokens[i])) break;
+        currentStatement.offset=i;
+        for(; i<st.tokens.Count; i++) tokens.Add(Unquote(st.tokens[i]));
+        return tokens;
+    }
+	public void Redirect(){
+        var rd=sta[sno].redirect;
+        if(rd==null) return;
+        string key=rd.txt;
+        string val=(string)lvars.output;
+        if(sta[sno].append) Variables.Append(key,val,lvars,svars);
+        else Variables.Set(key,val,lvars,svars);
+        lvars.output="";
+        if(ComShInterpreter.IsEnvChanged(key)) envChanged=true;
     }
     // 変数代入文の処理　
-    private bool Keyval(int from,int to, VarDic lvars,Dictionary<string,string> svars){
-        int i=GetWord(cha,from,to);
-        if(i==from||i>to) return false;
-        if(cha[i]=='=' && qm[i]==0){
-            if(lvars==null) return true;
-            string key=new string(cha,from,i-from);
-            Variables.Set(key,(i+1>to)?"":Unquote(i+1,to,lvars,svars),lvars,svars);
-            if(cha[from]!='/'&&cha[from]!='.') envChanged=true;
+    private bool Keyval(Token tok){
+        int from=tok.head,to=tok.head+tok.len-1;
+        string key=null,value=null;
+        bool append=false;
+        if(tok.varies>0 || tok.assign==null){
+            int i=GetWord(from,to);
+            if(i==from||i>to) return false;
+            if(cha[i]=='=' && qm[i]==0){
+                if(lvars==null) return true;
+                key=new string(cha,from,i-from);
+                value=(i+1>to)?"":Unquote(i+1,to);
+            }else if(i<to && cha[i]=='+' && qm[i]==0 && cha[i+1]=='=' && qm[i+1]==0){
+                if(lvars==null) return true;
+                append=true;
+                key=new string(cha,from,i-from);
+                value=(i+2>to)?"":Unquote(i+2,to);
+            }
+            if(tok.assign==null) tok.assign=new Assign(key,value,append);
+            else{tok.assign.key=key; tok.assign.value=value; tok.assign.append=append;}
+        }else{ key=tok.assign.key; value=tok.assign.value; append=tok.assign.append; }
+        if(key==null) return false;
+        if(append){
+            Variables.Append(key,value,lvars,svars);
+            if(ComShInterpreter.IsEnvChanged(tok.assign.key)) envChanged=true;
+            return true;
+        }else{
+            Variables.Set(key,value,lvars,svars);
+            if(ComShInterpreter.IsEnvChanged(tok.assign.key)) envChanged=true;
             return true;
         }
-        if(i<to && cha[i]=='+' && qm[i]==0 && cha[i+1]=='=' && qm[i+1]==0){
-            if(lvars==null) return true;
-            string key=new string(cha,from,i-from);
-            string val=(i+2>to)?"":Unquote(i+2,to,lvars,svars);
-            Variables.Append(key,val,lvars,svars);
-            if(cha[from]!='/'&&cha[from]!='.') envChanged=true;
-            return true;
-        }
-        return false;
     }
     // 変数置換 ＆ エスケープ文字消去 ＆ 引用符消去
-    private string Unquote(int from, int to,VarDic lvars, Dictionary<string,string> svars){
-        StringBuilder sb=new StringBuilder();
+    private string Unquote(Token tok){
+        if(tok.varies>0 || tok.txt==null){
+            string txt=tok.varies==2?Unquote2(tok.head,tok.head+tok.len-1):Unquote(tok.head,tok.head+tok.len-1);
+            tok.txt=txt;
+        }
+        return tok.txt;
+    }
+    private string Unquote(int from,int to){
+        StringBuilder sb=new StringBuilder(to-from+1);
         char[] buf=new char[to-from+1];
-        int bi=0, i=from;
+        int bi=0,i=from;
 		while(i<=to){
             if((qm[i]&varname)>0){
                 int start=i;
@@ -244,9 +488,8 @@ public class ComShParser {
                 }else if(cha[start]=='.'){
                     if(svars.TryGetValue(key,out string s)) sb.Append(s);
                 }else{
-                    if(lvars.TryGetValue(key,out ReferredVal rv)) sb.Append(rv.Get());
+                    sb.Append(lvars[key]);
                 }
-
                 continue;
             }else if((qm[i]&trash)==0) buf[bi++]=cha[i];
             i++;
@@ -254,9 +497,29 @@ public class ComShParser {
 		if (bi>0) sb.Append(buf,0,bi);
         return sb.ToString();
     }
+    // 変数１つだけで余計な文字もない場合、変数の値をそのまま返す(複製を作らない)
+    private string Unquote2(int from,int to){
+        if(lvars==null) return "";
+        int i,st=-1,ed=-1;
+		for(i=from; i<=to; i++) if((qm[i]&varname)>0){st=ed=i;break;}
+		for(i++; i<=to; i++) if((qm[i]&varname)>0) ed=i; else break;
+        if(st<0) return "";
+        if(cha[st]=='/'){
+            string key=new string(cha,st,ed-st+1);
+            return Variables.g.TryGetValue(key,out string s)?s:"";
+        }else if(cha[st]=='.'){
+            if(svars==null) return "";
+            string key=new string(cha,st,ed-st+1);
+            return svars.TryGetValue(key,out string s)?s:"";
+        }else{
+            string key=new string(cha,st,ed-st+1);
+            return lvars[key];
+        }
+    }
 }
 
 public static class ParseUtil {
+    public static List<string> emptyList=new List<string>();
     public static string error="";
     public static bool IsWordChar(char c){ return (char.IsLetterOrDigit(c)||c=='_'); }
     public static bool IsVar1Char(char c){ return (c=='`'||c=='#'||c=='?'); }
@@ -633,13 +896,13 @@ public static class ParseUtil {
     }
     private static string[] nthRangeDlm={""};
     public static List<string> NthRange(string txt,string dlm,string range){
-        if(txt=="") return new List<string>();
+        if(txt=="") return emptyList;
         nthRangeDlm[0]=dlm;
         string[] ta=txt.Split(nthRangeDlm,StringSplitOptions.None);
         int tl=ta.Length;
         string[] ra=range.Split(comma);
         if(ra.Length==0){ error="範囲の指定が不正です"; return null; }
-        List<string> sa=new List<string>();
+        List<string> sa=new List<string>(ra.Length);
         int n=0;
         for(int i=0; i<ra.Length; i++){
             if(!float.TryParse(ra[i],out float f)||f==0){ error="数値の指定が不正です"; return null;}
@@ -722,36 +985,42 @@ public static class ParseUtil {
     /* 例えば Bip01 L UpperArm をBLUpperArm と書けるようにする
        Bip01 Spine1 ならBSpine1。ちょっとだけ短い＆空白エスケープ不要＆男女書き分け不要に
        もしBip01 [LR]\S+ に該当するボーンが現れたら破綻する */
-    public static string CompleteBoneName(string shortname,bool manq, bool nayose=true){
-        if(shortname.Length>1 && char.IsUpper(shortname[1])){
-            string root,lr="",uname;
-            int n=1;
-            if(shortname[0]!='B') return shortname;
-            root=manq?"ManBip":"Bip01";
-            if(shortname[1]=='L'){ lr=" L"; n++; }
-            else if(shortname[1]=='R'){ lr=" R"; n++; }
-            uname=shortname.Substring(n);
-            if(nayose && manq){
-                if(uname=="Spine0a") uname="Spine1";        // Spine0aはないのでSpine1に名寄せ
-                else if(uname=="Spine1a") uname="Spine2";   // Spine1aはSpine2に該当
-                else if(uname.StartsWith("Toe",Ordinal)){
-                    if(uname[3]=='2') uname="Toe1";         // Toe2はないのでToe1に名寄せ
-                    else if(uname.Length==5) uname=uname.Substring(0,4); // Toe\d\dはないのでToe\dに名寄せ
-                }
-            }
-            return $"{root}{lr} {uname}";
-        }else return shortname;
+    private static Dictionary<string,string> completename_f=new Dictionary<string,string>(64);
+    private static Dictionary<string,string> completename_m=new Dictionary<string,string>(64){
+        {"BSpine0a","ManBip Spine1"},{"BSpine1a","ManBip Spine2"},
+        {"BRToe2","ManBip R Toe1"}, {"BRToe21","ManBip R Toe11"}, {"BRToe2Nub","ManBip R Toe1Nub"},
+        {"BLToe2","ManBip L Toe1"}, {"BLToe21","ManBip L Toe11"}, {"BLToe2Nub","ManBip L Toe1Nub"}
+    };
+    public static string CompleteBoneName(string shortname,bool manq){
+        if(shortname.Length<5 || !char.IsUpper(shortname[1]) || shortname[0]!='B') return shortname;
+        var dic=manq?completename_m:completename_f;
+        if(dic.TryGetValue(shortname,out string ret)) return ret;
+
+        string root,lr="",uname;
+        int n=1;
+        if(shortname[1]=='L'){ lr=" L"; n++; }
+        else if(shortname[1]=='R') { lr=" R"; n++; }
+        if(lr.Length>0 && !char.IsUpper(shortname[2])) return shortname;
+
+        root=manq?"ManBip":"Bip01";
+        uname=shortname.Substring(n);
+        return dic[shortname]=root+lr+" "+uname;
     }
+    private static Dictionary<string,string> compactname_f=new Dictionary<string,string>(64);
+    private static Dictionary<string,string> compactname_m=new Dictionary<string,string>(64);
     public static string CompactBoneName(string name){
+        Dictionary<string,string> dic;
+        if(name.StartsWith("Bip01 ",Ordinal)) dic=compactname_f;
+        else if(name.StartsWith("ManBip ",Ordinal)) dic=compactname_m;
+        else return name;
+        if(dic.TryGetValue(name,out string ret)) return ret;
         string[] sa=name.Split(space);
-        if(sa.Length==1) return name;
-        if(sa[0]=="Bip01"||sa[0]=="ManBip") sa[0]="B";
-        return string.Join("",sa);
+        sa[0]="B";
+        return dic[name]=string.Join("",sa);
     }
 
     public static float ParseFloat(string str,float dflt=float.NaN){
         if(string.IsNullOrEmpty(str)) return dflt;
-        // $xが負でも -$x と書けるように
         int i;
         string s=str;
         for(i=0; i<s.Length; i++) if(s[i]!='-') break;
@@ -763,7 +1032,6 @@ public static class ParseUtil {
     }
     public static double ParseDouble(string str,double dflt=double.NaN){
         if(string.IsNullOrEmpty(str)) return dflt;
-        // $xが負でも -$x と書けるように
         int i;
         string s=str;
         for(i=0; i<s.Length; i++) if(s[i]!='-') break;
@@ -775,7 +1043,6 @@ public static class ParseUtil {
     }
     public static int ParseInt(string str,int dflt=int.MinValue){
         if(string.IsNullOrEmpty(str)) return dflt;
-        // $xが負でも -$x と書けるように
         int i;
         string s=str;
         for(i=0; i<s.Length; i++) if(s[i]!='-') break;

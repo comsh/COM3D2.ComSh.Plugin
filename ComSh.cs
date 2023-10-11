@@ -1,8 +1,9 @@
 ﻿using System;
-using System.IO;
 using UnityEngine;
 using UnityInjector.Attributes;
 using System.Text.RegularExpressions;
+using UnityEngine.SceneManagement;
+using System.Text;
 
 namespace COM3D2.ComSh.Plugin {
 	[   PluginFilter("COM3D2x64"), PluginFilter("COM3D2VRx64"),
@@ -11,11 +12,14 @@ namespace COM3D2.ComSh.Plugin {
 
 	// イベント
 	public class ComSh : UnityInjector.PluginBase {
-		public void Awake() { DontDestroyOnLoad(this); }
+		public void Awake() { SceneManager.sceneLoaded+=OnSceneLoaded; DontDestroyOnLoad(this); }
 		public void Update() { ComShWM.Update(); ComShBg.OnUpdate(); }
 		public void LateUpdate() { ComShBg.OnLateUpdate(); }
 		public void OnGUI() { ComShWM.OnGUI(); }
         public void OnApplicationQuit(){ DataFiles.Clean(); }
+	    private void OnSceneLoaded(Scene scene, LoadSceneMode mode){
+            StudioMode.SceneChg(SceneManager.GetActiveScene().name);
+        }
 	}
 
 	public static class ComShWM {
@@ -92,7 +96,7 @@ namespace COM3D2.ComSh.Plugin {
         }
 
         public static int panelCnt=0;
-        public static ComShPanel[] panel=new ComShPanel[10]; // 10個まで
+        public static ComShPanel[] panel=new ComShPanel[20]; // 20個まで
         public static ComShPanel CreatePanel(ComShInterpreter sh,int x,int y,int w,int h,string t,int fsize){
             int i; for(i=0; i<panel.Length; i++) if(panel[i]==null) break;
             if(i==panel.Length) return null;
@@ -353,16 +357,21 @@ namespace COM3D2.ComSh.Plugin {
             ed.selectIndex=si;
             return old;
         }
+        private static char[] logchar=new char[15000];
         public void AddLog(string add){ // addの最終行は改行なしで渡してね
             int l=add.Length;
             if(l>=15000){
-                logTe.text=add.Substring(l-15000,15000);
+                add.CopyTo(l-15000,logchar,0,15000);
+                logTe.text=new string(logchar,0,15000);
             }else{
                 var log=logTe.text;
-                add="\n"+add; l++;      // 初回に限り無駄にはなるけど表示上問題なし
-                int start=log.Length+l-15000;
-                if(start<0) start=0;
-                logTe.text=log.Substring(start)+add;
+                int len=15000-l-1;
+                if(log.Length<len) len=log.Length;
+                int start=log.Length-len;
+                log.CopyTo(start,logchar,0,len);
+                logchar[len]='\n';      // 初回に限り無駄にはなるけど表示上問題なし
+                add.CopyTo(0,logchar,len+1,l);
+                logTe.text=new string(logchar,0,len+1+l);
             }
         }
         public string GetLog(){ return logTe.text; }
@@ -565,8 +574,10 @@ try{
 		}
 		public int InterpretBg(string line) {   // メニュー(select)からの呼び出し用
             output=OutputType.LOG;
+try{   
 			cui.Interpret(line);
             if(cui.exitq){ cui.exitq=false; return 1;}
+}catch(Exception e){ Debug.Log(e.ToString()); return -1; }
             return cui.io.exitStatus;
         }
         public void Stdout(string msg,int code=0){

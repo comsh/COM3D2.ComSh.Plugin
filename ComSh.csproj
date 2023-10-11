@@ -64,6 +64,7 @@
     <Compile Include="CmdMeshes.cs" />
     <Compile Include="CmdSubCamera.cs" />
     <Compile Include="DataFiles.cs" />
+    <Compile Include="StudioMode.cs" />
     <Compile Include="Variables.cs" />
     <Compile Include="ObjInfo.cs" />
     <Compile Include="ComShHandle.cs" />

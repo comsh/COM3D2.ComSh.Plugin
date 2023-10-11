@@ -113,7 +113,7 @@ public static class CmdBones {
 public static class BoneUtil{
     public static Dictionary<string,Transform> boneCache=new Dictionary<string,Transform>();
     public static void CleanBoneCache(){
-        var del=new List<string>();
+        var del=new List<string>(boneCache.Count);
         foreach(var kv in boneCache) if(kv.Value==null) del.Add(kv.Key);
         foreach(var k in del) boneCache.Remove(k);
     }
@@ -135,9 +135,9 @@ public static class BoneUtil{
             if(tr==null) return null;
             if(s3=="/") return tr;
             string fullname=ParseUtil.CompleteBoneName(s3,false);
-            var oi=tr.gameObject.GetComponent<ObjInfo>();
-            if(oi!=null) return oi.data.FindBone(fullname);
-            else return CMT.SearchObjName(tr,fullname);
+            var oi=tr.GetComponent<ObjInfo>();
+            if(oi==null) oi=ObjInfo.AddObjInfo(tr,"");
+            return oi.data.FindBone(fullname);
         }else if(s1=="maid"||s1=="man"){
             string[] s2lr=ParseUtil.LeftAndRight(s2,'.');
             Maid m=MaidUtil.FindMaidMan(s1,s2lr[0]);
@@ -157,28 +157,31 @@ public static class BoneUtil{
     public class MaidBone {
         public Maid maid;
         public int iid;
-        public string name;
         public Transform boneTr;
         public static MaidBone Find(Maid m,string abn,string slot=null){
             if(m.body0==null||m.body0.m_trBones==null) return null;
             if(abn.Length==0) return null;
-            string name=ParseUtil.CompactBoneName(abn);
             string fullname=ParseUtil.CompleteBoneName(abn,m.boMAN);
             Transform tr;
             if(!string.IsNullOrEmpty(slot)){
                 if(!m.body0.IsSlotNo(slot)) return null;
                 var root=m.body0.goSlot[m.body0.GetSlotNo(slot)].obj_tr;
                 if(root==null) return null;
-                tr=CMT.SearchObjName(root,fullname,false);
-            }else tr=CMT.SearchObjName(m.body0.m_trBones,fullname);
+                var oi=root.gameObject.GetComponent<ObjInfo>();
+                if(oi==null) oi=ObjInfo.AddObjInfo(root,"");
+                tr=oi.data.FindBone(fullname);
+            }else{
+                var oi=m.body0.m_trBones.gameObject.GetComponent<ObjInfo>();
+                if(oi==null) oi=ObjInfo.AddObjInfo(m.body0.m_trBones,"");
+                tr=oi.data.FindBone(fullname);
+            }
             if(tr==null) return null;
-            return new MaidBone(m,tr,name);
+            return new MaidBone(m,tr);
         }
-        public MaidBone(Maid m,Transform btr,string name){
+        public MaidBone(Maid m,Transform btr){
             maid=m;
             iid=m.GetInstanceID();
             boneTr=btr;
-            this.name=name;
         }
     }
 }

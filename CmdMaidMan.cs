@@ -128,14 +128,14 @@ public static class CmdMaidMan {
 			int cnt=0;
 			for (int i=0; i<cm.GetMaidCount(); i++) {
 				Maid m=cm.GetMaid(i);
-				if (m==null) continue;
+				if (m==null||m.body0==null||m.body0.m_trBones==null) continue;
 				sh.io.PrintJoinLn(sh.ofs,cnt.ToString(),m.status.fullNameJpStyle.Trim(),sh.fmt.FPos(m.GetPos()));
 				cnt++;
 			}
             return 0;
         }else if(args[1]=="add"){
             if(args.Count<3) return sh.io.Error("メイドさんを指定してください");
-            PlacementWindow pw=GameObject.FindObjectOfType<PlacementWindow>();
+            PlacementWindow pw=StudioMode.GetPlacementWindow();
             for(int i=2; i<args.Count; i++){
 			    CharacterMgr cm=GameMain.Instance.CharacterMgr;
                 int stockidx=MaidUtil.FindStockMaid(args[i]);
@@ -153,23 +153,23 @@ public static class CmdMaidMan {
 				    m.FaceAnime("通常");
                     m.FaceBlend("オリジナル");
                 }else{
-                    if(MaidAddStudio(pw,sm,sm.status.lastName,sm.status.firstName)<0) return sh.io.Error("失敗しました");
+                    if(StudioMode.MaidAddStudio(pw,sm.status.lastName,sm.status.firstName)<0) return sh.io.Error("失敗しました");
                 }
             }
             return 0;
         }else if(args[1]=="del"){
             if(args.Count<3) return sh.io.Error("メイドさんを指定してください");
-            PlacementWindow pw=GameObject.FindObjectOfType<PlacementWindow>();
+            PlacementWindow pw=StudioMode.GetPlacementWindow();
             if(pw==null){
 			    CharacterMgr cm=GameMain.Instance.CharacterMgr;
-                List<int> asn=new List<int>();
+                List<int> asn=new List<int>(args.Count-2);
                 for(int i=2; i<args.Count; i++){
                     Maid m=MaidUtil.FindMaid(args[i]);
                     if(m!=null) asn.Add(m.ActiveSlotNo);
                 }
                 foreach(int n in asn) cm.Deactivate(n,false);
             }else{
-                List<Maid> ml=new List<Maid>();
+                List<Maid> ml=new List<Maid>(args.Count-2);
                 for(int i=2; i<args.Count; i++){
                     Maid m=MaidUtil.FindMaid(args[i]);
                     if(m!=null) ml.Add(m);
@@ -190,32 +190,6 @@ public static class CmdMaidMan {
             if(sa.Length>1 && sa[0]=="maid") return CmdMaidSub(sh,sa[1],args,2);
             return CmdMaidSub(sh,args[1],args,2);
         }
-    }
-    // スタジオモード用のGUI経由のメイド追加。普通にActivate()だとスタジオモード終了時にフリーズ
-    private static int MaidAddStudio(PlacementWindow pw,Maid m,string lname,string fname){
-        return MaidClickStudio(pw,m,lname,fname,"Plate/TopButton");
-    }
-    private static int MaidSelectStudio(PlacementWindow pw,Maid m,string lname,string fname){
-        return MaidClickStudio(pw,m,lname,fname,"Button");
-    }
-    private static int MaidClickStudio(PlacementWindow pw,Maid m,string lname,string fname,string path){
-        UIGrid grid=UTY.GetChildObject(pw.content_game_object, "ListParent/Contents/UnitParent", false).GetComponent<UIGrid>();
-        if(grid==null) return -1;
-        SimpleMaidPlate[] mp=grid.transform.GetComponentsInChildren<SimpleMaidPlate>();
-        if(mp==null) return -1;
-        for(int i=0; i<mp.Length; i++){
-            UILabel[] lbl=mp[i].GetComponentsInChildren<UILabel>();
-            if(lbl==null || lbl.Length<3) continue;
-            if((lname==null||lbl[1].text==lname) && (fname==null||lbl[2].text==fname)){
-                UIButton b=UTY.GetChildObject(mp[i].gameObject,path).GetComponent<UIButton>();
-                if(b==null || b.onClick==null || b.onClick.Count==0) continue;
-                UIButton.current=b;
-                EventDelegate.Execute(b.onClick);
-                UIButton.current=null;
-                return 0;
-            }
-        }
-        return -1;
     }
  	public static int CmdMaidSub(ComShInterpreter sh,string id, List<string> args,int prmstart){
         Maid m=MaidUtil.FindMaid(id);
@@ -247,7 +221,7 @@ public static class CmdMaidMan {
             for(int i=2; i<args.Count; i++){
                 Maid m=MaidUtil.FindMan(args[i]);
                 if(m==null) return sh.io.Error("指定された男性は存在しません");
-                PlacementWindow pw=GameObject.FindObjectOfType<PlacementWindow>();
+                PlacementWindow pw=StudioMode.GetPlacementWindow();
                 if(pw==null){
     			    CharacterMgr cm=GameMain.Instance.CharacterMgr;
                     cm.SetActiveMan(m,m.ActiveSlotNo);
@@ -255,15 +229,15 @@ public static class CmdMaidMan {
                     m.AllProcProp();
                     m.CrossFade("man_porse01.anm",false,true,false,0f);
                 }else{
-                    int ret=MaidAddStudio(pw,m,null,m.ActiveSlotNo==0?"主人公":("男"+m.ActiveSlotNo));
+                    int ret=StudioMode.MaidAddStudio(pw,null,m.ActiveSlotNo==0?"主人公":("男"+m.ActiveSlotNo));
                     if(ret<0) return sh.io.Error("失敗しました");
                 }
             }
             return 0;
         }else if(args[1]=="del"){
             if(args.Count<3) return sh.io.Error("男性を指定してください");
-            PlacementWindow pw=GameObject.FindObjectOfType<PlacementWindow>();
-            List<Maid> del=new List<Maid>();
+            PlacementWindow pw=StudioMode.GetPlacementWindow();
+            List<Maid> del=new List<Maid>(args.Count-2);
             for(int i=2; i<args.Count; i++){
                 Maid m=MaidUtil.FindMan(args[i]);
                 if(m!=null) del.Add(m);
@@ -465,7 +439,7 @@ public static class CmdMaidMan {
         if(val[0]!='+'&&val[0]!=':'&&val[0]!='&'){    // お掃除
             GameMain.Instance.ScriptMgr.StopMotionScript();
             Animation anim=m.GetAnimation();
-            var remove=new List<string>();
+            var remove=new List<string>(10);
             foreach(AnimationState state in anim)
                 if(!anim.IsPlaying(state.name)||state.layer>0||state.name.IndexOf(" - Queued Clone",Ordinal)>=0)
                     remove.Add(state.name);
@@ -489,54 +463,9 @@ public static class CmdMaidMan {
                 updated=true;
             }
         }
-        if(updated){
-            MotionWindow mw=GameObject.FindObjectOfType<MotionWindow>();
-            if(mw!=null){
-                PoseEditWindow pew=mw.mgr.GetWindow(PhotoWindowManager.WindowType.PoseEdit) as PoseEditWindow;
-                pew.OnMotionUpdate(m);
-                int i;
-
-                // モーション変更時にレイヤ2以降掃除
-                var lst=mw.PopupAndTabList.onSelect;
-                for(i=0; i<lst.Count; i++) if(lst[i]==layerSweepHdr) break;
-                if(i==lst.Count) lst.Insert(0,layerSweepHdr);
-
-                // ポーズエディットON時にレイヤ2以降掃除
-                var pelst=pew.CheckbtnUse.onClick;
-                for(i=0; i<pelst.Count; i++) if(pelst[i]==peLayerSweepHdr) break;
-                if(i==pelst.Count) pelst.Insert(0,peLayerSweepHdr); // AddだとON時もOFF時も引数がTrue
-            }
-        }
+        if(updated) StudioMode.OnMotionChange(m);
         return 1;
     }
-    // スタジオモードUIからのモーション変更で追加レイヤが残る事があるので面倒を見る
-    private static Action<object> layerSweepHdr=new Action<object>(OnMotionItemSelect);
-    private static void OnMotionItemSelect(object item){
-        MotionWindow mw=GameObject.FindObjectOfType<MotionWindow>();
-        if(mw==null) return;
-        Maid m=mw.mgr.select_maid;
-        Animation anim=m.GetAnimation();
-        var remove=new List<AnimationClip>();
-        foreach(AnimationState state in anim) if(state.layer>0) remove.Add(state.clip);
-        foreach(var clip in remove) anim.RemoveClip(clip);
-    }
-    // スタジオモード　ポーズエディットON時に追加レイヤが邪魔になるので消す
-    private static Action<WFCheckBox> peLayerSweepHdr=new Action<WFCheckBox>(OnPoseEditStart);
-    private static void OnPoseEditStart(WFCheckBox ck){
-        MotionWindow mw=GameObject.FindObjectOfType<MotionWindow>();
-        if(mw==null) return;
-        Maid m=mw.mgr.select_maid;
-        Animation anim=m.GetAnimation();
-        if(ck.check){
-            // removeするとOFF時(の後の確認ダイアログOK時)に例外が出るので無力化のみ
-            foreach(AnimationState st in anim) st.weight=0;
-        }else{
-            // この時点ではまだ確認ダイアログが開くだけ
-            // でもダイアログのOK押下イベントには処理を追加できそうにないので、ここでやる
-            foreach(AnimationState st in anim) if(st.layer==0 && st.weight==0) st.weight=1f;
-        }
-    }
-
     private static int MaidParamMotionTimeL(ComShInterpreter sh,Maid m,string val){
         return MaidParamMotionTimeSub(sh,m,val,true);
     }
@@ -686,6 +615,7 @@ public static class CmdMaidMan {
     }
     private static int MaidParamMotionWeight(ComShInterpreter sh,Maid m,string val){
         var anm=m.body0.m_Animation;
+        if(anm==null) return sh.io.Error("処理に失敗しました");
         if(val==null){
             foreach(AnimationState st in anm) if(anm.IsPlaying(st.name))
                 sh.io.PrintJoinLn(sh.ofs,st.layer.ToString(),sh.fmt.FInt(st.weight));
@@ -729,11 +659,11 @@ public static class CmdMaidMan {
     }
 
     public class MotionName{
-        public List<ClipList> list=new List<ClipList>();
+        public List<ClipList> list=new List<ClipList>(8);
 
         public class ClipList{
             public int type=0;
-            public List<Clip> list=new List<Clip>();
+            public List<Clip> list=new List<Clip>(8);
         }
 
         public class Clip{
@@ -813,7 +743,7 @@ public static class CmdMaidMan {
                         var nm=(single==1)?sa[k].Substring(0,sa[k].Length-1):sa[k];
                         var bn=BoneUtil.MaidBone.Find(m,nm);
                         if(bn==null||bn.boneTr==null) continue;
-                        if(c.tr==null) c.tr=new List<MotionName.MixTr>();
+                        if(c.tr==null) c.tr=new List<MotionName.MixTr>(10);
                         c.tr.Add(new MotionName.MixTr(bn.boneTr,single));
                     }
                 }else{
@@ -1152,7 +1082,7 @@ public static class CmdMaidMan {
             if(lr[1]=="") m.body0.SetVisibleNodeSlot("body",p[0]=='+',lr[0]);
             else{
                 if(!m.body0.IsSlotNo(lr[0])) return sh.io.Error("スロット名が不正です");
-                m.body0.SetVisibleNodeSlot(lr[0],p[0]=='+',ParseUtil.CompleteBoneName(lr[1],false,false));
+                m.body0.SetVisibleNodeSlot(lr[0],p[0]=='+',ParseUtil.CompleteBoneName(lr[1],false));
             }
         }
         m.body0.FixMaskFlag();
@@ -1180,7 +1110,7 @@ public static class CmdMaidMan {
         return 1;
     }
     private static int MaidParamFaceSave(ComShInterpreter sh,Maid m,string val){
-        var fw=GameObject.FindObjectOfType<FaceWindow>();
+        var fw=StudioMode.GetWindow<FaceWindow>(PhotoWindowManager.WindowType.Face);
         if(fw==null) return sh.io.Error("このコマンドはスタジオモード専用です");
         fw.FaceMorphInput.CreateBackupData(m);
         return 1;
@@ -1302,7 +1232,7 @@ public static class CmdMaidMan {
             ComShBg.cron.ChangePriority(MaidUtil.CRON_ATTACH+ms[i].GetInstanceID().ToString(),prio++);
         if(jmpq==2) UTIL.ResetTr(m.transform);
         MaidUtil.AttachCron(m,tr,prio,jmpq==0);
-        (ms=new List<Maid>()).Add(m);
+        (ms=new List<Maid>(1)).Add(m);
         while((ms=MaidUtil.GetChildMaidList(ms)).Count>0){ // 子メイド達も階層ごとに更新
             foreach(Maid maid in ms)
                 ComShBg.cron.ChangePriority(MaidUtil.CRON_ATTACH+maid.GetInstanceID().ToString(),prio);
@@ -1444,14 +1374,14 @@ public static class CmdMaidMan {
         return 1;
     }
     private static int MaidParamSelect(ComShInterpreter sh,Maid m,string val){
-        PlacementWindow pw=GameObject.FindObjectOfType<PlacementWindow>(); 
+        var pw=StudioMode.GetPlacementWindow();
         if(pw==null) return sh.io.Error("スタジオモードでのみ有効です");
         if(m.boMAN){
             int no=m.ActiveSlotNo;
             string manname=(no==0)?"主人公":$"男{no}";
-            return MaidSelectStudio(pw,m,"",manname);
+            return StudioMode.MaidSelectStudio(pw,"",manname);
         }else{
-            return MaidSelectStudio(pw,m,m.status.lastName,m.status.firstName);
+            return StudioMode.MaidSelectStudio(pw,m.status.lastName,m.status.firstName);
         }
     }
 
@@ -1459,11 +1389,12 @@ public static class CmdMaidMan {
     private static int MaidParamLater(ComShInterpreter sh,Maid m,string val){
         if(val==null) return 0;
 
-        var subsh=new ComShInterpreter(null,sh.env,sh.func,sh.ns);
+        var sbo=new ComShInterpreter.SubShOutput();
+        var subsh=new ComShInterpreter(new ComShInterpreter.Output(sbo.Output),sh.env,sh.func,sh.ns);
         subsh.env[ComShInterpreter.SCRIPT_ERR_ON]="1";
-        var psr=subsh.parser;
-        int r=psr.Parse(val); // パースだけしておく
-        if(r<0) return sh.io.Error(psr.error);
+
+        var psr=Command.EvalParser(sh,Command.currentArgNo+1,false,sh.currentParser.lineno);
+        if(psr==null) return -1;
 
         System.Action act;
         int iid=m.GetInstanceID();
@@ -1472,14 +1403,16 @@ public static class CmdMaidMan {
             lateDic.Remove(iid);
         }
 
-        if(r==0) return 1; // 空→登録削除のみ
+        if(psr.sta.Count==0) return 1; // 空→登録削除のみ
 
         int ret=0;
         long stime=DateTime.UtcNow.Ticks;
+        subsh.env.args.Clear();
+        subsh.env.args.Add("");
         act=()=>{
-            subsh.env["1"]=((DateTime.UtcNow.Ticks-stime)/TimeSpan.TicksPerMillisecond).ToString();
+            subsh.env.args[0]=((DateTime.UtcNow.Ticks-stime)/TimeSpan.TicksPerMillisecond).ToString();
             psr.Reset();
-            ret=subsh.InterpretParser();
+            ret=subsh.InterpretParser(psr);
         };
         m.body0.OnLateUpdate+=act;
         lateDic[iid]=act;
@@ -1488,24 +1421,27 @@ public static class CmdMaidMan {
     private static int MaidParamEvenLater(ComShInterpreter sh,Maid m,string val){
         if(val==null) return 0;
 
-        var subsh=new ComShInterpreter(null,sh.env,sh.func,sh.ns);
+        var sbo=new ComShInterpreter.SubShOutput();
+        var subsh=new ComShInterpreter(new ComShInterpreter.Output(sbo.Output),sh.env,sh.func,sh.ns);
         subsh.env[ComShInterpreter.SCRIPT_ERR_ON]="1";
-        var psr=subsh.parser;
-        int r=psr.Parse(val); // パースだけしておく
-        if(r<0) return sh.io.Error(psr.error);
 
-        ComShBg.cron.KillJob("maidlater/"+m.GetInstanceID().ToString());
-        if(r==0) return 1; // 空→登録削除のみ
+        var psr=Command.EvalParser(sh,Command.currentArgNo+1,false,sh.currentParser.lineno);
+        if(psr==null) return -1;
+
+        ComShBg.cron.KillJob("maidevenlater/"+m.GetInstanceID().ToString());
+        if(psr.sta.Count==0) return 1; // 空→登録削除のみ
 
         int ret=0;
         long stime=DateTime.UtcNow.Ticks;
+        subsh.env.args.Clear();
+        subsh.env.args.Add("");
         System.Action act=()=>{
-            subsh.env["1"]=((DateTime.UtcNow.Ticks-stime)/TimeSpan.TicksPerMillisecond).ToString();
+            subsh.env.args[0]=((DateTime.UtcNow.Ticks-stime)/TimeSpan.TicksPerMillisecond).ToString();
             psr.Reset();
-            ret=subsh.InterpretParser();
+            ret=subsh.InterpretParser(psr);
         };
         // OnLateUpdateEndは毎フレームクリアされるようなので、毎フレーム登録する
-        ComShBg.cron.AddJob("maidlater/"+m.GetInstanceID().ToString(),0,0,(t)=>{
+        ComShBg.cron.AddJob("maidevenlater/"+m.GetInstanceID().ToString(),0,0,(t)=>{
             if(m.body0.m_Bones==null || ret!=0){
                 if(m.body0!=null) m.body0.OnLateUpdateEnd-=act;
                 return -1;
@@ -1548,7 +1484,7 @@ public static class CmdMaidMan {
     private static int MaidParamBBox(ComShInterpreter sh,Maid m,string val){
         Vector3 min=new Vector3(float.MaxValue,float.MaxValue,float.MaxValue);
         Vector3 max=new Vector3(float.MinValue,float.MinValue,float.MinValue);
-        var ls=new List<string>();
+        var ls=new List<string>(64);
         CharacterMgr cm=GameMain.Instance.CharacterMgr;
         if(cm.TryGetCacheObject(m.body0.goSlot[0].m_strModelFileName,out GameObject go)){
             Transform bip=go.transform.Find(m.boMAN?"ManBip":"Bip01");
@@ -1561,7 +1497,7 @@ public static class CmdMaidMan {
             });
         }
         foreach(var k in ls){
-            if(!m.body0.m_dicTrans.TryGetValue(k,out Transform t)){ Debug.Log(k+" not found"); continue;}
+            if(!m.body0.m_dicTrans.TryGetValue(k,out Transform t)) continue;
             Vector3 pos=t.position;
             if(max.x<pos.x) max.x=pos.x;
             if(max.y<pos.y) max.y=pos.y;
@@ -1722,10 +1658,10 @@ public static class MaidUtil {
     public static Maid FindMaid(string key){
         if(key.Length==0) return null;
         int n;
+        if(int.TryParse(key,out n)) return NthMaid(n); 
         if(key[0]=='%' && int.TryParse(key.Substring(1),out n)) return MaidByInstanceID(n);
         if(key[0]=='@' && int.TryParse(key.Substring(1),out n)) return MaidByStockNo(n);
-        if(int.TryParse(key,out n)) return NthMaid(n); 
-        else return MaidByGuidOrName(key);
+        return MaidByGuidOrName(key);
     }
     // 男性検索＆取得。連番 or 表示名
     public static Maid FindMan(string key){
@@ -1756,7 +1692,7 @@ public static class MaidUtil {
         CharacterMgr cm = GameMain.Instance.CharacterMgr;
         for (int i=0, no=0; i<cm.GetMaidCount(); i++) {
             Maid m=cm.GetMaid(i);
-            if (m==null) continue;
+            if (m==null||m.body0==null||m.body0.m_trBones==null) continue;
             if(no++==n) return m;
         }
         return null;
@@ -2073,7 +2009,7 @@ public static class MaidUtil {
         },prio)!=null);
     }
     public static List<Maid> GetParentMaidList(Transform tgt,Transform dontreachme){
-        var ret=new List<Maid>();
+        var ret=new List<Maid>(16);
         Maid tm; Transform tr=tgt;
         while(tr!=null&&tr.name!="AllOffset"){
             if(tr.name=="Offset"){
@@ -2090,7 +2026,7 @@ public static class MaidUtil {
         return ret;
     }
     public static List<Maid> GetChildMaidList(List<Maid> ml){
-        var ret=new List<Maid>();
+        var ret=new List<Maid>(16);
         string name; Transform tr;
         if(allOffset==null) return ret;
         for(int i=0; i<allOffset.childCount; i++){
@@ -2158,29 +2094,13 @@ public static class MaidUtil {
         }catch{ return null; }
         return buffer;
     }
-
-    // スタジオモードUIはMyPoseだけクリップ名を数値にしている。
-    // 内部での扱いはそのまま、表示する時点でファイル名に置き換える
-    public static string MyPoseId2Name(long id){
-        MotionWindow mw = GameObject.FindObjectOfType<MotionWindow>();
-        if(mw==null) return null;
-        var pmdm=PhotoMotionData.data;
-        if(pmdm==null) return null;
-        if(PhotoMotionData.category_list==null||!PhotoMotionData.category_list.ContainsKey("マイポーズ")) return null;
-        var pmds=PhotoMotionData.category_list["マイポーズ"];
-        if(pmdm==null) return null;
-        for(int i=0; i<pmds.Count; i++) if(pmds[i].id==id) return Path.GetFileName(pmds[i].direct_file);
-        return null;
-    }
     public static string GetCurrentMotion(Maid m){
         foreach(AnimationState ast in m.body0.m_Animation)
             if(m.body0.m_Animation.IsPlaying(ast.name) && ast.layer==0 && ast.name.IndexOf(" - Queued Clone")<0){
-                if(long.TryParse(ast.name,out long id)) return MyPoseId2Name(id)??ast.name;
+                if(long.TryParse(ast.name,out long id)) return StudioMode.MyPoseId2Name(id)??ast.name;
                 else return ast.name;
             }
         return "";
     }
-
-
 }
 }

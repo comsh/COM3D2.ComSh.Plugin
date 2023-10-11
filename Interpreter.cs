@@ -17,20 +17,19 @@ public partial class ComShInterpreter {
 
 	public VarDic env;        // 環境変数
     public Dictionary<string,ScriptStatus> func; // function
-    public ComShParser parser=new ComShParser();
+    public ComShParser parser;
     public bool exitq=false;
     public bool interactiveq=false;
     public IO io;
-    public delegate void Output(string str,int code);
+    public delegate void Output(string msg,int code);
     public ComShPanel panel=null;
     public string ofs=" ";
     public string ns="";
 
-
 	public ComShInterpreter(Output op=null, VarDic parentEnv=null,Dictionary<string,ScriptStatus> parentFunc=null,string ns="") {
         env=(parentEnv!=null)?new VarDic(parentEnv):new VarDic();
-        env["`"]=string.Empty;
-        func=(parentFunc!=null)?new Dictionary<string,ScriptStatus>(parentFunc):new Dictionary<string,ScriptStatus>();
+        env.output=string.Empty;
+        func=(parentFunc!=null)?new Dictionary<string,ScriptStatus>(parentFunc):new Dictionary<string,ScriptStatus>(10);
         io=new IO(this,op);
         this.ns=ns;
         OnEnvChanged();
@@ -42,40 +41,45 @@ public partial class ComShInterpreter {
         return InterpretParser(parser);
     }
 	public int Parse(string line) {
+        if(parser==null) parser=new ComShParser();
         int r=parser.Parse(line);
         if(r<0) return io.Error(parser.error);
         if(r==0) return io.OK(); // 空行
         return 1;
     }
-    public bool envChanged=false;
-    public ComShParser lastParser;
+    public bool envChanged;
+    public ComShParser currentParser;
     public int InterpretParser(){ return InterpretParser(this.parser); }
     public int InterpretParser(ComShParser parser,bool canSleep=false){
+        var parser_bak=currentParser;
+        currentParser=parser;
         List<string> tokens;
+        envChanged=false;
         while((tokens=parser.Next(env,(runningScript!=null)?runningScript.svars:null))!=null){
-            if(parser.envChanged) envChanged=true;
+//UnityEngine.Debug.Log(string.Join("/",tokens.ToArray()));
+            envChanged=envChanged||parser.envChanged;
             if (tokens.Count==0) continue;
-            if(envChanged) { OnEnvChanged(); envChanged=false; } // 変数変更後最初のコマンド実行時
-            lastParser=parser;
-            int ret=InterpretTokens(tokens,parser.prevEoL,parser.currentEoL,canSleep);
+            if(envChanged){ OnEnvChanged(); envChanged=false; }
+            int ret=InterpretTokens(tokens,parser.prevEoL,parser.currentStatement.eol,canSleep);
             if(ret<0) return ret;
             if(exitq) return io.OK(io.exitStatus);
-            if (envChanged) { OnEnvChanged(); envChanged = false; }
+            if(parser.currentStatement.eol=='>') parser.Redirect();
+            if(envChanged){ OnEnvChanged(); envChanged=false; }
         }
+        if(envChanged){ OnEnvChanged(); envChanged=false; }
+        currentParser=parser_bak;
         return io.OK();
     }
     private int InterpretTokens(List<string> tokens,char prevEoL,char currentEoL,bool canSleep){
         int ret=0;
         Command.Cmd cmd;
         io.PrintStart(prevEoL);
-
         // コマンド先頭が'?'だったらエラー無視
         io.suppressError=false;
         if(tokens[0].Length>0 && tokens[0][0]=='?'){
             io.suppressError=true;
             tokens[0]=tokens[0].Substring(1);
         }
-
         var cd=new ParseUtil.ColonDesc(tokens[0]);
         if(cd.num>0){   // maid:0:BHead などのコロン記法
             if(cd.meshno>=0){
@@ -116,13 +120,15 @@ public partial class ComShInterpreter {
         return ret;
     }
     public class SubShOutput {
-        private StringBuilder sb=new StringBuilder();
-        public void Output(string str,int code){
-            if(code==0) sb.Append(str).Append('\n'); // lfのみ
-            else if(str!="") Debug.Log(str);
+        private StringBuilder sb=new StringBuilder(256);
+        public void Output(string msg,int code){
+            if(code==0) sb.Append(msg).Append('\n');
+            else if(msg.Length>0) Debug.Log(msg);
         }
         public string GetSubShResult(){
-            string ret=sb.ToString().TrimEnd(ParseUtil.lf);
+            if(sb.Length==0) return "";
+            int tail=sb.Length-1;
+            string ret=(sb[tail]=='\n')?sb.ToString(0,tail):sb.ToString();
             sb.Length=0;
             return ret;
         }
@@ -131,11 +137,15 @@ public partial class ComShInterpreter {
         Source("_comshrc");
         ComShProperties.Update(env);
     }
+
     public void OnEnvChanged(){
         ofs=Variables.Value(env,"OFS"," ");
         fmt.Update(env);
         UpdateObjBase(env);
         UpdateLightBase(env);
+    }
+    public static bool IsEnvChanged(string name){
+        return (name.Length>0 && (name[0]=='_' || char.IsUpper(name[0])));
     }
 
     private int Source(string scriptName) { // 今はもう_comshrc専用
@@ -185,11 +195,12 @@ public partial class ComShInterpreter {
         public bool isSource=false;
         public bool enableSleep=false;
         public int line0=0;
-        public List<ComShParser> lines=new List<ComShParser>();
-    	public Dictionary<string, string> svars=new Dictionary<string,string>(); // static変数
+        public List<ComShParser> lines;
+    	public Dictionary<string, string> svars=new Dictionary<string,string>(10); // static変数
         public ScriptStatus(bool funcq=false,bool scriptq=false){
             isFunc=funcq; isSource=scriptq;
             enableSleep=(!funcq && !scriptq);
+            lines=new List<ComShParser>(isFunc?64:256);
         }
         public bool hasNext(){ return lines.Count-1>current; }
         public void rewind(){
@@ -312,9 +323,11 @@ public partial class ComShInterpreter {
 	}
     private void ExecParamEnv(List<string> args){
     	env["#"]=(args.Count-1).ToString();                       // $#
-		for (int i=0;i<args.Count;i++) env[i.ToString()]=args[i]; // $0,$1,...
-        // env["*"]=string.Join(" ",args.ToArray());
-		for (int i=args.Count;i<=255;i++) if(!env.Remove(i.ToString())) break;
+        env.args.Clear();
+    	if(args.Count>0){
+            env["0"]=args[0];   //$0
+		    for(int i=1;i<args.Count;i++) env.args.Add(args[i]); // $1,...
+        }
     }
 	public int Exec(List<string> args,string fullname=null) {
         ExecParamEnv(args);
@@ -341,40 +354,41 @@ public partial class ComShInterpreter {
         }
         private void Silent(string msg,int code){}
 
-        private StringBuilder printSb=new StringBuilder();
+        private StringBuilder printSb=new StringBuilder(128);
         public string pipedText;
         public void PrintStart(char peol){
             printSb.Length=0;
-            pipedText=(peol=='|')?env["`"]:null;
-            env["`"]="";
+            pipedText=(peol=='|')?env.output:null;
+            env.output="";
         }
-        public void Print(string str){ printSb.Append(str); }
-        public void Print(char[] ca,int start,int len){ printSb.Append(ca,start,len); }
-        public void PrintLn(string str){ printSb.Append(str).Append('\n'); }
-        public void PrintLn2(string s1,string s2){
+        public IO Print(string str){ printSb.Append(str); return this;}
+        public IO Print(char[] ca,int start,int len){ printSb.Append(ca,start,len); return this;}
+        public IO PrintLn(string str){ printSb.Append(str).Append('\n'); return this;}
+        public IO PrintLn2(string s1,string s2){
             printSb.Append(s1).Append(s2).Append('\n'); // lfのみ
+            return this;
         }
-        public void PrintJoin(string fs,params string[] str){
-            if(str.Length==0) return;
-            _PrintJoin(fs,str);
+        public IO PrintJoin(string fs,params string[] str){
+            if(str.Length!=0) _PrintJoin(fs,str);
+            return this;
         }
         private void _PrintJoin(string fs,string[] str){
             printSb.Append(str[0]);
             for(int i=1; i<str.Length; i++) printSb.Append(fs).Append(str[i]);
         }
-        public void PrintJoinLn(string fs,params string[] str){
-            if(str.Length==0) return;
-            _PrintJoin(fs,str);
-            printSb.Append("\n");
+        public IO PrintJoinLn(string fs,params string[] str){
+            if(str.Length!=0){ _PrintJoin(fs,str); printSb.Append("\n"); }
+            return this;
         }
         public void PrintEnd(char eol){
             if(printSb.Length==0) return;
-            env["`"]=printSb.ToString().TrimEnd(ParseUtil.lf);
-            if(eol==';') output(env["`"],0);
+            int tail=printSb.Length-1;
+            string txt=(printSb[tail]=='\n')?printSb.ToString(0,tail):printSb.ToString();
+            env.output=txt;
+            if(eol==';') output(txt,0);
             printSb.Length=0;
         }
 
-        public void Output(string str,int code){ output(str,code); }
         public string errorMessage="";
         public int exitStatus=0;
         public int OK(int code=0){
@@ -395,8 +409,8 @@ public partial class ComShInterpreter {
             exitStatus=code;
             env["?"]=code.ToString();
             ScriptStatus script=sh.runningScript;
-            if(script!=null && script.name!="" && sh.lastParser!=null && sh.lastParser.lineno>0){
-                int lno=sh.lastParser.lineno;
+            if(script!=null && script.name!="" && sh.currentParser!=null && sh.currentParser.lineno>0){
+                int lno=sh.currentParser.lineno;
                 output($"{script.name}:{lno}行: {msg}",-1);
             }else output(msg,-1);
             return code;

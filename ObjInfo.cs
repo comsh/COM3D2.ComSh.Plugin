@@ -2,6 +2,7 @@
 using UnityEngine;
 using System.Reflection;
 using static System.StringComparison;
+using System;
 
 namespace COM3D2.ComSh.Plugin {
 
@@ -55,11 +56,18 @@ public class ObjInfoData {
     public List<Transform> bones=new List<Transform>();
     public List<TMorph> morph;        // シェイプキー用
     public ObjInfoData(Transform transform){ UpdateBones(transform); }
+    public void UpdateBones(){
+        if(bones.Count>0) UpdateBones(bones[0]);
+    }
     public void UpdateBones(Transform transform){
         bones.Clear();
+        bones.Capacity=64;
         if(transform.parent!=null && transform.parent.name=="Offset"){ // メイド
             UTIL.TraverseTr(transform,(Transform tr,int i)=>{
-                if(!tr.name.StartsWith("_SM_",Ordinal)) return 1;
+                ObjInfo oi;
+                if(tr.name.StartsWith("_SM_",Ordinal)) return 1;
+                if(tr.GetComponent<AttachPrefab>()!=null) return 1;
+                if(i>0 && (oi=tr.GetComponent<ObjInfo>())!=null && oi.enabled) return 1;
                 bones.Add(tr);
                 return 0;
             });
@@ -71,30 +79,60 @@ public class ObjInfoData {
         }
     }
     public Transform FindBone(Transform tr){
-        for(int i=0; i<bones.Count; i++) if(ReferenceEquals(bones[i],tr)) return bones[i];
+        if(bones.Count==0) return null;
+        bool haveNull=false;
+        for(int i=0; i<bones.Count; i++){
+            if(bones[i]==null){haveNull=true; break;}
+            if(ReferenceEquals(bones[i],tr)) return bones[i];
+        }
+        if(haveNull){
+            UpdateBones(bones[0]);
+            for(int i=0; i<bones.Count; i++)
+                if(ReferenceEquals(bones[i],tr)) return bones[i];
+        }
         return null;
     }
-    public Transform FindBone(int iid){
-        for(int i=0; i<bones.Count; i++) if(bones[i].GetInstanceID()==iid) return bones[i];
-        return null;
-    }
-    public Transform FindBone(string name){
-        for(int i=0; i<bones.Count; i++) if(bones[i].name==name) return bones[i];
+    public Transform FindBone(string name){ // 同じ名前のボーンが複数あるかもだけど
+        if(bones.Count==0) return null;
+        bool haveNull=false;
+        for(int i=0; i<bones.Count; i++){
+            if(bones[i]==null){haveNull=true; break;}
+            if(bones[i].name==name) return bones[i];
+        }
+        if(haveNull){
+            UpdateBones(bones[0]);
+            for(int i=0; i<bones.Count; i++)
+                if(bones[i].name==name) return bones[i];
+        }
         return null;
     }
     public T FindComponent<T>(){
+        if(bones.Count==0) return default;
         T ret;
-        for(int i=0; i<bones.Count; i++) if((ret=bones[i].GetComponent<T>())!=null) return ret;
+        bool haveNull=false;
+        for(int i=0; i<bones.Count; i++){
+            if(bones[i]==null){haveNull=true; break;}
+            if((ret=bones[i].GetComponent<T>())!=null) return ret;
+        }
+        if(haveNull){
+            UpdateBones(bones[0]);
+            for(int i=0; i<bones.Count; i++)
+                if((ret=bones[i].GetComponent<T>())!=null) return ret;
+        }
         return default;
     }
     public List<T> FindComponents<T>(){
         List<T> ret=new List<T>();
+        if(bones.Count==0) return ret;
         T c;
-        for(int i=0; i<bones.Count; i++) if((c=bones[i].GetComponent<T>())!=null) ret.Add(c);
+        bool haveNull=false;
+        for(int i=0; i<bones.Count; i++) if(bones[i]==null){haveNull=true; break;}
+        if(haveNull) UpdateBones(bones[0]);
+        for(int i=0; i<bones.Count; i++)
+            if((c=bones[i].GetComponent<T>())!=null) ret.Add(c);
         return ret;
     }
     public T[] FindComponentsToArray<T>(){ return FindComponents<T>().ToArray(); }
-
 
     public MeshList originalMesh;
     public MeshList workMesh;
@@ -103,12 +141,13 @@ public class ObjInfoData {
 
     public void Backup(){
         if(originalMesh!=null) return;
-        originalMesh = new MeshList();
+        originalMesh=new MeshList();
         originalMate=new List<Material>();
         int meshno = 0;
         foreach(var b in bones){
             var r=b.GetComponent<Renderer>();
             if(r==null) continue;
+
             if(ReferenceEquals(r.GetType(),typeof(SkinnedMeshRenderer))) {
                 var smr = (SkinnedMeshRenderer)r;
                 if(smr.sharedMesh==null) continue;
@@ -150,7 +189,7 @@ public class ObjInfoData {
             if (ReferenceEquals(r.GetType(), typeof(SkinnedMeshRenderer))){
                 var smr = (SkinnedMeshRenderer)r;
                 Mesh oldmesh=smr.sharedMesh;
-                Mesh newmesh=Object.Instantiate(oldmesh);
+                Mesh newmesh=UnityEngine.Object.Instantiate(oldmesh);
                 smr.sharedMesh=newmesh;
                 workMesh.Add(new MeshList.Entry { no=meshno,submeshcount=smr.sharedMesh.subMeshCount,mesh=newmesh });
                 meshno +=smr.sharedMesh.subMeshCount;
@@ -216,6 +255,8 @@ public class ObjInfoData {
         }
         public int submeshCount=0;
         private static int[] triangle_empty=new int[0];
+        public MeshList() {}
+        public MeshList(int cap):base(cap) {}
         public int FindMeshIdx(int meshno){ // オブジェクト全体での通し番号で単一のサブメッシュを探す
             int i;
             for(i=0; i<this.Count; i++) if(meshno<this[i].no) break;
@@ -250,7 +291,7 @@ public class ParticleInfo : MonoBehaviour{
         if(r==null) return;
         var m=r.material;
         if(m==null) return;
-        Object.Destroy(m);
+        UnityEngine.Object.Destroy(m);
     }
 }
 }
