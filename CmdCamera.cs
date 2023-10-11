@@ -38,6 +38,8 @@ public static class CmdCamera {
 
         CameraMain mc=GameMain.Instance.MainCamera;
         if(mc==null) return;
+        mc.m_bCalcNearClip=false;
+        mc.camera.nearClipPlane=0.01f;
         UltimateOrbitCamera oc=mc.GetComponent<UltimateOrbitCamera>();
         if(oc==null) return;
         oc.maxDistance=500f;
@@ -321,12 +323,6 @@ public static class CmdCamera {
               ||(!float.TryParse(sa[1],out f)||f<=0) ) return sh.io.Error("数値が不正です");
             cam.nearClipPlane=n;
             cam.farClipPlane=f;
-            ComShBg.cron.AddJob("cmdcamera/range",0,0,(long t)=>{
-                // mc.m_bCalcNearClip=false;で変更した直後は値が変わらないようなので次フレームに
-                cam.nearClipPlane=n;
-                cam.farClipPlane=f;
-                return -1;
-            },0);
         }
         return 1;
     }
