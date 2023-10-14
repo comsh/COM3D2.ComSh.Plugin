@@ -56,7 +56,6 @@ public partial class ComShInterpreter {
         List<string> tokens;
         envChanged=false;
         while((tokens=parser.Next(env,(runningScript!=null)?runningScript.svars:null))!=null){
-//UnityEngine.Debug.Log(string.Join("/",tokens.ToArray()));
             envChanged=envChanged||parser.envChanged;
             if (tokens.Count==0) continue;
             if(envChanged){ OnEnvChanged(); envChanged=false; }
