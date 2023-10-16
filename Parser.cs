@@ -81,11 +81,14 @@ public class ComShParser {
     private int Analyze(string txt){
         if(txt.Length==0) return 0;
         {
-            int head=-1,tail=txt.Length;
-            while(++head<=tail) if(txt[head]!=' '&&txt[head]!='\t') break; // TrimStart(' ','\t')
+            int head,tail;
+            for(head=0; head<txt.Length; head++)
+                if(txt[head]!=' '&&txt[head]!='\t') break; // TrimStart(' ','\t')
+            if(head>=txt.Length) return 0;
             if(txt[head]=='#') return 0;
-            while(--tail>=0) if(txt[tail]!='\n'&&txt[tail]!='\r') break;   // TrimEnd('\n','\r')
-            if(head>tail) return 0;
+            for(tail=txt.Length-1; tail>=head; tail--)
+                if(txt[tail]!='\n'&&txt[tail]!='\r') break; // TrimEnd('\n','\r')
+            if(tail<head) return 0;
             cha=new char[tail-head+1+1];
             txt.CopyTo(head,cha,0,tail-head+1);
             cha[tail-head+1]=';'; // 終端

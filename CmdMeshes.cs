@@ -17,6 +17,7 @@ public static class CmdMeshes {
         meshParamDic.Add("prop",new CmdParam<SingleMesh>(MeshParamProp));
         meshParamDic.Add("reset",new CmdParam<SingleMesh>(MeshParamReset));
         meshParamDic.Add("texture",new CmdParam<SingleMesh>(MeshParamTexture));
+        meshParamDic.Add("mipmap",new CmdParam<SingleMesh>(MeshParamMipmap));
         meshParamDic.Add("recalc",new CmdParam<SingleMesh>(MeshParamRecalc));
         meshParamDic.Add("rq",new CmdParam<SingleMesh>(MeshParamRQ));
         meshParamDic.Add("ss",new CmdParam<SingleMesh>(MeshParamSS));
@@ -441,7 +442,7 @@ public static class CmdMeshes {
                 var tex=cam.targetTexture;
                 tex.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
                 var old=mate.GetTexture(prop);
-                if(old!=null && texiid.Remove(old)) GameObject.Destroy(old); 
+                if(old!=null && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
                 mate.SetTexture(prop,tex);
             }else{
                 RenderTexture rt=cam.targetTexture;
@@ -451,7 +452,7 @@ public static class CmdMeshes {
                 else {
                     if(old.name=="__subcamera_pic_" && old.width==rt.width && old.height==rt.height) tx=(Texture2D)old;
                     else{
-                        if(old!=null && texiid.Remove(old)) GameObject.Destroy(old); 
+                        if(old!=null && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
                         tx=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);
                     }
                 }
@@ -471,7 +472,7 @@ public static class CmdMeshes {
                 Texture2D tex=TextureUtil.CloneTexture((Texture2D)tex0);
                 tex.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
                 var old=mate.GetTexture(prop);
-                if(old!=null && texiid.Remove(old)) GameObject.Destroy(old); 
+                if(old!=null && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
                 mate.SetTexture(prop,tex);
                 texiid.Add(tex);
                 return "";
@@ -491,7 +492,7 @@ public static class CmdMeshes {
                     t2d.name=name;
                     t2d.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
                     var old=mate.GetTexture(prop);
-                    if(old!=null && texiid.Remove(old)) GameObject.Destroy(old); 
+                    if(old!=null && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
                     mate.SetTexture(prop,t2d);
                     texiid.Add(t2d);
                     return "";
@@ -504,7 +505,7 @@ public static class CmdMeshes {
                     t2d.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
 
                     var old=mate.GetTexture(prop);
-                    if(old!=null && texiid.Remove(old)) GameObject.Destroy(old); 
+                    if(old!=null && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
                     mate.SetTexture(prop,t2d);
                     texiid.Add(t2d);
                 }else return "texファイルが見つかりません";
@@ -524,6 +525,42 @@ public static class CmdMeshes {
             if(opts.Length>=2 && (!int.TryParse(opts[1],out mode) || mode<0 || mode>1)) return "書式が不正です";
         }
         return SetTex(key,right,mode,wrap,m);
+    }
+    private static int MeshParamMipmap(ComShInterpreter sh,SingleMesh sm,string val){
+        if(val==null || val==""){return 0;}
+        sm.mi.EditMaterial();
+        Material mate0=sm.mi.oid.originalMate[sm.submeshno];
+        Material mate=sm.mi.material[sm.submeshno];
+        Texture tx;
+        float mmb;
+        if(val=="off") mmb=float.NaN;
+        else if (!float.TryParse(val,out mmb)) return sh.io.Error("値が不正です");
+
+        int mipmap(string prop){
+            if(!mate0.HasProperty(prop)) return -1;
+            tx=mate0.GetTexture(prop);
+            if(tx!=null && ReferenceEquals(tx.GetType(),typeof(Texture2D))){
+                Texture2D t=(Texture2D)tx;
+                Texture2D t2;
+                if(float.IsNaN(mmb)){
+                    t2=t;
+                }else{
+                    int alv=(t.anisoLevel==0)?1:t.anisoLevel;
+                    FilterMode fm=(t.filterMode==FilterMode.Point)?FilterMode.Bilinear:t.filterMode; 
+                    t2=TextureUtil.CloneTexture(t,alv,mmb,fm,true);
+                    t2.name=t.name;
+                    texiid.Add(t2);
+                }
+                var old=mate.GetTexture(prop);
+                if(old!=null && texiid.Remove(old)) UnityEngine.Object.Destroy(old);
+                mate.SetTexture(prop,t2);
+            }
+            return 0;
+        }
+
+        mipmap("_MainTex");
+        mipmap("_ShadowTex");
+        return 1;
     }
     private static int MeshParamRQ(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null){
@@ -690,13 +727,14 @@ public static class CmdMeshes {
 public static class TextureUtil {
     public static Texture2D CloneTexture(Texture src){ return CloneTexture(src,src.anisoLevel,src.mipMapBias,src.filterMode); }
     public static Texture2D CloneBitmap(Texture src){ return CloneTexture(src,0,0,FilterMode.Point); }
-    public static Texture2D CloneTexture(Texture src,int anisolv,float mmb,FilterMode flt){ 
+    public static Texture2D CloneTexture(Texture src,int anisolv,float mmb,FilterMode flt,bool useMipMap=false){ 
         int w=src.width, h=src.height;
         RenderTexture rt=RenderTexture.GetTemporary(w,h,0);
         Graphics.Blit(src,rt);
         var bak=RenderTexture.active;
         RenderTexture.active=rt;
-        var ret=new Texture2D(w,h,TextureFormat.RGBA32,false);
+        var ret=new Texture2D(w,h,TextureFormat.RGBA32,useMipMap);
+        ret.name=src.name;
         ret.wrapMode=src.wrapMode;
         ret.anisoLevel=anisolv;
         ret.mipMapBias=mmb;
