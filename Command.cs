@@ -59,12 +59,14 @@ public static class Command {
         cmdTbl.Add("sin",new Cmd(CmdSin));
         cmdTbl.Add("cos",new Cmd(CmdCos));
         cmdTbl.Add("rnd",new Cmd(CmdRnd));
+        cmdTbl.Add("rndn",new Cmd(CmdRndN));
         cmdTbl.Add("sleep",new Cmd(CmdSleep));
         cmdTbl.Add("kvs",new Cmd(CmdKvs));
         cmdTbl.Add("kvs.save",new Cmd(CmdKvsSave));
         cmdTbl.Add("kvs.load",new Cmd(CmdKvsLoad));
         cmdTbl.Add("kvs.clear",new Cmd(CmdKvsClear));
         cmdTbl.Add("distance",new Cmd(CmdDistance));
+        cmdTbl.Add("normalize", new Cmd(CmdNormalize));
         cmdTbl.Add("replace",new Cmd(CmdReplace));
         cmdTbl.Add("split",new Cmd(CmdSplit));
         cmdTbl.Add("crossproduct",new Cmd(CmdCrossProduct));
@@ -81,6 +83,7 @@ public static class Command {
         cmdTbl.Add("meminfo",new Cmd(CmdMemInfo));
         cmdTbl.Add("escape",new Cmd(CmdEscape));
         cmdTbl.Add("sort",new Cmd(CmdSort));
+        cmdTbl.Add("uniq",new Cmd(CmdUniq));
         cmdTbl.Add("tan",new Cmd(CmdTan));
         cmdTbl.Add("asin",new Cmd(CmdASin));
         cmdTbl.Add("acos",new Cmd(CmdACos));
@@ -117,6 +120,11 @@ public static class Command {
         cmdTbl.Add("unsubscribe", new Cmd(CmdUnSubscribe));
         cmdTbl.Add("vars2str", new Cmd(CmdVars2Str));
         cmdTbl.Add("str2vars", new Cmd(CmdStr2Vars));
+        cmdTbl.Add("rgb2hsv", new Cmd(CmdRgb2Hsv));
+        cmdTbl.Add("hsv2rgb", new Cmd(CmdHsv2Rgb));
+        cmdTbl.Add("indiv", new Cmd(CmdInDiv));
+        cmdTbl.Add("clean", new Cmd(CmdClean));
+        cmdTbl.Add("gc", new Cmd(CmdGC));
 
         cmdTbl.Add("__res",new Cmd(Cmd__Resource));
         cmdTbl.Add("__files",new Cmd(Cmd__Files));
@@ -299,14 +307,14 @@ public static class Command {
         })==null) return sh.io.Error("タイマー登録に失敗しました");
         return 0;
     }
-    public static ComShParser EvalParser(ComShInterpreter sh,int idx,bool cannotempty=true,int lno=-1){
+    public static ComShParser EvalParser(ComShInterpreter sh,int idx,bool cannotempty=true,int lno=-1,string cmd=null){
         ComShParser.Statement st=sh.currentParser.currentStatement;
         var cmdTkn=st.tokens[st.offset+idx];
         ComShParser psr;
         if(cmdTkn.parser==null){
             psr=new ComShParser(lno>=0?lno:sh.currentParser.lineno);
-            int r=psr.Parse(cmdTkn.txt);
-            if(r<0){ sh.io.Error(psr.error); return null; }
+            int r=psr.Parse(cmd!=null?cmd:cmdTkn.txt);
+            if(r<0){ sh.io.Error(psr); return null; }
             if(r==0 && cannotempty){ sh.io.Error("コマンドが空です"); return null; }   
             if(cmdTkn.varies==0) cmdTkn.parser=psr;
         }else psr=cmdTkn.parser;
@@ -549,7 +557,7 @@ public static class Command {
         int cnt=0;
         if(args[1][0]=='l'||args[1][0]=='L'){
             for(int i=0; i<txt.Length; i++) if(txt[i]=='\n') cnt++;
-            if(txt[txt.Length-1]!='\n') cnt++;
+            if(txt.Length>0 && txt[txt.Length-1]!='\n') cnt++;
         } else if(args[1][0]=='c'||args[1][0]=='C'){
             cnt=txt.Length;
         } else return sh.io.Error(usage);
@@ -614,16 +622,16 @@ public static class Command {
                     +"コマンド2    比較結果が偽のとき実行するコマンド\n"
                     +"対象1,対象2  どちらも数値と解釈できれば数値として比較\n"
                     +"             そうでなければ文字列として比較される";
-        if(args.Count!=5&&args.Count!=6) return sh.io.Error(usage);
-        int cmp=CmdCmpSub(args[1],args[2],args[3]);
-        if(cmp<0) return sh.io.Error(usage);
+        int n=args.Count%4;
+        if(args.Count<4 || (n!=1&&n!=2)) return sh.io.Error(usage);
+        int cmp=CmdCmpSub(args,args.Count-n);
         if(cmp==1){
-            var psr=EvalParser(sh,4,false);
+            var psr=EvalParser(sh,args.Count-n,false);
             if(psr==null) return -1;
             psr.Reset();
             return sh.InterpretParser(psr);
-        }else if(args.Count==6){
-            var psr=EvalParser(sh,5,false);
+        }else if(n==2){
+            var psr=EvalParser(sh,args.Count-1,false);
             if(psr==null) return -1;
             psr.Reset();
             return sh.InterpretParser(psr);
@@ -635,13 +643,26 @@ public static class Command {
                     +"比較演算子   eq|ne|ge|le|gt|lt|has|and|or\n"
                     +"対象1,対象2  どちらも数値と解釈できれば数値として比較\n"
                     +"             そうでなければ文字列として比較される";
-        if(args.Count!=4) return sh.io.Error(usage);
-        int cmp=CmdCmpSub(args[1],args[2],args[3]);
+        if(args.Count<4 || args.Count%4!=0) return sh.io.Error(usage);
+        int cmp=CmdCmpSub(args,args.Count);
         if(cmp<0) return sh.io.Error(usage);
         sh.io.Print(cmp==1?"1":"0");
         return 0;
     }
-    private static int CmdCmpSub(string val1,string op,string val2){
+    private static int CmdCmpSub(List<string> args,int n){
+        int cmp=DoCmp(args[1],args[2],args[3]);
+        if(cmp<0) return -1;
+        for(int i=4; i<n; i+=4){
+            string op=args[i];
+            int c=DoCmp(args[1+i],args[2+i],args[3+i]);
+            if(c<0) return -1;
+            if(op=="and") cmp=(cmp==1 && c==1)?1:0;
+            else if(op=="or") cmp=(cmp==1 || c==1)?1:0;
+            else return -1;
+        }
+        return cmp;
+    }
+    private static int DoCmp(string val1,string op,string val2){
         double f1=ParseUtil.ParseDouble(val1);
         if(op=="between"){
             double[] fa=ParseUtil.MinMaxW(val2);
@@ -725,13 +746,16 @@ public static class Command {
             foreach(string name in ls) sh.io.PrintLn(name.Substring(jobpfx.Length));
             return 0;
         }
-        if(args[1]=="add"){
+        if(args[1]=="add" || args[1]=="set"){
             if(args.Count<4) return sh.io.Error(string.Format(usage,args[0]));
             if(args.Count>7) return sh.io.Error(string.Format(usage,args[0]));
             if(args[2]==string.Empty) return sh.io.Error("識別名が空です");
             if(!UTIL.ValidName(args[2])) return sh.io.Error("その名前は使用できません");
             string name=jobpfx+sh.ns+args[2];
-            if(bg.ContainsName(name)) return sh.io.Error("その名前は既に使われています");
+            if(bg.ContainsName(name)){
+                if(args[1]=="add") return sh.io.Error("その名前は既に使われています");
+                bg.KillJob(name,true);
+            }
             int prio=0;
             double ms=0,life=0;
             if(args.Count>=5 && (!double.TryParse(args[4],out ms) || ms<0)) return sh.io.Error("実行間隔の値が不正です");
@@ -744,9 +768,13 @@ public static class Command {
             subsh.env[ComShInterpreter.SCRIPT_ERR_ON]="1";
             subsh.env.args.Clear();
             subsh.env.args.Add("");
-            long stime=DateTime.UtcNow.Ticks;
+            subsh.env.args.Add("");
+            long stime=DateTime.UtcNow.Ticks,lasttime=0;
             var j=bg.AddJob(name,(long)(ms*TimeSpan.TicksPerMillisecond),(long)(life*TimeSpan.TicksPerMillisecond),(long t)=>{
-                subsh.env.args[0]=((t-stime)/TimeSpan.TicksPerMillisecond).ToString();
+                long cur=(t-stime)/TimeSpan.TicksPerMillisecond;
+                subsh.env.args[0]=cur.ToString();
+                subsh.env.args[1]=(cur-lasttime).ToString();
+                lasttime=cur;
                 psr.Reset();
                 return subsh.InterpretParser(psr);
             },(int)prio);
@@ -817,7 +845,7 @@ public static class Command {
         }
 
         sh.io.output=orig;
-        sh.io.Print(subout.GetSubShResult());
+        if(ret>=0) sh.io.Print(subout.GetSubShResult());
         return ret;
     }
     private static int CmdLineLoop(ComShInterpreter sh,List<string> args){
@@ -864,7 +892,7 @@ public static class Command {
             m=m.NextMatch();
         }
         sh.io.output=orig;
-        sh.io.Print(subout.GetSubShResult());
+        if(ret>=0) sh.io.Print(subout.GetSubShResult());
         return ret;
     }
     private static int CmdPs(ComShInterpreter sh,List<string> args){
@@ -1186,6 +1214,16 @@ public static class Command {
         sh.io.Print(sh.fmt.FVal(UnityEngine.Random.value));
         return 0;
     }
+    private static int CmdRndN(ComShInterpreter sh,List<string> args){
+        if(args.Count!=2 && args.Count!=3) return sh.io.Error("使い方: rndn 最大値 [シード]");
+        if(!int.TryParse(args[1],out int n)||n==0) return sh.io.Error("数値の指定が不正です");
+        if(args.Count==3){
+            if(!int.TryParse(args[2],out int s)) return sh.io.Error("数値の指定が不正です");
+            UnityEngine.Random.InitState(s);
+        }
+        sh.io.Print(UnityEngine.Random.Range(0,n+1).ToString());
+        return 0;
+    }
     private static int CmdPerlinNoise(ComShInterpreter sh,List<string> args){
         if(args.Count!=3 && args.Count!=5) return sh.io.Error("使い方: perlinnoise x y [半径 角度]");
 
@@ -1318,10 +1356,32 @@ public static class Command {
             if(d1!=d) return sh.io.Error("座標の指定が不正です");
             v[0]-=v1[0]; v[1]-=v1[1]; v[2]-=v1[2]; v[3]-=v1[3];
         }
-        if(d==3) sh.io.Print(sh.fmt.FVal(Mathf.Sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2])));
-        else if(d==2) sh.io.Print(sh.fmt.FVal(Mathf.Sqrt(v[0]*v[0]+v[1]*v[1])));
-        else if(d==4) sh.io.Print(sh.fmt.FVal(Mathf.Sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]+v[3]*v[3])));
-        else if(d==1) sh.io.Print(sh.fmt.FVal(Mathf.Abs(v[0])));
+        float l=0;
+        if(d==1) l=Mathf.Abs(v[0]); else{
+            for(int i=0; i<d; i++) l+=v[i]*v[i];
+            l=Mathf.Sqrt(l);
+        }
+        sh.io.Print(sh.fmt.FVal(l));
+        return 0;
+    }
+    private static int CmdNormalize(ComShInterpreter sh,List<string> args){
+        float[] v=new float[4];
+        if(args.Count!=2 && args.Count!=3) return sh.io.Error("使い方: normalize 座標1 [座標2]");
+        int d=ParseUtil.XyzSub(args[1],v);
+        if(d<=0||d>4) return sh.io.Error("座標の指定が不正です");
+        if(args.Count==3){
+            float[] v1=new float[4];
+            int d1=ParseUtil.XyzSub(args[2],v1);
+            if(d1!=d) return sh.io.Error("座標の指定が不正です");
+            v[0]-=v1[0]; v[1]-=v1[1]; v[2]-=v1[2]; v[3]-=v1[3];
+        }
+        float l=0;
+        if(d==1) l=Mathf.Abs(v[0]); else{
+            for(int i=0; i<d; i++) l+=v[i]*v[i];
+            l=Mathf.Sqrt(l);
+        }
+        sh.io.Print(sh.fmt.FVal(v[0]/l));
+        for(int i=1; i<d; i++) sh.io.Print(",").Print(sh.fmt.FVal(v[i]/l));
         return 0;
     }
     private static int CmdReplace(ComShInterpreter sh,List<string> args){
@@ -1483,6 +1543,14 @@ public static class Command {
         sh.io.PrintLn($"Unity allocated:{UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong().ToString("N0")}bytes");
         return 0;
     }
+    private static int CmdClean(ComShInterpreter sh,List<string> args){
+        Resources.UnloadUnusedAssets();
+        return 0;
+    }
+    private static int CmdGC(ComShInterpreter sh,List<string> args){
+        System.GC.Collect();
+        return 0;
+    }
 
     private static int CmdSubstr(ComShInterpreter sh,List<string> args){
         const string usage="使い方: substr 値 開始位置 文字数";
@@ -1530,8 +1598,8 @@ public static class Command {
             if(ret<0 || sh.exitq){ ret=sh.io.exitStatus; sh.exitq=false; break; }
         }
         sh.io.output=orig;
-        sh.io.Print(subout.GetSubShResult());
-        return ret;
+        if(ret>=0) sh.io.Print(subout.GetSubShResult());
+        return 0;
     }
 
     public class PubSubEntry {
@@ -1553,9 +1621,9 @@ public static class Command {
             sh.env["_1"]=msg;
             parser.Reset();
             ret=sh.InterpretParser(parser);
-            if(ret<0 || sh.exitq){ ret=sh.io.exitStatus; sh.exitq=false; return; }
+            if(ret<0 || sh.exitq){ ret=sh.io.exitStatus; sh.exitq=false; }
             sh.io.output=orig;
-            sh.io.Print(subout.GetSubShResult());
+            if(ret>=0) sh.io.Print(subout.GetSubShResult());
         }
     }
     private static Dictionary<string,LinkedList<PubSubEntry>> pubsubdic=new Dictionary<string,LinkedList<PubSubEntry>>();
@@ -1662,7 +1730,6 @@ public static class Command {
         sh.io.Print(buf,0,bi);
         return 0;
     }
-    
     private static int CmdSort(ComShInterpreter sh,List<string> args){
         string val;
         if(args.Count==1){
@@ -1672,6 +1739,54 @@ public static class Command {
         var sa=val.Split('\n');
         Array.Sort(sa);
         for(int i=0; i<sa.Length; i++) sh.io.PrintLn(sa[i]);
+        return 0;
+    }
+    private static int CmdUniq(ComShInterpreter sh,List<string> args){
+        string val;
+        if(args.Count==1){
+            if(sh.io.pipedText!=null) val=sh.io.pipedText;
+            else return sh.io.Error("使い方: uniq 文字列");
+        } else val=args[1];
+        var sa=val.Split('\n');
+        var set=new HashSet<string>();
+        if(sa.Length>0){
+            set.Add(sa[0]); sh.io.Print(sa[0]);
+            for(int i=1; i<sa.Length; i++) if(set.Add(sa[i])) sh.io.Print("\n").Print(sa[i]);
+        }
+        return 0;
+    }
+    private static int CmdRgb2Hsv(ComShInterpreter sh,List<string> args){
+        if(args.Count!=2) return sh.io.Error("使い方: rgb2hsv r,g,b");
+        float[] col=ParseUtil.Rgb(args[1]);
+        if(col==null) return sh.io.Error(ParseUtil.error);
+        Color.RGBToHSV(new Color(col[0],col[1],col[2]),out float h,out float s,out float v);
+        sh.io.PrintJoin(",",sh.fmt.F0to1(h),sh.fmt.F0to1(s),sh.fmt.F0to1(v));
+        return 0;
+    }
+    private static int CmdHsv2Rgb(ComShInterpreter sh,List<string> args){
+        if(args.Count!=2) return sh.io.Error("使い方: hsv2rgb h,s,v");
+        float[] col=ParseUtil.Rgb(args[1]);
+        if(col==null) return sh.io.Error(ParseUtil.error);
+        Color rgb=Color.HSVToRGB(col[0],col[1],col[2]);
+        sh.io.PrintJoin(",",sh.fmt.F0to1(rgb.r),sh.fmt.F0to1(rgb.g),sh.fmt.F0to1(rgb.b));
+        return 0;
+    }
+    private static int CmdInDiv(ComShInterpreter sh,List<string> args){
+        if(args.Count!=4) return sh.io.Error("使い方1: indiv 座標1 座標2 比\n使い方2: indiv 座標1 座標2 座標3");
+        float[] p0=ParseUtil.Xyz(args[1]);
+        float[] p1=ParseUtil.Xyz(args[2]);
+        float t=0;
+        float[] p2=null;
+        if(args[3].IndexOf(',')>=0) p2=ParseUtil.Xyz(args[3]);
+        else if(!float.TryParse(args[3],out t)) return sh.io.Error("数値が不正です");
+        if(p2==null){
+            sh.io.Print(sh.fmt.FPos((p1[0]-p0[0])*t+p0[0],(p1[1]-p0[1])*t+p0[1],(p1[2]-p0[2])*t+p0[2]));
+        }else{
+            var nv=new Vector3(p1[0]-p0[0],p1[1]-p0[1],p1[2]-p0[2]);
+            var ll=nv.sqrMagnitude;
+            var sl=new Vector3(p2[0]-p0[0],p2[1]-p0[1],p2[2]-p0[2]);
+            sh.io.Print(sh.fmt.F0to1(Vector3.Dot(nv,sl)/ll));
+        }
         return 0;
     }
 

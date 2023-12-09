@@ -57,12 +57,15 @@ public static class CmdObjects {
         objParamDic.Add("mesh",new CmdParam<Transform>(ObjParamMesh));
         objParamDic.Add("component",new CmdParam<Transform>(ObjParamComponent));
         objParamDic.Add("lookat",new CmdParam<Transform>(ObjParamLookAt));
+        objParamDic.Add("lookatlocal",new CmdParam<Transform>(ObjParamLookAtLocal));
         objParamDic.Add("locik",new CmdParam<Transform>(ObjParamLocIK));
         objParamDic.Add("locik-",new CmdParam<Transform>(ObjParamLocIKMinus));
         objParamDic.Add("locik3",new CmdParam<Transform>(ObjParamLocIK3));
         objParamDic.Add("locik3-",new CmdParam<Transform>(ObjParamLocIK3Minus));
+        objParamDic.Add("ik",new CmdParam<Transform>(ObjParamIK));
         objParamDic.Add("shadow",new CmdParam<Transform>(ObjParamShadow));
         objParamDic.Add("join",new CmdParam<Transform>(ObjParamJoin));
+        objParamDic.Add("bakemesh",new CmdParam<Transform>(ObjParamBakeMesh));
         
         objParamDic.Add("l2w",new CmdParam<Transform>(_CmdParamL2W));
         objParamDic.Add("w2l",new CmdParam<Transform>(_CmdParamW2L));
@@ -656,7 +659,9 @@ public static class CmdObjects {
         }
         if(val==null){
             if(pa!=null) for(int i=0; i<pa.Length; i++) if(pa[i]!=null){
-                var shname=par[i].render==null?"":par[i].render.sharedMaterial.shader.name;
+                var shname="";
+                if(par[i].render!=null && par[i].render.sharedMaterial!=null && par[i].render.sharedMaterial!=null && par[i].render.sharedMaterial.shader.name!=null)
+                    shname=par[i].render.sharedMaterial.shader.name;
                 sh.io.PrintLn(pa[i].name+sh.ofs+shname);
             }
             return 0;
@@ -873,12 +878,32 @@ public static class CmdObjects {
     }
     private static int ObjParamComponent(ComShInterpreter sh,Transform tr,string val){
         Component[] ca=tr.GetComponentsInChildren<Component>(false);
+        if(val==null){
+            for(int i=0; i<ca.Length; i++){
+                int iid=ca[i].GetInstanceID();
+                if(ReferenceEquals(ca[i].GetType(),typeof(Transform))) continue;
+                sh.io.PrintJoin(sh.ofs,iid.ToString(),ca[i].GetType().FullName,ca[i].transform.name);
+                if(ca[i] is UnityEngine.MonoBehaviour)
+                    sh.io.Print(sh.ofs+(((MonoBehaviour)ca[i]).enabled?"on":"off"));
+                sh.io.PrintLn("");
+            }
+            return 0;
+        }
+        var sa=ParseUtil.LeftAndRight(val,'=');
+        if(sa[1]!="on"&&sa[1]!="off") return sh.io.Error("onまたはoffで指定してください");
+        if(!int.TryParse(sa[0],out int tgt)) return sh.io.Error("idの指定が不正です");
         for(int i=0; i<ca.Length; i++){
             if(ReferenceEquals(ca[i].GetType(),typeof(Transform))) continue;
-            if(ca[i] is UnityEngine.MonoBehaviour && !((MonoBehaviour)ca[i]).enabled) continue;
-            sh.io.PrintLn(ca[i].GetType().FullName+sh.ofs+ca[i].transform.name);
+            if(ca[i].GetInstanceID()!=tgt) continue;
+            if(sa[1]=="on"){
+                if(ca[i] is UnityEngine.MonoBehaviour) ((MonoBehaviour)ca[i]).enabled=true;
+            }else{
+                if(ca[i] is UnityEngine.MonoBehaviour) ((MonoBehaviour)ca[i]).enabled=false;
+                else UnityEngine.Object.Destroy(ca[i]);
+            }
+            break;
         }
-        return 0;
+        return 1;
     }
 
     private static int ObjParamMesh(ComShInterpreter sh,Transform tr,string val){
@@ -940,18 +965,66 @@ public static class CmdObjects {
         }
         return 1;
     }
+    private static int ObjParamBakeMesh(ComShInterpreter sh,Transform tr,string val){
+        if(val==null) return sh.io.Error("オブジェクト名を指定してください");
+        if(!UTIL.ValidName(val)) return sh.io.Error("その名前は使用できません");
+        Transform pftr=ObjUtil.GetPhotoPrefabTr(sh,true);
+        if(pftr==null) return sh.io.Error("オブジェクト作成に失敗しました");
+        if(ObjUtil.FindObj(sh,val)!=null||LightUtil.FindLight(sh,val)!=null) return sh.io.Error("その名前は既に使われています");
+        GameObject go;
+        SkinnedMeshRenderer[] smra=tr.GetComponentsInChildren<SkinnedMeshRenderer>();
+        if(smra==null || smra.Length==0){ // MeshFilterならcloneと同じ
+            go=ObjUtil.CloneObject(val,tr,pftr);
+            if(go==null) return sh.io.Error("オブジェクト作成に失敗しました");
+            ObjUtil.objDic.Add(go.transform.name,go.transform);
+            return 1;
+        }
+        go=new GameObject(val);
+        go.transform.SetParent(pftr);
+        go.transform.position=tr.position;
+        go.transform.rotation=tr.rotation;
+        go.transform.localScale=tr.localScale;
+        for(int i=0; i<smra.Length; i++) CreateBakeMeshObj(smra[i].name,smra[i],go.transform);
+        var oi=ObjInfo.AddObjInfo(go.transform,"");
+        ObjUtil.objDic.Add(go.transform.name,go.transform);
+        oi.data.Backup();
+        oi.data.OwnMesh();
+        return 1;
+    }
+    private static GameObject CreateBakeMeshObj(string name,SkinnedMeshRenderer smr,Transform parent){
+        Mesh mesh=new Mesh();
+        smr.BakeMesh(mesh);
+        var go=new GameObject(name);
+        go.transform.SetParent(parent);
+        go.transform.localScale=smr.transform.localScale;
+        go.transform.position=smr.transform.position;
+        go.transform.rotation=smr.transform.rotation;
+        MeshFilter mf=go.AddComponent<MeshFilter>();
+        mf.mesh=mesh;
+        MeshRenderer mr=go.AddComponent<MeshRenderer>();
+        mr.materials=smr.sharedMaterials;
+        return go;
+    }
     private static int ObjParamLookAt(ComShInterpreter sh,Transform tr,string val){
         if(val==null){ return 0; }
         if(val.IndexOf(':')>=0){
             var cd=new ParseUtil.ColonDesc(val);
             var tgt=ObjUtil.FindObj(sh,cd);
             if(tgt==null) return sh.io.Error("対象が見つかりません");
-            tr.transform.LookAt(tgt.position,tr.up);
+            tr.transform.LookAt(tgt.position,Vector3.up);
         }else{
             float[] xyz=ParseUtil.Xyz(val);
             if(xyz==null) return sh.io.Error(ParseUtil.error);
-            tr.transform.LookAt(new Vector3(xyz[0],xyz[1],xyz[2]),tr.up);
+            tr.transform.LookAt(new Vector3(xyz[0],xyz[1],xyz[2]),Vector3.up);
         }
+        return 1;
+    }
+    private static int ObjParamLookAtLocal(ComShInterpreter sh,Transform tr,string val){
+        if(val==null){ return 0; }
+        float[] xyz=ParseUtil.Xyz(val);
+        if(xyz==null) return sh.io.Error(ParseUtil.error);
+        Quaternion q=Quaternion.FromToRotation(Vector3.forward,new Vector3(xyz[0],xyz[1],xyz[2]));
+        tr.transform.localRotation*=q;
         return 1;
     }
     private static int ObjParamLocIK(ComShInterpreter sh,Transform tr,string val){
@@ -1043,6 +1116,69 @@ public static class CmdObjects {
 
         // 次いで p1,p2,p3 で２ボーンIK
         return LocIK(t,p1,p2,p3,dir2);
+    }
+    private static int ObjParamIK(ComShInterpreter sh,Transform tr,string val){
+        if(val==null) return 0;
+        float[] xyzn=new float[4];
+        int n=ParseUtil.XyzSub(val,xyzn);
+        if(n!=4) return sh.io.Error("書式が不正です");
+        int bn=(int)xyzn[3];
+        if(bn<1) return sh.io.Error("ボーン数が不正です");
+
+        var ja=new List<Transform>(10);
+        Transform p=tr;
+        for(int i=0; i<bn+1; i++){
+            ja.Add(p);
+            p=p.parent;
+            if(p==null || p.name=="Bip01" || p.name=="ManBip") return sh.io.Error("親ボーンが足りません");
+        }
+
+        var pa=new List<Vector3>();
+        for(int i=0; i<ja.Count; i++) pa.Add(ja[i].position);
+
+        var la=new List<float>();
+        for(int i=0; i<pa.Count-1; i++) la.Add(Vector3.Distance(pa[i],pa[i+1]));
+
+        var root=pa[pa.Count-1];
+        var goal=new Vector3(xyzn[0],xyzn[1],xyzn[2]);
+        float prev=0;
+        for (int r=0; r<10; r++){
+            float d=Vector3.Distance(pa[0],goal);
+            float mv=Mathf.Abs(d-prev);
+            prev=d;
+            if (d<0.001||mv<0.0002) break;
+            pa[0]=goal;
+            for(int i=1; i<pa.Count; i++){
+                pa[i]=pa[i-1]+(pa[i]-pa[i-1]).normalized*la[i-1];
+            }
+
+            pa[pa.Count-1]=root;
+            for(int i=pa.Count-2; i>=0; i--){
+                pa[i]=pa[i+1]+(pa[i]-pa[i+1]).normalized*la[i];
+            }
+        }
+        for (int i=ja.Count-1; i>=1; i--){
+            var o=ja[i].position;
+            //var q=Quaternion.FromToRotation((ja[i-1].position-o).normalized,(pa[i-1]-o).normalized);
+            var q=RYRX(ja[i-1].position-o,pa[i-1]-o);
+            ja[i].rotation=q*ja[i].rotation;
+        }
+        return 1;
+    }
+    private static Quaternion RYRX(Vector3 from,Vector3 to){
+        Quaternion ret=Quaternion.identity;
+        Vector3 fn=from.normalized, tn=to.normalized;
+        Vector3 p0=fn;
+        float ll=to.x*to.x+to.z*to.z;
+        if(ll>=0.00000001){ 
+            p0=new Vector3(tn.x,fn.y,tn.z).normalized;
+            ret=Quaternion.FromToRotation(fn,p0);
+        }
+        ll=to.y*to.y+to.z*to.z;
+        if(ll>=0.00000001){ 
+            ret*=Quaternion.FromToRotation(p0,tn);
+        }
+        return ret;
     }
     private static int ObjParamShadow(ComShInterpreter sh,Transform tr,string val){
         if(val==null) return 0;

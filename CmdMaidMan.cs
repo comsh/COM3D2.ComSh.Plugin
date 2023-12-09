@@ -77,16 +77,19 @@ public static class CmdMaidMan {
         maidParamDic.Add("muneyure",new CmdParam<Maid>(MaidParamMuneYure));
         maidParamDic.Add("autotwist",new CmdParam<Maid>(MaidParamAutoTwist));
         maidParamDic.Add("ap",new CmdParam<Maid>(MaidParamAttachPoint));
+        maidParamDic.Add("ap.wpos",new CmdParam<Maid>(MaidParamAttachPointWpos));
         maidParamDic.Add("handle",new CmdParam<Maid>(MaidParamHandle));
         maidParamDic.Add("describe",new CmdParam<Maid>(MaidParamDesc));
         maidParamDic.Add("node",new CmdParam<Maid>(MaidParamNode));
+        maidParamDic.Add("partsnode",new CmdParam<Maid>(MaidParamPartsNode));
+        maidParamDic.Add("mask",new CmdParam<Maid>(MaidParamMask));
         maidParamDic.Add("select",new CmdParam<Maid>(MaidParamSelect));
         maidParamDic.Add("later",new CmdParam<Maid>(MaidParamLater));
         maidParamDic.Add("evenlater",new CmdParam<Maid>(MaidParamEvenLater));
         maidParamDic.Add("muneparam",new CmdParam<Maid>(MaidParamMuneParam));
         maidParamDic.Add("bbox",new CmdParam<Maid>(MaidParamBBox));
         maidParamDic.Add("floor",new CmdParam<Maid>(MaidParamFloor));
-
+        maidParamDic.Add("skirtyure",new CmdParam<Maid>(MaidParamSkirtYure));
         maidParamDic.Add("shape.rename",new CmdParam<Maid>(MaidParamShapeRename));
 
         maidParamDic.Add("l2w",new CmdParam<Maid>(MaidParamL2W));
@@ -1070,8 +1073,12 @@ public static class CmdMaidMan {
         return 1;
     }
     private static int MaidParamNode(ComShInterpreter sh,Maid m,string val){
-        if(val==null){ return 0; }
-
+        if(val==null){
+            for(int i=0; i<m.body0.goSlot.Count; i++)
+                foreach(var nd in m.body0.goSlot[i].m_dicDelNodeBody)
+                    sh.io.PrintLn($"{m.body0.goSlot[i].Category}.{ParseUtil.CompactBoneName(nd.Key)}{(nd.Value?'+':'-')}");
+            return 0;
+        }
         string[] sa=val.Split(ParseUtil.comma);
         for(int i=0; i<sa.Length; i++){
             var t=sa[i];
@@ -1083,6 +1090,68 @@ public static class CmdMaidMan {
             else{
                 if(!m.body0.IsSlotNo(lr[0])) return sh.io.Error("スロット名が不正です");
                 m.body0.SetVisibleNodeSlot(lr[0],p[0]=='+',ParseUtil.CompleteBoneName(lr[1],false));
+            }
+        }
+        m.body0.FixMaskFlag();
+        m.body0.FixVisibleFlag();
+        m.AllProcProp();
+        return 1;
+    }
+    private static int MaidParamPartsNode(ComShInterpreter sh,Maid m,string val){
+        if(val==null){
+            for(int i=0; i<m.body0.goSlot.Count; i++)
+                foreach(var np in m.body0.goSlot[i].m_dicDelNodeParts)
+                    foreach(var bn in (Dictionary<string,bool>)np.Value)
+                        sh.io.PrintLn($"{m.body0.goSlot[i].Category}.{np.Key}.{ParseUtil.CompactBoneName(bn.Key)}{(bn.Value?'+':'-')}");
+            return 0;
+        }
+        string[] sa=val.Split(ParseUtil.comma);
+        for(int i=0; i<sa.Length; i++){
+            var t=sa[i];
+            if(t.Length==0) continue;
+            var p=t.Substring(t.Length-1,1);
+            if(p!="+" && p!="-"){ p="+"; } else t=t.Substring(0,t.Length-1);
+            string[] sa2=t.Split(ParseUtil.period);
+            if(sa2.Length!=3) return sh.io.Error("書式が不正です");
+            if(!m.body0.IsSlotNo(sa2[0])||!m.body0.IsSlotNo(sa2[1]))
+                return sh.io.Error("スロット名が不正です");
+            string bname=ParseUtil.CompleteBoneName(sa2[2],m.boMAN);
+            m.body0.SetVisibleNodeSlotParts(sa2[0],sa2[1],p[0]=='+',bname);
+        }
+        m.body0.FixMaskFlag();
+        m.body0.FixVisibleFlag();
+        m.AllProcProp();
+        return 1;
+    }
+    private static int MaidParamMask(ComShInterpreter sh,Maid m,string val){
+        if(val==null){
+            var rev=new Dictionary<int,string>();
+            foreach(System.Collections.DictionaryEntry ent in TBody.hashSlotName) rev[(int)ent.Value]=((string)ent.Key).ToLower();
+            foreach(string slotname in TBody.hashSlotName.Keys){
+                var skin=m.body0.GetSlot(slotname);
+                if(skin.obj==null) continue;
+                foreach(int slot in skin.listMaskSlot) sh.io.PrintLn($"{slotname.ToLower()}.{rev[slot]}");
+            }
+            return 0; 
+        }
+        string[] sa=val.Split(ParseUtil.comma);
+        for(int i=0; i<sa.Length; i++){
+            var t=sa[i];
+            if(t.Length==0) continue;
+            var p=t.Substring(t.Length-1,1);
+            if(p!="+" && p!="-"){ p="+"; } else t=t.Substring(0,t.Length-1);
+            string[] lr=ParseUtil.LeftAndRight(t,'.');
+            if(!m.body0.IsSlotNo(lr[0])||!m.body0.IsSlotNo(lr[1])) return sh.io.Error("スロット名が不正です");
+
+            var skin=m.body0.GetSlot(lr[0]);
+            if(skin.obj!=null){
+                int no=m.body0.GetSlotNo(lr[1]);
+                int idx=skin.listMaskSlot.IndexOf(no);
+                if(idx>=0){
+                    if(p[0]=='-') skin.listMaskSlot.RemoveAt(idx);
+                }else{
+                    if(p[0]=='+') m.body0.AddMask(lr[0],lr[1]);
+                }
             }
         }
         m.body0.FixMaskFlag();
@@ -1159,7 +1228,7 @@ public static class CmdMaidMan {
         }
         int sw=ParseUtil.OnOff(val);
         if(sw<0) return sh.io.Error(ParseUtil.error);
-        m.boMabataki=(sw==1);
+        m.MabatakiUpdateStop=(sw==0);
         return 1;
     }
     private static int MaidParamSing(ComShInterpreter sh,Maid m,string val){
@@ -1249,28 +1318,6 @@ public static class CmdMaidMan {
         }else return sh.io.Error("アタッチされていません");
         return 1;
     }
-
-/*  private static FieldInfo fldLaySlot=null;
-    private static int MaidParamFaceTest(ComShInterpreter sh,Maid m,string val){
-        if(fldLaySlot==null) try{ fldLaySlot=typeof(TBody).GetField("m_dicLaySlot",BindingFlags.Instance | BindingFlags.NonPublic); }catch{ return 0; }
-        var s2m=(Dictionary<string,TBody.TexLay.Mat>)fldLaySlot.GetValue(m.body0);
-        if(s2m.TryGetValue("head",out TBody.TexLay.Mat mat)){
-            var n2p=mat.dicPropInMat;
-            if(n2p.TryGetValue(5,out TBody.TexLay.Prop prop)){
-                var p2l=prop.dicLayInProp;
-                int sno=(int)TBody.hashSlotName["head"];
-                Renderer r=m.body0.goSlot[sno].obj.GetComponentInChildren<Renderer>();
-                Material m5=r.sharedMaterials[5];
-                if(p2l.TryGetValue("_MainTex",out TBody.TexLay.Lay lay)){
-                    var rt=lay.rtBase;
-                }
-                if(p2l.TryGetValue("_ShadowTex",out lay)){
-                    var rt=lay.rtBase;
-                }
-            }
-        }
-        return 1;
-    } */
 
     private static int MaidParamList(ComShInterpreter sh,Maid m,string val){
         List<string> ls=new List<string>();
@@ -1396,7 +1443,7 @@ public static class CmdMaidMan {
         var psr=Command.EvalParser(sh,Command.currentArgNo+1,false,sh.currentParser.lineno);
         if(psr==null) return -1;
 
-        System.Action act;
+        Action act;
         int iid=m.GetInstanceID();
         if(lateDic.TryGetValue(iid,out act)){
             if(m.body0!=null) m.body0.OnLateUpdate-=act;
@@ -1405,14 +1452,14 @@ public static class CmdMaidMan {
 
         if(psr.sta.Count==0) return 1; // 空→登録削除のみ
 
-        int ret=0;
         long stime=DateTime.UtcNow.Ticks;
         subsh.env.args.Clear();
         subsh.env.args.Add("");
         act=()=>{
             subsh.env.args[0]=((DateTime.UtcNow.Ticks-stime)/TimeSpan.TicksPerMillisecond).ToString();
             psr.Reset();
-            ret=subsh.InterpretParser(psr);
+            int ret=subsh.InterpretParser(psr);
+            if(m.body0.m_Bones==null || ret!=0) m.body0.OnLateUpdate-=act;
         };
         m.body0.OnLateUpdate+=act;
         lateDic[iid]=act;
@@ -1442,10 +1489,8 @@ public static class CmdMaidMan {
         };
         // OnLateUpdateEndは毎フレームクリアされるようなので、毎フレーム登録する
         ComShBg.cron.AddJob("maidevenlater/"+m.GetInstanceID().ToString(),0,0,(t)=>{
-            if(m.body0.m_Bones==null || ret!=0){
-                if(m.body0!=null) m.body0.OnLateUpdateEnd-=act;
-                return -1;
-            }
+            if(m.body0.m_Bones==null) return -1;
+            if(ret<0){ m.body0.OnLateUpdateEnd-=act; return -1; }
             m.body0.OnLateUpdateEnd+=act;
             return 0;
         });
@@ -1487,10 +1532,12 @@ public static class CmdMaidMan {
         var ls=new List<string>(64);
         CharacterMgr cm=GameMain.Instance.CharacterMgr;
         if(cm.TryGetCacheObject(m.body0.goSlot[0].m_strModelFileName,out GameObject go)){
-            Transform bip=go.transform.Find(m.boMAN?"ManBip":"Bip01");
+            string bname=m.boMAN?"ManBip":"Bip01";
+            Transform bip=go.transform.Find(bname);
             if(bip==null) return 0;
             UTIL.TraverseTr(bip,(Transform tr,int d)=>{
-                if(tr.name.StartsWith("_IK",Ordinal)) return 1;
+                if(!tr.name.StartsWith(bname,Ordinal)) return 1;
+                if(tr.name.EndsWith("_SCL_",Ordinal)) return 1;
                 if(tr.name.EndsWith("Footsteps",Ordinal)) return 1;
                 ls.Add(tr.name);
                 return 0;
@@ -1521,6 +1568,32 @@ public static class CmdMaidMan {
         m.body0.m_trFloorPlane.position=p;
         return 1;
     }
+    private static int MaidParamSkirtYure(ComShInterpreter sh,Maid m,string val){
+        if(m.body0==null) return 1;
+        int ret=0;
+        if(m.body0.GetSlotVisible(TBody.SlotID.skirt)){
+            ret=SkirtYureSub(sh,m,"skirt",val);
+            if(ret<0) return ret;
+        }
+        if(m.body0.GetSlotVisible(TBody.SlotID.onepiece)) ret=SkirtYureSub(sh,m,"onepiece",val);
+        return ret;
+    }
+    private static int SkirtYureSub(ComShInterpreter sh,Maid m,string slotname,string val){
+        TBodySkin skin=m.body0.GetSlot(slotname);
+        if(val==null){
+            sh.io.Print(skin.bonehair.boSkirt?"on":"off");
+            return 0;
+        }
+        if(val!="on" && val!="off") return sh.io.Error("onまたはoffを指定してください");
+        if(val=="on"){
+            skin.bonehair.SearchGameObj(skin.obj,
+                skin.bonehair3.InitGameObject(skin.obj,skin.m_ParentMPN));
+        }else{
+            skin.bonehair.Init();
+            skin.bonehair3.Uninit();
+        }
+        return 1;
+    }
 
     private static int MaidParamAttachPoint(ComShInterpreter sh,Maid m,string val){
         if(val==null){
@@ -1544,6 +1617,30 @@ public static class CmdMaidMan {
             }
         }
         return 1;
+    }
+    private static int MaidParamAttachPointWpos(ComShInterpreter sh,Maid m,string val){
+        if(val==null){
+            foreach(TBodySkin skin in m.body0.goSlot){
+                if(skin.morph==null) continue;
+                foreach(var ap in skin.morph.dicAttachPoint){
+                    Vector3 v,s; Quaternion q;
+                    skin.morph.GetAttachPoint(ap.Key,out v,out q,out s);
+                    sh.io.PrintLn($"{ap.Key}{sh.ofs}{sh.fmt.FPos(v)}");
+                    break;
+                }
+            }
+            return 0;
+        }
+        foreach(TBodySkin skin in m.body0.goSlot){
+            if(skin.morph==null) continue;
+            foreach(var ap in skin.morph.dicAttachPoint) if(ap.Key==val){
+                Vector3 v,s; Quaternion q;
+                skin.morph.GetAttachPoint(val,out v,out q,out s);
+                sh.io.Print(sh.fmt.FPos(v));
+                break;
+            }
+        }
+        return 0;
     }
     private static int MaidParamHandle(ComShInterpreter sh,Maid m,string val){
         if(val==null)
@@ -1856,9 +1953,7 @@ public static class MaidUtil {
         if(tgt==null) return true;
         Transform tr=MaidLookTarget(m);
         return (ComShBg.cron.AddJob(name,0,0,(long t)=>{
-            if(m.ActiveSlotNo<0||tgt==null){
-                return -1;  // nullっぽく振る舞うDestroy後の残骸
-            }
+            if (m==null||m.body0==null||m.body0.m_trBones==null||tgt==null) return -1;
             tr.position=tgt.position;     // Vector3の値渡し。クラスの参照渡しと見分け難いのがC#の構造体
             return 0;
         })!=null);
@@ -1868,7 +1963,7 @@ public static class MaidUtil {
         string name=CRON_LOOKAT+m.GetInstanceID();
         ComShBg.cron.KillJob(name);
         return (ComShBg.cron.AddJob(name,0,0,(long t)=>{
-            if(m.ActiveSlotNo<0) return -1;
+            if (m==null||m.body0==null||m.body0.m_trBones==null) return -1;
             tr.position=tgt;
             return 0;
         })!=null);

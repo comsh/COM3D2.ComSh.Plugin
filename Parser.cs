@@ -154,7 +154,7 @@ public class ComShParser {
         int start=0;
         int rd=-1;
         for(int i=0; i<chalen; i++) if((qm[i]&escaped)==0){
-            if(cha[i]=='>') rd=i;
+            if(cha[i]=='>'){ if(rd<0) rd=i; }
             else if(cha[i]==';'||cha[i]=='|'){
                 if(TokenizeStatement(start,i,rd)<0) return -1;
                 start=i+1;
@@ -231,20 +231,6 @@ public class ComShParser {
         }
         if(st.tokens.Count>0) sta.Add(st);
         return 0;
-    }
-    private int GetWord(string txt,int i0,int tail){
-        int i;
-        if(txt[i0]=='.'){   // \.\w+
-            for(i=i0+1; i<=tail; i++) if(!ParseUtil.IsWordChar(txt[i])) break;
-            if(i==i0+1) return i0; else return i;
-        }else if(txt[i0]=='/'){  // /[\w/]*\w+
-            int w=i0;
-            for(i=i0+1; i<=tail; i++) if(ParseUtil.IsWordChar(txt[i])) w=i; else if(txt[i]!='/') break;
-            if(w==i0) return i0; else return w+1;
-        }else{
-            for(i=i0; i<=tail; i++) if(!ParseUtil.IsWordChar(txt[i])) break;
-            return i;
-        }
     }
     private int GetWord(int i0,int tail){
         int i;
@@ -433,6 +419,7 @@ public static class ParseUtil {
 
     // SplitやTrimの引数が配列とparam配列の２通りしかないので
     public static char[] comma={','};
+    public static char[] period={'.'};
     public static char[] colon={':'};
     public static char[] space={' '};
     public static char[] tab={'\t'};

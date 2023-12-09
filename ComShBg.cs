@@ -66,9 +66,9 @@ namespace COM3D2.ComSh.Plugin {
                 joblist[prio].Add(j);
                 return true;
             }
-            public void KillJob(string name){
+            public void KillJob(string name,bool nodestroy=false){
                 if(!jobs.TryGetValue(name,out Job j)) return;
-                j.destroy?.Invoke(-2);
+                if(!nodestroy) j.destroy?.Invoke(-2);
                 jobs.Remove(name);
                 UTIL.RemoveFromList(joblist[j.prio],j);
             }

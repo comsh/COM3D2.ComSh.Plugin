@@ -392,7 +392,7 @@ public static class CmdMisc {
             if(!UTIL.ValidName(args[2])) return sh.io.Error("その名前は使用できません");
             string name=sh.ns+args[2];
             if(queDic.ContainsKey(name)) return sh.io.Error("その名前は既に使われています");
-            if(!float.TryParse(args[3],out float d) || d<1 || d>3) return sh.io.Error("次元が不正です");
+            if(!float.TryParse(args[3],out float d) || d<1 || d>4) return sh.io.Error("次元が不正です");
             if(!float.TryParse(args[4],out float n) || n<2 || n>100000) return sh.io.Error("要素数が不正です");
             q=new Q(Mathf.RoundToInt(n),Mathf.RoundToInt(d));
             queDic[name]=q;
@@ -402,9 +402,14 @@ public static class CmdMisc {
             return 0;
         }
         if(!queDic.TryGetValue(sh.ns+args[1],out q)) return sh.io.Error("指定されたキューは見つかりません");
-        if(args.Count==3) return CmdParamQueue(sh,q,args[2],"");
-        else if(args.Count==4) return CmdParamQueue(sh,q,args[2],args[3]);
-        else return 0;
+        if(args.Count==2){
+            sh.io.Print($"{q.dim}{sh.ofs}{q.max}");
+            return 0;
+        }
+        int ret=0;
+        for(int i=0; i<(args.Count-2)/2; i++) if((ret=CmdParamQueue(sh,q,args[2+i*2],args[2+i*2+1]))<=0) return ret;
+        if((args.Count&1)>0) return CmdParamQueue(sh,q,args[args.Count-1],"");
+        return 0;
     }
     private static int CmdParamQueue(ComShInterpreter sh,Q q,string cmd,string val){
         if(cmd=="enq"){
@@ -414,10 +419,12 @@ public static class CmdMisc {
             float[] f=new float[q.dim];
             for(int i=0; i<fa.Length; i++) f[i]=fa[i];
             q.EnQ(f);
+            return 1;
         } else if(cmd=="deq"){
             float[] f=q.DeQ();
             if(f==null) return sh.io.Error("キューが空です");
             PrintNVec(sh,f);
+            return 0;
         } else if(cmd=="peek"){
             float n;
             if(val=="") n=0;
@@ -425,8 +432,10 @@ public static class CmdMisc {
             float[] f=q.Peek(Mathf.RoundToInt(n));
             if(f==null) return sh.io.Error("キューが空です");
             PrintNVec(sh,f);
+            return 0;
         } else if(cmd=="clear"){
             q.Clear();
+            return 0;
         } else if(cmd=="list"){
             if(q.count>0){
                 float[][] fl=q.List();
@@ -435,22 +444,26 @@ public static class CmdMisc {
                     sh.io.Print("\n");
                 }
             }
+            return 0;
         } else if(cmd=="count"){
             sh.io.Print(q.count.ToString());
+            return 0;
         } else if(cmd=="average"){
             if(q.count==0) return sh.io.Error("キューが空です");
             PrintNVec(sh,q.Average());
+            return 0;
         } else if(cmd=="distance"){
             if(q.count==0) return sh.io.Error("キューが空です");
             sh.io.Print(sh.fmt.FVal(q.Distance()));
+            return 0;
         } else if(cmd=="bbox"){
             if(q.count==0) return sh.io.Error("キューが空です");
             float[][] bb=q.BBox();
             PrintNVec(sh,bb[0]);
             sh.io.Print(",");
             PrintNVec(sh,bb[1]);
+            return 0;
         } else return sh.io.Error("パラメータが不正です");
-        return 0;
     }
     private static void PrintNVec(ComShInterpreter sh,float[] f){
         sh.io.Print(sh.fmt.FVal(f[0]));

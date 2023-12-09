@@ -43,7 +43,7 @@ public partial class ComShInterpreter {
 	public int Parse(string line) {
         if(parser==null) parser=new ComShParser();
         int r=parser.Parse(line);
-        if(r<0) return io.Error(parser.error);
+        if(r<0) return io.Error(parser);
         if(r==0) return io.OK(); // 空行
         return 1;
     }
@@ -102,8 +102,7 @@ public partial class ComShInterpreter {
             var sbo=new SubShOutput();
             ComShInterpreter child = new ComShInterpreter(new Output(sbo.Output),env,func,ns);
             ret=child.Exec(tokens,f);
-            if(ret<0) ret=io.Error(child.io.errorMessage,ret);
-            else io.Print(sbo.GetSubShResult());
+            io.Print(sbo.GetSubShResult());
         }else{      // シェルスクリプト
             string fname=FullScriptNameSafe(tokens[0]);
             if(fname=="") ret=io.Error("コマンドが存在しません");
@@ -111,8 +110,7 @@ public partial class ComShInterpreter {
                 var sbo=new SubShOutput();
                 ComShInterpreter child = new ComShInterpreter(new Output(sbo.Output),env,func,ns);
                 ret=child.Exec(tokens,fname);
-                if(ret<0) ret=io.Error(child.io.errorMessage,ret);
-                else io.Print(sbo.GetSubShResult());
+                io.Print(sbo.GetSubShResult());
             }
         }
         io.PrintEnd(currentEoL);
@@ -238,7 +236,7 @@ public partial class ComShInterpreter {
                         if(sb!=null){ sb.Append(line); line=sb.ToString(); sb=null; }
                         var p=new ComShParser(lno);
                         int ret=p.Parse(line);
-                        if(ret<0) return sh.io.Error(p.error);
+                        if(ret<0) return sh.io.Error(p);
                         if(ret==0) continue;
                         // functionを探す
                         List<string> tokens=p.Next(null,null);
@@ -360,6 +358,7 @@ public partial class ComShInterpreter {
             pipedText=(peol=='|')?env.output:null;
             env.output="";
         }
+        public IO Print(char c){ printSb.Append(c); return this;}
         public IO Print(string str){ printSb.Append(str); return this;}
         public IO Print(char[] ca,int start,int len){ printSb.Append(ca,start,len); return this;}
         public IO PrintLn(string str){ printSb.Append(str).Append('\n'); return this;}
@@ -404,14 +403,31 @@ public partial class ComShInterpreter {
                 env["?"]=code.ToString(); // $?にだけエラーを残す
                 return 0;
             }
-            errorMessage=msg;
             exitStatus=code;
             env["?"]=code.ToString();
+            string name="",line="";
             ScriptStatus script=sh.runningScript;
-            if(script!=null && script.name!="" && sh.currentParser!=null && sh.currentParser.lineno>0){
-                int lno=sh.currentParser.lineno;
-                output($"{script.name}:{lno}行: {msg}",-1);
-            }else output(msg,-1);
+            if(script!=null && script.name!="") name=script.name+":";
+            if(sh.currentParser!=null && sh.currentParser.lineno>0) line=sh.currentParser.lineno.ToString()+"行: ";
+            errorMessage=$"{name}{line}{msg}";
+            output(errorMessage,code);
+            return code;
+        }
+        public int Error(ComShParser parser,int code=-1){
+            if(suppressError){
+                errorMessage="";
+                exitStatus=0;
+                env["?"]=code.ToString(); // $?にだけエラーを残す
+                return 0;
+            }
+            exitStatus=code;
+            env["?"]=code.ToString();
+            string name="",line="";
+            ScriptStatus script=sh.runningScript;
+            if(script!=null && script.name!="") name=script.name+":";
+            if(parser.lineno>0) line=parser.lineno.ToString()+"行: ";
+            errorMessage=$"{name}{line}{parser.error}";
+            output(errorMessage,code);
             return code;
         }
     }

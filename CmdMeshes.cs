@@ -16,12 +16,16 @@ public static class CmdMeshes {
         meshParamDic.Add("blend",new CmdParam<SingleMesh>(MeshParamBlend));
         meshParamDic.Add("prop",new CmdParam<SingleMesh>(MeshParamProp));
         meshParamDic.Add("reset",new CmdParam<SingleMesh>(MeshParamReset));
+        meshParamDic.Add("commit",new CmdParam<SingleMesh>(MeshParamCommit));
         meshParamDic.Add("texture",new CmdParam<SingleMesh>(MeshParamTexture));
         meshParamDic.Add("mipmap",new CmdParam<SingleMesh>(MeshParamMipmap));
         meshParamDic.Add("recalc",new CmdParam<SingleMesh>(MeshParamRecalc));
         meshParamDic.Add("rq",new CmdParam<SingleMesh>(MeshParamRQ));
         meshParamDic.Add("ss",new CmdParam<SingleMesh>(MeshParamSS));
         meshParamDic.Add("png",new CmdParam<SingleMesh>(MeshParamPNG));
+        meshParamDic.Add("texloop",new CmdParam<SingleMesh>(MeshParamTexLoop));
+        meshParamDic.Add("texloop.hsv",new CmdParam<SingleMesh>(MeshParamTexLoopHsv));
+        meshParamDic.Add("findverno",new CmdParam<SingleMesh>(MeshParamFindVerno));
     }
     private static Dictionary<string,CmdParam<SingleMesh>> meshParamDic=new Dictionary<string,CmdParam<SingleMesh>>();
 
@@ -54,15 +58,13 @@ public static class CmdMeshes {
         var mi=new MeshInfo(tr,tr0);
         if(mi.count<=cd.meshno) return sh.io.Error("指定されたメッシュが存在しません");
         if(args.Count==startpos){
-            sh.io.Print($"count:{mi.oid.originalMesh.GetIndices(cd.meshno).Length/3}");
-            if(mi.material.Count>cd.meshno) sh.io.Print($"\nmaterial:{mi.material[cd.meshno].name}\nshader:{mi.material[cd.meshno].shader.name}");
+            if(mi.material.Count>cd.meshno) sh.io.Print($"material:{mi.material[cd.meshno].name}\nshader:{mi.material[cd.meshno].shader.name}");
             return 0;
         }
         var mesh=new SingleMesh(cd.meshno,mi);
         int ret=ParamLoop(sh,mesh,meshParamDic,args,startpos);
         return ret;
     }
-
     private static int MeshParamFilter(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null || val=="") return 0;
         float[] sz=new float[6];
@@ -76,7 +78,7 @@ public static class CmdMeshes {
                 sz[1]-sz[4]/2,sz[1]+sz[4]/2,
                 sz[2]-sz[5]/2,sz[2]+sz[5]/2
             };
-        }else{
+        }else if(n==4){
             sm.filter=new float[]{ sz[0],sz[1],sz[2],sz[3]*sz[3] };   // x,y,z,r -> x,y,z,r^2
         }
         return 1;
@@ -94,7 +96,7 @@ public static class CmdMeshes {
                 sz[1]-sz[4]/2,sz[1]+sz[4]/2,
                 sz[2]-sz[5]/2,sz[2]+sz[5]/2
             };
-        }else{
+        }else if(n==4){
             sm.exclude=new float[]{ sz[0],sz[1],sz[2],sz[3]*sz[3] };   // x,y,z,r -> x,y,z,r^2
         }
         return 1;
@@ -102,31 +104,83 @@ public static class CmdMeshes {
     private static int MeshParamVerList(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null || val=="") return 0;
         string[] sa=val.Split(ParseUtil.comma);
-        var lst=new List<uint>();
+        var lst=new List<int>();
+        int vcnt=sm.mi.oid.originalMesh.FindMesh(sm.submeshno).vertices.Length;
         for(int i=0; i<sa.Length; i++){
-            if(!uint.TryParse(sa[i],out uint th)) return sh.io.Error("頂点番号の指定が不正です");
+            if(!int.TryParse(sa[i],out int th)||th>=vcnt) return sh.io.Error("頂点番号の指定が不正です");
             lst.Add(th);
         }
         sm.list=lst.ToArray();
         return 1;
     }
+    private static char[] verqueryletters={'c','l'};
+    private static int MeshParamFindVerno(ComShInterpreter sh,SingleMesh sm,string val){
+        float[] fa={-1,-1,-1};
+        if(ParseUtil.GetLetterFloat(val,verqueryletters,fa)<0) return sh.io.Error(ParseUtil.error);
+        int conn=(int)fa[0],loop=(int)fa[1];
+
+        if(loop>=0){
+            if(conn<0 && (sm.list==null || sm.list.Length==0))
+                return sh.io.Error("cまたはverlistを指定してください");
+        }
+
+        int[] tri=sm.mi.GetIndices3(sm.submeshno);
+
+        var cnd=new HashSet<int>();
+        var hs=new HashSet<int>();
+
+        if(sm.list!=null) for(int i=0; i<sm.list.Length; i++) hs.Add((int)sm.list[i]);
+        else for(int i=0; i<tri.Length; i++) hs.Add(tri[i]);
+
+        if(conn>=0){
+            foreach(int th in hs){
+                int cnt=0;
+                for(int ti=0; ti<tri.Length; ti+=3)
+                    if(tri[ti]==th||tri[ti+1]==th||tri[ti+2]==th) cnt++;
+                if(cnt==conn) cnd.Add(th);
+            }
+        }
+        if(loop>0){
+            if(conn<0) cnd=hs;
+            var all=new HashSet<int>(cnd);
+            var added=new HashSet<int>();
+            for(int l=0; l<loop; l++){
+                foreach(int th in cnd){
+                    for(int ti=0; ti<tri.Length; ti+=3)
+                        if(tri[ti]==th){ added.Add(tri[ti+1]); added.Add(tri[ti+2]);}
+                        else if(tri[ti+1]==th){ added.Add(tri[ti]); added.Add(tri[ti+2]);}
+                        else if(tri[ti+2]==th){ added.Add(tri[ti]); added.Add(tri[ti+1]);}
+                }
+                cnd.UnionWith(added);
+                cnd.ExceptWith(all);
+                all.UnionWith(added);
+            }
+            //hs=new HashSet<int>(cnd);
+        }
+        if(cnd.Count>0){
+            int[] rslt=new int[cnd.Count];
+            cnd.CopyTo(rslt);
+            Array.Sort(rslt);
+            sh.io.Print(rslt[0].ToString());
+            for(int i=1; i<rslt.Length; i++) sh.io.Print(',').Print(rslt[i].ToString());
+        }
+        return 0;
+    }
     private static int MeshParamVerLoop(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null || val=="") return 0;
 
-        uint[] idx;
+        int[] idx;
+        int[] tri=sm.mi.GetIndices3(sm.submeshno);
+        Mesh m=sm.mi.mesh.FindMesh(sm.submeshno);
+
         if(sm.list!=null){
             idx=sm.list;
         }else{
-            int[] tri=sm.mi.mesh.GetIndices(sm.submeshno);
-            if(tri==null) return sh.io.Error("メッシュ番号が不正です");
-            var hs=new HashSet<uint>();
-            for(int i=0; i<tri.Length; i++) hs.Add((uint)tri[i]);
-            idx=new uint[hs.Count];
+            var hs=new HashSet<int>();
+            for(int i=0; i<tri.Length; i++) hs.Add(tri[i]);
+            idx=new int[hs.Count];
             hs.CopyTo(idx,0);
         }
-
-        Mesh m=sm.mi.mesh.FindMesh(sm.submeshno);
-        if(m==null) return sh.io.Error("メッシュ番号が不正です");
 
         var psr=EvalParser(sh,Command.currentArgNo+1);
         if(psr==null) return -1;
@@ -147,33 +201,15 @@ public static class CmdMeshes {
             int th=(int)idx[i];
             var vt=vta[th];
 
-            if(sm.filter!=null){
-                if(sm.filter.Length==6){
-                    if( sm.filter[0]>vt.x || sm.filter[1]<vt.x 
-                     || sm.filter[2]>vt.y || sm.filter[3]<vt.y
-                     || sm.filter[4]>vt.z || sm.filter[5]<vt.z ) continue;
-                }else{
-                    float x=vt.x-sm.filter[0], y=vt.y-sm.filter[1], z=vt.z-sm.filter[2];
-                    if(sm.filter[3] < x*x+y*y+z*z ) continue;
-                }
-            }
-            if(sm.exclude!=null){
-                if(sm.filter.Length==6){
-                    if( sm.exclude[0]<=vt.x && sm.exclude[1]>=vt.x 
-                     && sm.exclude[2]<=vt.y && sm.exclude[3]>=vt.y
-                     && sm.exclude[4]<=vt.z && sm.exclude[5]>=vt.z) continue;
-                }else{
-                    float x=vt.x-sm.filter[0], y=vt.y-sm.filter[1], z=vt.z-sm.filter[2];
-                    if(sm.filter[3] >= x*x+y*y+z*z ) continue;
-                }
-            }
+            int inc=sm.ApplyFilter(vt);
+            if(inc!=1) continue;
 
             sh.env["_1"]=i.ToString();
             sh.env["_2"]=th.ToString();
 
             string svt="",snm="",suv="";
             svt=sh.fmt.FPos(vt);
-            if(th<nma.Length) snm=sh.fmt.FPos(nma[th]);// この辺は常にverticesと同数だと思うけど一応チェック
+            if(th<nma.Length) snm=sh.fmt.FPos(nma[th]);
             if(th<uva.Length) suv=sh.fmt.FXY(uva[th]);
 
             sh.env["_vertex"]=svt;
@@ -203,36 +239,60 @@ public static class CmdMeshes {
             }
             if(c!=null) changes.Add(c);
         }
+        if(ret<0){ sh.io.output=orig; return ret; }
 
         if(changed!=0){
             sm.mi.EditMesh();
             m=sm.mi.mesh.FindMesh(sm.submeshno);
         }
 
+        List<int> remove=new List<int>();
         foreach(var c in changes){
             if(c.vertex!=null){
-                float[] xyz=ParseUtil.Xyz(c.vertex);
-                if(xyz==null){ sh.io.Error($"頂点{c.idx} 座標の形式が不正です"); break; }
-                vta[c.idx]=new Vector3(xyz[0],xyz[1],xyz[2]);
+                if(c.vertex.Length==0) remove.Add(c.idx);
+                else{
+                    float[] xyz=ParseUtil.Xyz(c.vertex);
+                    if(xyz==null){ ret=sh.io.Error($"頂点{c.idx} 座標の形式が不正です"); break; }
+                    vta[c.idx]=new Vector3(xyz[0],xyz[1],xyz[2]);
+                }
             }
             if(c.normal!=null){
                 float[] xyz=ParseUtil.Xyz(c.normal);
-                if(xyz==null){ sh.io.Error($"頂点{c.idx}: 法線ベクトルの形式が不正です"); break;}
+                if(xyz==null){ ret=sh.io.Error($"頂点{c.idx}: 法線ベクトルの形式が不正です"); break;}
                 nma[c.idx]=new Vector3(xyz[0],xyz[1],xyz[2]);
             }
             if(c.uv!=null){
                 float[] xy=ParseUtil.Xy(c.uv);
-                if(xy==null){ sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
+                if(xy==null){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
                 uva[c.idx]=new Vector2(xy[0],xy[1]);
             }
         }
+        if(ret<0){ sh.io.output=orig; return ret; }
         if((changed&1)!=0) m.vertices=vta;
         if((changed&2)!=0) m.normals=nma;
         if((changed&4)!=0) m.uv=uva;
+        if(remove.Count>0) RemoveVertex(m,sm,remove);
 
         sh.io.output=orig;
         sh.io.Print(subout.GetSubShResult());
-        return ret;
+        return 1;
+    }
+    private static void RemoveVertex(Mesh m,SingleMesh sm,List<int> lst){
+        int[] tri=sm.mi.GetIndices3(sm.submeshno);
+        List<int> tri2=new List<int>(tri.Length);
+        for(int i=0; i<tri.Length; i+=3){
+            int j; for(j=0; j<lst.Count; j++) if(lst[j]==tri[i]||lst[j]==tri[i+1]||lst[j]==tri[i+2]) break;
+            if(j==lst.Count){ tri2.Add(tri[i]); tri2.Add(tri[i+1]); tri2.Add(tri[i+2]);}
+        }
+        int[] ia=tri2.ToArray();
+        sm.mi.mesh.UpdateIndices3(sm.submeshno,ia);
+        var mt=sm.mi.mesh.GetTopology(sm.submeshno);
+        if(mt==MeshTopology.Triangles)
+            sm.mi.mesh.SetIndices(ia,mt,sm.submeshno);
+        else if(mt==MeshTopology.Lines)
+            sm.mi.mesh.SetIndices(Indices2(ia),mt,sm.submeshno);
+        else if(mt==MeshTopology.Points)
+            sm.mi.mesh.SetIndices(Indices1(ia),mt,sm.submeshno);
     }
     private static int MeshParamShader(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null){
@@ -247,7 +307,20 @@ public static class CmdMeshes {
     }
     private static int MeshParamProp(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null) return 0;
-        string[] kv=ParseUtil.LeftAndRight(val,'=');
+        string[] kv;
+        if(val.IndexOf('=')<0){
+            if(!sm.mi.material[sm.submeshno].HasProperty(val))
+                return sh.io.Error("指定されたプロパティは現在のシェーダでは無効です");
+            if(val.EndsWith("Color",StringComparison.Ordinal)){
+                var c=sm.mi.material[sm.submeshno].GetColor(val);
+                sh.io.Print(sh.fmt.RGBA(c));
+            }else{
+                var f=sm.mi.material[sm.submeshno].GetFloat(val);
+                sh.io.Print(sh.fmt.FVal(f));
+            }
+            return 0;
+        }
+        kv=ParseUtil.LeftAndRight(val,'=');
         string err;
         sm.mi.EditMaterial();
         if(kv[1]=="on"){
@@ -364,44 +437,58 @@ public static class CmdMeshes {
         }else if(val=="1"){
             mi.EditMesh();
             if(mi.mesh.GetTopology(n)==MeshTopology.Points) return 1;
-            int[] ia=mi.oid.originalMesh.GetIndices(n);
-            var hs=new HashSet<int>();
-            for(int i=0; i<ia.Length; i++) hs.Add(ia[i]);
-            int[] ia2=new int[hs.Count];
-            hs.CopyTo(ia2);
-            mi.mesh.SetIndices(ia2,MeshTopology.Points,n);
+            mi.mesh.SetIndices(Indices1(mi.mesh.indices3[n]),MeshTopology.Points,n);
         }else if(val=="2"){
             mi.EditMesh();
             if(mi.mesh.GetTopology(n)==MeshTopology.Lines) return 1;
-
             MeshTopology mt=mi.oid.originalMesh.GetTopology(n);
             if(mt!=MeshTopology.Triangles) return sh.io.Error($"未対応の形式です(topology={mt.ToString()})");
-            int[] ia=mi.oid.originalMesh.GetIndices(n);
-
-            var hs=new HashSet<uint>();
-            for(int i=0; i<ia.Length; i+=3){
-                hs.Add((ia[i]<ia[i+1])?(uint)(ia[i]*65536+ia[i+1]):(uint)(ia[i+1]*65536+ia[i]));
-                hs.Add((ia[i+1]<ia[i+2])?(uint)(ia[i+1]*65536+ia[i+2]):(uint)(ia[i+2]*65536+ia[i+1]));
-                hs.Add((ia[i+2]<ia[i])?(uint)(ia[i+2]*65536+ia[i]):(uint)(ia[i]*65536+ia[i+2]));
-            }
-            int[] ia2=new int[hs.Count*2];
-            int cnt=0;
-            foreach(var u in hs){ ia2[cnt++]=(int)(u>>16); ia2[cnt++]=(int)(u&0xffff); }
-
-            mi.mesh.SetIndices(ia2,MeshTopology.Lines,n);
+            mi.mesh.SetIndices(Indices2(mi.mesh.indices3[n]),MeshTopology.Lines,n);
         }else if(val=="3"){
             if(mi.mesh.GetTopology(n)==MeshTopology.Triangles) return 1;
-            mi.mesh.SetIndices(mi.oid.originalMesh.GetIndices(n),MeshTopology.Triangles,n);
+            mi.mesh.RestoreIndices3(n);
         }
-        return 0;
+        return 1;
+    }
+    public static int[] Indices1(int[] ia){
+        var hs=new HashSet<int>();
+        for(int i=0; i<ia.Length; i++) hs.Add(ia[i]);
+        int[] ia2=new int[hs.Count];
+        hs.CopyTo(ia2);
+        return ia2;
+    }
+    public static int[] Indices2(int[] ia){
+        var hs=new HashSet<uint>();
+        for(int i=0; i<ia.Length; i+=3){
+            hs.Add((ia[i]<ia[i+1])?(uint)(ia[i]*65536+ia[i+1]):(uint)(ia[i+1]*65536+ia[i]));
+            hs.Add((ia[i+1]<ia[i+2])?(uint)(ia[i+1]*65536+ia[i+2]):(uint)(ia[i+2]*65536+ia[i+1]));
+            hs.Add((ia[i+2]<ia[i])?(uint)(ia[i+2]*65536+ia[i]):(uint)(ia[i]*65536+ia[i+2]));
+        }
+        int[] ia2=new int[hs.Count*2];
+        int cnt=0;
+        foreach(var u in hs){ ia2[cnt++]=(int)(u>>16); ia2[cnt++]=(int)(u&0xffff); }
+        return ia2;
     }
     private static int MeshParamReset(ComShInterpreter sh,SingleMesh sm,string val){
-        int mode=0;
+        int mode=2;
         if(val!=null && val!=""
             && (!int.TryParse(val,out mode) || mode<0 || mode>2)) return sh.io.Error("0～2で指定してください");
         if(mode!=1) sm.mi.RestoreMesh(sm.submeshno);
         if(mode!=0) sm.mi.RestoreMaterial(sm.submeshno);
-        return 0;
+        Resources.UnloadUnusedAssets();
+        System.GC.Collect();
+        return (val==null)?0:1;
+    }
+    private static int MeshParamCommit(ComShInterpreter sh,SingleMesh sm,string val){
+        int mode=2;
+        if(val!=null && val!=""
+            && (!int.TryParse(val,out mode) || mode<0 || mode>2)) return sh.io.Error("0～2で指定してください");
+
+        if(mode!=1) sm.mi.oid.CommitMesh(sm.submeshno);
+        if(mode!=0) sm.mi.oid.CommitMaterial(sm.submeshno);
+        Resources.UnloadUnusedAssets();
+        System.GC.Collect();
+        return (val==null)?0:1;
     }
     private static int MeshParamRecalc(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null || val=="") return 0;
@@ -412,6 +499,7 @@ public static class CmdMeshes {
             else if(val[i]=='b'||val[i]=='B') b=true;
             else return sh.io.Error("再計算対象はn,t,bいずれかで指定してください");
         }
+        sm.mi.EditMesh();
         Mesh m=sm.mi.mesh.FindMesh(sm.submeshno);
         if(n) m.RecalculateNormals();
         if(t) m.RecalculateTangents();
@@ -421,10 +509,27 @@ public static class CmdMeshes {
 
     private static HashSet<Texture> texiid=new HashSet<Texture>();
     private static int MeshParamTexture(ComShInterpreter sh,SingleMesh sm,string val){
-        if(val==null || val=="") return 0;
+        Material mate;
+        if(val==null){
+            mate=sm.mi.material[sm.submeshno];
+            PrintTextureInfo(sh,mate,"_MainTex");
+            PrintTextureInfo(sh,mate,"_ShadowTex");
+            PrintTextureInfo(sh,mate,"_ToonRamp");
+            PrintTextureInfo(sh,mate,"_ShadowRateToon");
+            PrintTextureInfo(sh,mate,"_HiTex");
+            PrintTextureInfo(sh,mate,"_LightMap");
+            PrintTextureInfo(sh,mate,"_OutlineTex");
+            PrintTextureInfo(sh,mate,"_OutlineToonRamp");
+            PrintTextureInfo(sh,mate,"_OutlineWidthTex");
+            PrintTextureInfo(sh,mate,"_NormalMap");
+            PrintTextureInfo(sh,mate,"_BumpMap");
+            PrintTextureInfo(sh,mate,"_ParallaxMap");
+            return 0;
+        }
+        if(val=="") return 0;
 
         sm.mi.EditMaterial();
-        Material mate=sm.mi.material[sm.submeshno];
+        mate=sm.mi.material[sm.submeshno];
 
         string prop="_MainTex",right="";
         string[] lr=ParseUtil.LeftAndRight(val,'=');
@@ -434,6 +539,12 @@ public static class CmdMeshes {
         string msg=SetTexProp(mate,prop,right);
         if(msg!="") return sh.io.Error(msg);
         return 1;
+    }
+    private static void PrintTextureInfo(ComShInterpreter sh,Material mate,string prop){
+        if(!mate.HasProperty(prop)) return;
+        Texture tx=mate.GetTexture(prop);
+        if(tx==null) return;
+        sh.io.PrintLn($"{prop}:{tx.name}{sh.ofs}{tx.width}x{tx.height}");
     }
     private static string SetTex(string prop,string name,int mode,int wrap,Material mate){
         Camera cam;
@@ -526,10 +637,128 @@ public static class CmdMeshes {
         }
         return SetTex(key,right,mode,wrap,m);
     }
+    private static int MeshParamTexLoop(ComShInterpreter sh,SingleMesh sm,string val){ return MeshParamTexLoopSub(sh,sm,val,0); }
+    private static int MeshParamTexLoopHsv(ComShInterpreter sh,SingleMesh sm,string val){ return MeshParamTexLoopSub(sh,sm,val,1); }
+    private static int MeshParamTexLoopSub(ComShInterpreter sh,SingleMesh sm,string val,int hsvq){
+        if(val==null || val=="") return 0;
+
+        string[] lr=ParseUtil.LeftAndRight(val,':');
+        string prop=lr[0],cmd=lr[1];
+        if(cmd==""){cmd=prop; prop="_MainTex";}
+
+        sm.mi.EditMaterial();
+        Material mate=sm.mi.material[sm.submeshno];
+        if(!mate.HasProperty(prop)) return sh.io.Error("プロパティが無効です");
+        Texture tx=mate.GetTexture(prop);
+        if(tx==null) return sh.io.Error("テクスチャがありません");
+
+        var psr=EvalParser(sh,Command.currentArgNo+1,true,-1,cmd);
+        if(psr==null) return -1;
+
+        ComShInterpreter.Output orig=sh.io.output;
+        var sbo=new ComShInterpreter.SubShOutput();
+        int ret=0;
+        sh.io.output=new ComShInterpreter.Output(sbo.Output);
+        ret=PixelLoop(sh,psr,mate,prop,tx,hsvq);
+        sh.io.output=orig;
+        if(ret>=0) sh.io.Print(sbo.GetSubShResult());
+        return 1;
+    }
+    private static int PixelLoop(ComShInterpreter sh,ComShParser psr,Material mate,string prop,Texture tx,int hsvq){
+        int ret=0;
+        Texture2D t2=TextureUtil.CloneBitmap(tx);
+        int width=t2.width,height=t2.height;
+        Color[] ca=t2.GetPixels();
+        bool changed=false;
+        if(hsvq==0) for(int y=0; y<height; y++) for(int x=0; x<width; x++){
+            int i=y*width+x;
+            sh.env["_1"]=sh.fmt.FVal((float)x/width);
+            sh.env["_2"]=sh.fmt.FVal((float)y/height);
+            sh.env["_3"]=width.ToString();
+            sh.env["_4"]=height.ToString();
+            sh.env["_r"]=sh.fmt.F0to1(ca[i].r);
+            sh.env["_g"]=sh.fmt.F0to1(ca[i].g);
+            sh.env["_b"]=sh.fmt.F0to1(ca[i].b);
+            sh.env["_a"]=sh.fmt.F0to1(ca[i].a);
+            psr.Reset();
+            ret=sh.InterpretParser(psr);
+            if(ret<0 || sh.exitq){
+                ret=sh.io.exitStatus; sh.exitq=false;
+                UnityEngine.Object.Destroy(t2);
+                return ret;
+            }
+            Color c2;
+            if(!float.TryParse(sh.env["_r"],out c2.r)
+            ||!float.TryParse(sh.env["_g"],out c2.g)
+            ||!float.TryParse(sh.env["_b"],out c2.b)
+            ||!float.TryParse(sh.env["_a"],out c2.a)){
+                UnityEngine.Object.Destroy(t2);
+                return sh.io.Error("色の指定が不正です");
+            }
+            c2.r=Mathf.Clamp01(c2.r);
+            c2.g=Mathf.Clamp01(c2.g);
+            c2.b=Mathf.Clamp01(c2.b);
+            c2.a=Mathf.Clamp01(c2.a);
+            if(!ColorEq(c2,ca[i])){ ca[i]=c2; changed=true; }
+        }else for(int y=0; y<height; y++) for(int x=0; x<width; x++){
+            int i=y*width+x;
+            float h,s,v,a=ca[i].a;
+            Color.RGBToHSV(ca[i],out h,out s,out v);
+            sh.env["_1"]=sh.fmt.FVal((float)x/width);
+            sh.env["_2"]=sh.fmt.FVal((float)y/height);
+            sh.env["_3"]=width.ToString();
+            sh.env["_4"]=height.ToString();
+            sh.env["_h"]=sh.fmt.F0to1(h);
+            sh.env["_s"]=sh.fmt.F0to1(s);
+            sh.env["_v"]=sh.fmt.F0to1(v);
+            sh.env["_a"]=sh.fmt.F0to1(a);
+            psr.Reset();
+            ret=sh.InterpretParser(psr);
+            if(ret<0 || sh.exitq){
+                ret=sh.io.exitStatus; sh.exitq=false;
+                UnityEngine.Object.Destroy(t2);
+                return ret;
+            }
+            if(!float.TryParse(sh.env["_h"],out h)
+            ||!float.TryParse(sh.env["_s"],out s)
+            ||!float.TryParse(sh.env["_v"],out v)
+            ||!float.TryParse(sh.env["_a"],out a)){
+                UnityEngine.Object.Destroy(t2);
+                return sh.io.Error("色の指定が不正です");
+            }
+            h=Mathf.Clamp01(h);
+            s=Mathf.Clamp01(s);
+            v=Mathf.Clamp01(v);
+            a=Mathf.Clamp01(a);
+            Color c2=Color.HSVToRGB(h,s,v);
+            c2.a=a;
+            if(!ColorEq(c2,ca[i])){ ca[i]=c2; changed=true; }
+        }
+        if(changed){
+            t2.SetPixels(ca);
+            t2.Apply();
+            texiid.Add(t2);
+            var old=mate.GetTexture(prop);
+            if(old!=null && texiid.Remove(old)) UnityEngine.Object.Destroy(old);
+            mate.SetTexture(prop,t2);
+        }
+        return ret;
+    }
+    private static bool ColorEq(Color c1,Color c2){
+        float t=c1.r-c2.r;
+        if(t<-0.003||0.003<t) return false; // 1/256=0.039
+        t=c1.g-c2.g;
+        if(t<-0.003||0.003<t) return false;
+        t=c1.b-c2.b;
+        if(t<-0.003||0.003<t) return false;
+        t=c1.a-c2.a;
+        if(t<-0.003||0.003<t) return false;
+        return true;
+    }
     private static int MeshParamMipmap(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null || val==""){return 0;}
         sm.mi.EditMaterial();
-        Material mate0=sm.mi.oid.originalMate[sm.submeshno];
+        Material mate0=(sm.submeshno<sm.mi.oid.originalMate.Count)?sm.mi.oid.originalMate[sm.submeshno]:sm.mi.oid.originalMate[sm.submeshno];
         Material mate=sm.mi.material[sm.submeshno];
         Texture tx;
         float mmb;
@@ -579,7 +808,10 @@ public static class CmdMeshes {
         if(sa[1]==""){ fname=sa[0]; prop="_MainTex";} else { fname=sa[1]; prop=sa[0];}
         if(fname=="" || fname.IndexOf('\\')>=0 || UTIL.CheckFileName(fname)<0) return sh.io.Error("ファイル名が不正です");
         fname=ComShInterpreter.homeDir+@"ScreenShot\\"+UTIL.Suffix(fname,".png");
-        return MeshParamPNGSub(sh,sm,fname,prop);
+        int ret=MeshParamPNGSub(sh,sm,fname,prop);
+        Resources.UnloadUnusedAssets();
+        System.GC.Collect();
+        return ret;
     }
     private static int MeshParamPNG(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null) return 0;
@@ -597,7 +829,10 @@ public static class CmdMeshes {
             }
         }
         if(file=="") return sh.io.Error("ファイル名が不正です");
-        return MeshParamPNGSub(sh,sm,file,prop);
+        int ret=MeshParamPNGSub(sh,sm,file,prop);
+        Resources.UnloadUnusedAssets();
+        System.GC.Collect();
+        return ret;
     }
     private static int MeshParamPNGSub(ComShInterpreter sh,SingleMesh sm,string fname,string prop){
         var tex=sm.mi.material[sm.submeshno].GetTexture(prop);
@@ -634,7 +869,30 @@ public static class CmdMeshes {
         public SingleMesh(int no,MeshInfo mi){ this.submeshno=no; this.mi=mi; }
         public float[] filter=null;
         public float[] exclude=null;
-        public uint[] list=null;
+        public int[] list=null;
+        public int ApplyFilter(Vector3 vt){
+            if(filter!=null){
+                if(filter.Length==6){
+                    if( filter[0]>vt.x || filter[1]<vt.x 
+                     || filter[2]>vt.y || filter[3]<vt.y
+                     || filter[4]>vt.z || filter[5]<vt.z ) return 0;
+                }else if(filter.Length==4){
+                    float x=vt.x-filter[0], y=vt.y-filter[1], z=vt.z-filter[2];
+                    if(filter[3] < x*x+y*y+z*z ) return 0;
+                }
+            }
+            if(exclude!=null){
+                if(exclude.Length==6){
+                    if( exclude[0]<=vt.x && exclude[1]>=vt.x 
+                     && exclude[2]<=vt.y && exclude[3]>=vt.y
+                     && exclude[4]<=vt.z && exclude[5]>=vt.z) return 0;
+                }else if(exclude.Length==4){
+                    float x=vt.x-exclude[0], y=vt.y-exclude[1], z=vt.z-exclude[2];
+                    if(exclude[3] >= x*x+y*y+z*z ) return 0;
+                }
+            }
+            return 1;
+        }
     }
     public class MeshInfo {
         public int count=0;
@@ -689,7 +947,7 @@ public static class CmdMeshes {
                 MeshFilter mf=ra[midx].transform.GetComponent<MeshFilter>();
                 if(mf==null) return -1;
                 newMesh=UnityEngine.Object.Instantiate(oid.originalMesh[midx].mesh);
-                mf.mesh=newMesh;
+                mf.sharedMesh=newMesh;
             }
             var e=oid.workMesh[midx];
             UnityEngine.Object.Destroy(e.mesh);
@@ -716,11 +974,16 @@ public static class CmdMeshes {
             UnityEngine.Object.Destroy(oid.workMate[submeshno]);
             oid.workMate[submeshno]=newMaterial;
 
-            var ma=ra[midx].materials;
+            var ma=ra[midx].sharedMaterials;
             ma[submeshno-oid.originalMesh[midx].no]=newMaterial;
-            ra[midx].materials=ma;
+            ra[midx].sharedMaterials=ma;
 
             return 0;
+        }
+        public int[] GetIndices3(int submeshno){
+            if(this.oid.workMesh==null || this.oid.workMesh.indices3==null)
+                return this.oid.originalMesh.GetIndices(submeshno);
+            return this.oid.workMesh.indices3[submeshno];
         }
     }
 }

@@ -550,7 +550,7 @@ namespace COM3D2.ComSh.Plugin {
         private ComShHistory history=new ComShHistory();
 
 		private ComShInterpreter cui;
-        private enum OutputType { STDOUT,LOG,NONE };
+        public enum OutputType { STDOUT,LOG,NONE };
         private OutputType output=OutputType.NONE;
 		public ComShInteractive() {
             output=OutputType.NONE;
@@ -580,10 +580,6 @@ try{
 }catch(Exception e){ Debug.Log(e.ToString()); return -1; }
             return cui.io.exitStatus;
         }
-        public void Stdout(string msg,int code=0){
-            if(output==OutputType.STDOUT) ComShWM.terminal.AddLog(msg);
-            else if(output==OutputType.LOG) Debug.Log(msg.TrimEnd(ParseUtil.crlf));
-        }
         public string HistoryBack(string dflt){
             string t=history.Back();
             return (t.Length>0)?t:dflt;
@@ -592,8 +588,11 @@ try{
             string t=history.Forward();
             return (t.Length>0)?t:dflt;
         }
-        public void HistoryRewind(){
-            history.Rewind();
+        public void HistoryRewind(){ history.Rewind(); }
+        public void Stdout(string msg,int code=0){ StdOut(msg,output); }
+        public static void StdOut(string msg,OutputType output){
+            if(output==OutputType.STDOUT) ComShWM.terminal.AddLog(msg);
+            else if(output==OutputType.LOG) Debug.Log(msg.TrimEnd(ParseUtil.crlf));
         }
 	}
 }

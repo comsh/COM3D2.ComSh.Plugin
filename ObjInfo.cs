@@ -13,8 +13,12 @@ public class ObjInfo : MonoBehaviour{
     public void OnDestroy(){
         ObjUtil.objDic.Remove(name);
         if(this.data!=null){
+            if(this.data.originalMesh!=null) foreach(var m in this.data.originalMesh)
+                if(m.own) UnityEngine.Object.Destroy(m.mesh);
             if(this.data.workMesh!=null) foreach(var m in this.data.workMesh) UnityEngine.Object.Destroy(m.mesh);
-            if(this.data.workMate!=null) foreach(var mate in this.data.workMate) UnityEngine.Object.Destroy(mate);
+            if (this.data.originalMate != null) for (int i = 0; i < this.data.originalMate.Count; i++)
+                if(this.data.originalMateOwn[i]) UnityEngine.Object.Destroy(this.data.originalMate[i]);
+            if (this.data.workMate!=null) foreach(var mate in this.data.workMate) UnityEngine.Object.Destroy(mate);
         }
     }
     public static ObjInfo AddObjInfo(Transform tr,string src,List<TMorph> morph=null){
@@ -137,12 +141,14 @@ public class ObjInfoData {
     public MeshList originalMesh;
     public MeshList workMesh;
     public List<Material> originalMate;
+    public List<bool> originalMateOwn;
     public List<Material> workMate;
 
     public void Backup(){
         if(originalMesh!=null) return;
         originalMesh=new MeshList();
         originalMate=new List<Material>();
+        originalMateOwn=new List<bool>();
         int meshno = 0;
         foreach(var b in bones){
             var r=b.GetComponent<Renderer>();
@@ -152,7 +158,7 @@ public class ObjInfoData {
                 var smr = (SkinnedMeshRenderer)r;
                 if(smr.sharedMesh==null) continue;
 
-                originalMesh.Add(new MeshList.Entry { no=meshno,submeshcount=smr.sharedMesh.subMeshCount,mesh=smr.sharedMesh });
+                originalMesh.Add(new MeshList.Entry { no=meshno,submeshcount=smr.sharedMesh.subMeshCount,mesh=smr.sharedMesh,rend=r,own=false });
                 int n=smr.sharedMesh.subMeshCount;
                 meshno+=n;
 
@@ -165,7 +171,7 @@ public class ObjInfoData {
                 if(mf==null) continue;
                 if(mf.sharedMesh==null) continue;
 
-                originalMesh.Add(new MeshList.Entry { no=meshno,submeshcount=mf.sharedMesh.subMeshCount,mesh=mf.sharedMesh });
+                originalMesh.Add(new MeshList.Entry { no=meshno,submeshcount=mf.sharedMesh.subMeshCount,mesh=mf.sharedMesh,rend=r,own=false });
                 int n=mf.sharedMesh.subMeshCount;
                 meshno+=n;
 
@@ -175,6 +181,7 @@ public class ObjInfoData {
                 for(; j<n; j++) originalMate.Add(new Material(Shader.Find("Standard"))); // 一応
             }
         }
+        for(int i=0; i<originalMate.Count; i++) originalMateOwn.Add(false);
         originalMesh.submeshCount=meshno;
         return;
     }
@@ -191,18 +198,49 @@ public class ObjInfoData {
                 Mesh oldmesh=smr.sharedMesh;
                 Mesh newmesh=UnityEngine.Object.Instantiate(oldmesh);
                 smr.sharedMesh=newmesh;
-                workMesh.Add(new MeshList.Entry { no=meshno,submeshcount=smr.sharedMesh.subMeshCount,mesh=newmesh });
+                workMesh.Add(new MeshList.Entry { no=meshno,submeshcount=smr.sharedMesh.subMeshCount,mesh=newmesh,rend=r,own=true });
                 meshno +=smr.sharedMesh.subMeshCount;
                 UpdateMorph(r.transform,oldmesh,newmesh);
             }else{
                 MeshFilter mf=r.transform.GetComponent<MeshFilter>();
                 if(mf==null) continue;
-                workMesh.Add(new MeshList.Entry { no=meshno,submeshcount=mf.sharedMesh.subMeshCount,mesh=mf.mesh });
+                Mesh oldmesh=mf.sharedMesh;
+                Mesh newmesh=UnityEngine.Object.Instantiate(oldmesh);
+                mf.sharedMesh=newmesh;
+                workMesh.Add(new MeshList.Entry { no=meshno,submeshcount=mf.sharedMesh.subMeshCount,mesh=newmesh,rend=r,own=true });
                 meshno += mf.sharedMesh.subMeshCount;
             }
         }
         workMesh.submeshCount=meshno;
+        workMesh.BackupIndices3();
         return;
+    }
+    public void OwnMesh(){
+        for(int i=0; i<originalMesh.Count; i++){
+            var ment=originalMesh[i];
+            ment.own=true;
+            originalMesh[i]=ment;
+        }
+    }
+    public void OwnMesh(int submeshno){
+        int n=originalMesh.FindMeshIdx(submeshno);
+        var ment=originalMesh[n];
+        ment.own=true;
+        originalMesh[n]=ment;
+    }
+    public void CommitMesh(int submeshno){
+        if(workMesh==null) return;
+        int n=workMesh.FindMeshIdx(submeshno);
+        if(n<0) return;
+        var old=originalMesh[n];
+        if(!object.ReferenceEquals(old.mesh,workMesh[n].mesh)){
+            UpdateMorph(old.rend.transform,old.mesh,workMesh[n].mesh);
+            if(old.own) UnityEngine.Object.Destroy(old.mesh);
+        }
+        var me=new MeshList.Entry(workMesh[n]);
+        me.mesh=UnityEngine.Object.Instantiate(me.mesh);
+        originalMesh[n]=me;
+        originalMesh.SetIndices(workMesh.indices3[submeshno],MeshTopology.Triangles,submeshno);
     }
     private static FieldInfo meshField=null;
     public void UpdateMorph(Transform tr,Mesh oldmesh,Mesh newmesh){
@@ -231,19 +269,31 @@ public class ObjInfoData {
                 var smr = (SkinnedMeshRenderer)r;
                 if(smr==null) continue;
                 int n=smr.sharedMesh.subMeshCount;
-                Material[] mate=smr.materials;
+                Material[] mate=smr.sharedMaterials;
                 n=(n>mate.Length)?mate.Length:n;    // 1サブメッシュ1マテリアルのみ対応
-                for(int j=0; j<n; j++) workMate.Add(mate[j]);
+                for(int j=0; j<n; j++) workMate.Add(UnityEngine.Object.Instantiate(mate[j]));
+                smr.sharedMaterials=workMate.ToArray();
             }else{
                 MeshFilter mf=r.transform.GetComponent<MeshFilter>();
                 if(mf==null) continue;
                 int n=mf.sharedMesh.subMeshCount;
-                Material[] mate=r.materials;
+                Material[] mate=r.sharedMaterials;
                 n=(n>mate.Length)?mate.Length:n;    // 1サブメッシュ1マテリアルのみ対応
-                for(int j=0; j<n; j++) workMate.Add(mate[j]);
+                for(int j=0; j<n; j++) workMate.Add(UnityEngine.Object.Instantiate(mate[j]));
+                r.sharedMaterials=workMate.ToArray();
             }
         }
         return;
+    }
+    public void OwnMaterial(){
+        for(int i=0; i<originalMate.Count; i++) originalMateOwn[i]=true;
+    }
+    public void OwnMaterial(int submeshno){ originalMateOwn[submeshno]=true; }
+    public void CommitMaterial(int submeshno){
+        if(workMate==null) return;
+        if(originalMateOwn[submeshno]) foreach(var m in originalMate) UnityEngine.Object.Destroy(m);
+        originalMate[submeshno]=UnityEngine.Object.Instantiate(workMate[submeshno]);
+        originalMateOwn[submeshno]=true;
     }
 
     // メッシュのリスト。管理用につきメッシュ単位
@@ -252,15 +302,28 @@ public class ObjInfoData {
             public int no;              // オブジェクト全体での通し番号。このメッシュの0番サブメッシュがオブジェクト全体で何番目か
             public int submeshcount;    // このメッシュ内のサブメッシュ数
             public Mesh mesh;           // メッシュ本体。triangleで複数のサブメッシュに分かれている
+            public Renderer rend;
+            public bool own;
+            public Entry(Entry e){no=e.no; submeshcount=e.submeshcount;mesh=e.mesh;rend=e.rend;own=e.own;}
         }
         public int submeshCount=0;
+        public List<int[]> indices3;
         private static int[] triangle_empty=new int[0];
-        public MeshList() {}
-        public MeshList(int cap):base(cap) {}
+        public MeshList(){}
+        public MeshList(int cap):base(cap){}
+        public void BackupIndices3(){
+            if(indices3==null) indices3=new List<int[]>(this.submeshCount);
+            else indices3.Clear();
+            foreach(Entry e in this) for(int i=0; i<e.mesh.subMeshCount; i++) indices3.Add(e.mesh.GetIndices(i));
+        }
+        public void UpdateIndices3(int submeshno,int[] arr){ indices3[submeshno]=arr; }
+        public void UpdateIndices3(int submeshno){ indices3[submeshno]=this.GetIndices(submeshno); }
+        public void RestoreIndices3(int submeshno){
+            this.SetIndices(indices3[submeshno],MeshTopology.Triangles,submeshno);
+        }
         public int FindMeshIdx(int meshno){ // オブジェクト全体での通し番号で単一のサブメッシュを探す
             int i;
             for(i=0; i<this.Count; i++) if(meshno<this[i].no) break;
-            //if(i==0) return -1;
             return i-1; // 返すのはリストの添え字でしかない
         }
         public Mesh FindMesh(int submeshno){
@@ -272,6 +335,7 @@ public class ObjInfoData {
             int n=FindMeshIdx(no);
             if(n<0) return;
             this[n].mesh.SetIndices(ia,mt,no-this[n].no);
+            if(mt==MeshTopology.Triangles) UpdateIndices3(no,ia);
         }
         public int[] GetIndices(int no){
             int n=FindMeshIdx(no);

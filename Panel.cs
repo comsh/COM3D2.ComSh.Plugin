@@ -223,7 +223,7 @@ public class ComShPanel {
         var rb=new Rect(x+w,ty,h,h);
         const int maxh=200;
         var ci=new ComboItems(items,dlmt);
-        shell.env[name]=v0;
+        string prev=shell.env[name]=v0;
         if(p==null){
             ComboWin.OnSelect onselect=(string val)=>{ shell.env[name]=val; };
             draw+=()=>{
@@ -265,11 +265,15 @@ public class ComShPanel {
         var r=new Rect(x,ty,w,h);
         var rb=new Rect(x+w,ty,h,h);
         const int maxh=200;
-        shell.env[name]=v0;
+        string prev=shell.env[name]=v0;
         var ci=MakeItems(shell,lst,dlmt);
         if(p==null){
             ComboWin.OnSelect onselect=(string val)=>{ shell.env[name]=val; };
             draw+=()=>{
+                if(prev!=shell.env[name]){        // 変数が他所で書き換えられていたら
+                    ci=MakeItems(shell,lst,dlmt); // 選択肢最新化
+                    prev=shell.env[name];
+                }
                 string txt=ci.GetLabel(shell.env[name]);
                 string t=GUI.TextField(r,txt,style.text);
                 if(t!=txt) shell.env[name]=ci.GetValue(t);
@@ -288,6 +292,7 @@ public class ComShPanel {
                 shell.exitq=false;
             };
             draw+=()=>{
+                if(prev!=shell.env[name]){ ci=MakeItems(shell,lst,dlmt); prev=shell.env[name]; }
                 string txt=ci.GetLabel(shell.env[name]);
                 string t=GUI.TextField(r,txt,style.text);
                 if(t!=txt){
