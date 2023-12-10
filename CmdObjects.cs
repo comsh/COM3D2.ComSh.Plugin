@@ -524,7 +524,7 @@ public static class CmdObjects {
             string err;
             if(p=="_MainTex"){
                 mate=op.EditMaterial();
-                if((err=CmdMeshes.SetTexProp(mate,p,v))!="") return sh.io.Error(err);
+                if((err=CmdMeshes.SetTexProp(mate,p,v,null))!="") return sh.io.Error(err);
             }else if(v=="on"){
                 mate=op.EditMaterial();
                 mate.EnableKeyword(p);
@@ -697,7 +697,7 @@ public static class CmdObjects {
             string err;
             if(p=="_MainTex"){
                 mate=par.EditMaterial();
-                if((err=CmdMeshes.SetTexProp(mate,p,v))!="") return sh.io.Error(err);
+                if((err=CmdMeshes.SetTexProp(mate,p,v,null))!="") return sh.io.Error(err);
             }else if(v=="on"){
                 mate=par.EditMaterial();
                 mate.EnableKeyword(p);

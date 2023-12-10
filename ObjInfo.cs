@@ -239,8 +239,8 @@ public class ObjInfoData {
         }
         var me=new MeshList.Entry(workMesh[n]);
         me.mesh=UnityEngine.Object.Instantiate(me.mesh);
+        me.mesh.SetIndices(workMesh.indices3[submeshno],MeshTopology.Triangles,submeshno-me.no);
         originalMesh[n]=me;
-        originalMesh.SetIndices(workMesh.indices3[submeshno],MeshTopology.Triangles,submeshno);
     }
     private static FieldInfo meshField=null;
     public void UpdateMorph(Transform tr,Mesh oldmesh,Mesh newmesh){
@@ -291,7 +291,7 @@ public class ObjInfoData {
     public void OwnMaterial(int submeshno){ originalMateOwn[submeshno]=true; }
     public void CommitMaterial(int submeshno){
         if(workMate==null) return;
-        if(originalMateOwn[submeshno]) foreach(var m in originalMate) UnityEngine.Object.Destroy(m);
+        if(originalMateOwn[submeshno]) UnityEngine.Object.Destroy(originalMate[submeshno]);
         originalMate[submeshno]=UnityEngine.Object.Instantiate(workMate[submeshno]);
         originalMateOwn[submeshno]=true;
     }
@@ -335,7 +335,7 @@ public class ObjInfoData {
             int n=FindMeshIdx(no);
             if(n<0) return;
             this[n].mesh.SetIndices(ia,mt,no-this[n].no);
-            if(mt==MeshTopology.Triangles) UpdateIndices3(no,ia);
+            if(this[n].own && mt==MeshTopology.Triangles) UpdateIndices3(no,ia);
         }
         public int[] GetIndices(int no){
             int n=FindMeshIdx(no);

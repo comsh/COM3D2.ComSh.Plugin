@@ -536,7 +536,7 @@ public static class CmdMeshes {
         if(lr[1]=="") right=lr[0]; else { prop=lr[0]; right=lr[1]; }
         if(!mate.HasProperty(prop)) return sh.io.Error("指定されたプロパティは現在のシェーダでは無効です");
 
-        string msg=SetTexProp(mate,prop,right);
+        string msg=SetTexProp(mate,prop,right,sm.mi.oid.originalMate[sm.submeshno]);
         if(msg!="") return sh.io.Error(msg);
         return 1;
     }
@@ -546,14 +546,15 @@ public static class CmdMeshes {
         if(tx==null) return;
         sh.io.PrintLn($"{prop}:{tx.name}{sh.ofs}{tx.width}x{tx.height}");
     }
-    private static string SetTex(string prop,string name,int mode,int wrap,Material mate){
+    private static string SetTex(string prop,string name,int mode,int wrap,Material mate,Material orig){
         Camera cam;
+        var origtex=(orig==null)?null:orig.GetTexture(prop);
         if(ObjUtil.objDic.TryGetValue(name,out Transform camTr) && (cam=camTr.GetComponent<Camera>())!=null){
             if(mode==0){
                 var tex=cam.targetTexture;
                 tex.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
                 var old=mate.GetTexture(prop);
-                if(old!=null && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
+                if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
                 mate.SetTexture(prop,tex);
             }else{
                 RenderTexture rt=cam.targetTexture;
@@ -563,7 +564,7 @@ public static class CmdMeshes {
                 else {
                     if(old.name=="__subcamera_pic_" && old.width==rt.width && old.height==rt.height) tx=(Texture2D)old;
                     else{
-                        if(old!=null && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
+                        if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
                         tx=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);
                     }
                 }
@@ -583,7 +584,7 @@ public static class CmdMeshes {
                 Texture2D tex=TextureUtil.CloneTexture((Texture2D)tex0);
                 tex.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
                 var old=mate.GetTexture(prop);
-                if(old!=null && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
+                if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
                 mate.SetTexture(prop,tex);
                 texiid.Add(tex);
                 return "";
@@ -603,7 +604,7 @@ public static class CmdMeshes {
                     t2d.name=name;
                     t2d.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
                     var old=mate.GetTexture(prop);
-                    if(old!=null && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
+                    if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
                     mate.SetTexture(prop,t2d);
                     texiid.Add(t2d);
                     return "";
@@ -614,9 +615,8 @@ public static class CmdMeshes {
                     var t2d=tere.CreateTexture2D();
                     t2d.name=name;
                     t2d.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
-
                     var old=mate.GetTexture(prop);
-                    if(old!=null && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
+                    if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
                     mate.SetTexture(prop,t2d);
                     texiid.Add(t2d);
                 }else return "texファイルが見つかりません";
@@ -624,7 +624,7 @@ public static class CmdMeshes {
         }
         return "";
     }
-    public static string SetTexProp(Material m, string key, string val){
+    public static string SetTexProp(Material m, string key, string val,Material orig){
         if(!m.HasProperty(key)) return "指定されたプロパティは現在のシェーダでは無効です";
         int wrap=1,mode=0;
         string right=val;
@@ -635,7 +635,7 @@ public static class CmdMeshes {
             if(opts.Length>=1 && (!int.TryParse(opts[0],out wrap) || wrap<0 || wrap>1)) return "書式が不正です";
             if(opts.Length>=2 && (!int.TryParse(opts[1],out mode) || mode<0 || mode>1)) return "書式が不正です";
         }
-        return SetTex(key,right,mode,wrap,m);
+        return SetTex(key,right,mode,wrap,m,orig);
     }
     private static int MeshParamTexLoop(ComShInterpreter sh,SingleMesh sm,string val){ return MeshParamTexLoopSub(sh,sm,val,0); }
     private static int MeshParamTexLoopHsv(ComShInterpreter sh,SingleMesh sm,string val){ return MeshParamTexLoopSub(sh,sm,val,1); }
@@ -648,6 +648,7 @@ public static class CmdMeshes {
 
         sm.mi.EditMaterial();
         Material mate=sm.mi.material[sm.submeshno];
+        Material mate0=sm.mi.oid.originalMate[sm.submeshno];
         if(!mate.HasProperty(prop)) return sh.io.Error("プロパティが無効です");
         Texture tx=mate.GetTexture(prop);
         if(tx==null) return sh.io.Error("テクスチャがありません");
@@ -659,12 +660,12 @@ public static class CmdMeshes {
         var sbo=new ComShInterpreter.SubShOutput();
         int ret=0;
         sh.io.output=new ComShInterpreter.Output(sbo.Output);
-        ret=PixelLoop(sh,psr,mate,prop,tx,hsvq);
+        ret=PixelLoop(sh,psr,mate,prop,tx,hsvq,mate0);
         sh.io.output=orig;
         if(ret>=0) sh.io.Print(sbo.GetSubShResult());
         return 1;
     }
-    private static int PixelLoop(ComShInterpreter sh,ComShParser psr,Material mate,string prop,Texture tx,int hsvq){
+    private static int PixelLoop(ComShInterpreter sh,ComShParser psr,Material mate,string prop,Texture tx,int hsvq,Material orig){
         int ret=0;
         Texture2D t2=TextureUtil.CloneBitmap(tx);
         int width=t2.width,height=t2.height;
@@ -739,7 +740,8 @@ public static class CmdMeshes {
             t2.Apply();
             texiid.Add(t2);
             var old=mate.GetTexture(prop);
-            if(old!=null && texiid.Remove(old)) UnityEngine.Object.Destroy(old);
+            var origtex=orig.GetTexture(prop);
+            if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old);
             mate.SetTexture(prop,t2);
         }
         return ret;
@@ -758,7 +760,7 @@ public static class CmdMeshes {
     private static int MeshParamMipmap(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null || val==""){return 0;}
         sm.mi.EditMaterial();
-        Material mate0=(sm.submeshno<sm.mi.oid.originalMate.Count)?sm.mi.oid.originalMate[sm.submeshno]:sm.mi.oid.originalMate[sm.submeshno];
+        Material mate0=sm.mi.oid.originalMate[sm.submeshno];
         Material mate=sm.mi.material[sm.submeshno];
         Texture tx;
         float mmb;
@@ -781,7 +783,8 @@ public static class CmdMeshes {
                     texiid.Add(t2);
                 }
                 var old=mate.GetTexture(prop);
-                if(old!=null && texiid.Remove(old)) UnityEngine.Object.Destroy(old);
+                var origtex=mate0.GetTexture(prop);
+                if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old);
                 mate.SetTexture(prop,t2);
             }
             return 0;
