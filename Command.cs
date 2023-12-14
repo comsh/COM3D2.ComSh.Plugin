@@ -29,6 +29,7 @@ public static class Command {
         cmdTbl.Add("width",new Cmd(CmdWidth));
         cmdTbl.Add("height",new Cmd(CmdHeight));
 		cmdTbl.Add("exit", new Cmd(CmdExit));
+		cmdTbl.Add("return", new Cmd(CmdReturn));
 		cmdTbl.Add("close", new Cmd(CmdClose));
 		cmdTbl.Add("env", new Cmd(CmdEnv));
 		cmdTbl.Add("echo", new Cmd(CmdEcho));
@@ -125,6 +126,7 @@ public static class Command {
         cmdTbl.Add("indiv", new Cmd(CmdInDiv));
         cmdTbl.Add("clean", new Cmd(CmdClean));
         cmdTbl.Add("gc", new Cmd(CmdGC));
+        cmdTbl.Add("evalkag", new Cmd(CmdEvalKag));
 
         cmdTbl.Add("__res",new Cmd(Cmd__Resource));
         cmdTbl.Add("__files",new Cmd(Cmd__Files));
@@ -269,6 +271,9 @@ public static class Command {
 
 	private static int CmdExit(ComShInterpreter sh,List<string> args){
         sh.exitq=true; 
+        return CmdReturn(sh,args);
+    }
+	private static int CmdReturn(ComShInterpreter sh,List<string> args){
         if(args.Count==2 && int.TryParse(args[1],out int n)) sh.io.exitStatus=n;
         else sh.io.exitStatus=0;
         return 0;
@@ -575,6 +580,13 @@ public static class Command {
         psr.Reset();
         return sh.InterpretParser(psr);
     }
+    private static int CmdEvalKag(ComShInterpreter sh,List<string> args){
+        if(args.Count!=2) return sh.io.Error("使い方: evalkag スクリプト");
+        TJSVariant ret=new TJSVariant();
+        GameMain.Instance.ScriptMgr.EvalScript(args[1],ret);
+        sh.io.Print(ret.AsString());
+        return 0;
+    }
     private static int CmdSystem(ComShInterpreter sh,List<string>args){
         if(args.Count==1 || args[1]=="") return sh.io.Error("使い方: system 外部コマンド名 引数1 ...");
         var sb=new StringBuilder((args.Count-1)*30);
@@ -775,7 +787,7 @@ public static class Command {
                 subsh.env.args[0]=cur.ToString();
                 subsh.env.args[1]=(cur-lasttime).ToString();
                 lasttime=cur;
-                psr.Reset();
+                psr.Reset(); subsh.exitq=false;
                 return subsh.InterpretParser(psr);
             },(int)prio);
             if(j==null) return sh.io.Error("登録に失敗しました");          
@@ -931,9 +943,13 @@ public static class Command {
         else { max=v2.Length; min=v1.Length; }
         if(max==min){
             if(max==4){
-                if(op!='*'){ exprErr="演算子が不正です"; return null; }
-                var q=new Quaternion((float)v1[0],(float)v1[1],(float)v1[2],(float)v1[3])*new Quaternion((float)v2[0],(float)v2[1],(float)v2[2],(float)v2[3]);
-                return new double[]{q.x,q.y,q.z,q.w};
+                if(op=='*'){
+                    var q=new Quaternion((float)v1[0],(float)v1[1],(float)v1[2],(float)v1[3])*new Quaternion((float)v2[0],(float)v2[1],(float)v2[2],(float)v2[3]);
+                    return new double[]{q.x,q.y,q.z,q.w};
+                }else{
+                    if(ExprTwoVal(max,op,v1,v2)<0) return null;
+                    return v1;
+                }
             }else{
                 if(ExprTwoVal(max,op,v1,v2)<0) return null;
                 return v1;
@@ -1483,28 +1499,45 @@ public static class Command {
     private static int CmdInside(ComShInterpreter sh,List<string> args){
         const string usage="使い方: inside 座標 中心座標 サイズ [回転]";
         if(args.Count!=4 && args.Count!=5) return sh.io.Error(usage);
-        float[] p=ParseUtil.Xyz(args[1]);
-        if(p==null) return sh.io.Error(ParseUtil.error);
-        float[] o=ParseUtil.Xyz(args[2]);
-        if(o==null) return sh.io.Error(ParseUtil.error);
-        float[] sz=new float[3];
-        int n=ParseUtil.XyzSub(args[3],sz);
-        if(n<0) return sh.io.Error("サイズの指定が不正です");
+        float[] p={0,0,0};
+        int n=ParseUtil.XyzSub(args[1],p);
+        if(n<=0||n>3) return sh.io.Error("座標が不正です");
+        float[] o={0,0,0};
+        int n2=ParseUtil.XyzSub(args[2],o);
+        if(n2!=n) return sh.io.Error("座標が不正、または次数が一致していません");
+        float[] sz={0,0,0};
+        n2=ParseUtil.XyzSub(args[3],sz);
+        if(n2<=0) return sh.io.Error("サイズの指定が不正です");
         Vector3 v3=new Vector3(p[0]-o[0],p[1]-o[1],p[2]-o[2]);
         if(args.Count==5){
-            float[] r=ParseUtil.FloatArr(args[4]);
-            if(r==null) return sh.io.Error(ParseUtil.error);
-            var q=(r.Length==4)?new Quaternion(r[0],r[1],r[2],r[3]):Quaternion.Euler(new Vector3(r[0],r[1],r[2]));
-            v3=Quaternion.Inverse(q)*v3; // 座標を領域側の座標系に翻訳
+            if(n==3){
+                float[] r=ParseUtil.FloatArr(args[4]);
+                if(r==null || (r.Length!=3 && r.Length!=4)) return sh.io.Error("回転が不正です");
+                var q=(r.Length==4)?new Quaternion(r[0],r[1],r[2],r[3]):Quaternion.Euler(new Vector3(r[0],r[1],r[2]));
+                v3=Quaternion.Inverse(q)*v3; // 座標を領域側の座標系に翻訳
+            }else if(n==2){
+                if(float.TryParse(args[4],out float deg)) return sh.io.Error("回転が不正です");
+                var q=Quaternion.Euler(new Vector3(0,0,-deg));
+                v3=q*v3;
+            }else return sh.io.Error("1次元で回転はできません");
         }
         bool result=false;
-        if(n==1){ // 球
-            if(sz[0]<=0) return sh.io.Error("サイズの指定が不正です");
-            result=(sz[0]*sz[0]>=v3.sqrMagnitude);
-        }else if(n==2){ // シリンダ
-            result=(-sz[1]<=v3.y && v3.y<=sz[1] && (v3.x*v3.x+v3.z*v3.z)<=sz[0]*sz[0]);
-        }else if(n==3){ // 直方体
-            result=(-sz[0]<=v3.x&&v3.x<=sz[0]&&-sz[1]<=v3.y&&v3.y<=sz[1]&&-sz[2]<=v3.z&&v3.z<=sz[2]);
+        if(n==3){
+            if(n2==1){ // 球
+                if(sz[0]<=0) return sh.io.Error("サイズの指定が不正です");
+                result=(sz[0]*sz[0]>=v3.sqrMagnitude);
+            }else if(n2==2){ // シリンダ
+                result=(-sz[1]/2<=v3.y && v3.y<=sz[1]/2 && (v3.x*v3.x+v3.z*v3.z)<=sz[0]*sz[0]);
+            }else if(n2==3){ // 直方体
+                result=(-sz[0]/2<=v3.x&&v3.x<=sz[0]/2&&-sz[1]/2<=v3.y&&v3.y<=sz[1]/2&&-sz[2]/2<=v3.z&&v3.z<=sz[2]/2);
+            } else return sh.io.Error("サイズの指定が不正です");
+        }else if(n==2){
+            if(n2==1) result=v3.x*v3.x+v3.y*v3.y<=sz[0]*sz[0]; // 円
+            else if(n2==2) result=(-sz[0]/2<=v3.x&&v3.x<=sz[0]/2&&-sz[1]/2<=v3.y&&v3.y<=sz[1]/2); // 矩形
+            else return sh.io.Error("サイズの指定が不正です");
+        }else{
+            if(n2==1) result=Mathf.Abs(v3.x)<=sz[0];
+            else return sh.io.Error("サイズの指定が不正です");
         }
         sh.io.Print(result?"1":"0");
         return 0;
@@ -1773,19 +1806,37 @@ public static class Command {
     }
     private static int CmdInDiv(ComShInterpreter sh,List<string> args){
         if(args.Count!=4) return sh.io.Error("使い方1: indiv 座標1 座標2 比\n使い方2: indiv 座標1 座標2 座標3");
-        float[] p0=ParseUtil.Xyz(args[1]);
-        float[] p1=ParseUtil.Xyz(args[2]);
+        float[] p0={0,0,0};
+        int n=ParseUtil.XyzSub(args[1],p0);
+        if(n<=0||n>3) return sh.io.Error("座標が不正です");
+        float[] p1={0,0,0};
+        int n2=ParseUtil.XyzSub(args[2],p1);
+        if(n2!=n) return sh.io.Error("座標が不正または次数が一致していません");
         float t=0;
         float[] p2=null;
-        if(args[3].IndexOf(',')>=0) p2=ParseUtil.Xyz(args[3]);
-        else if(!float.TryParse(args[3],out t)) return sh.io.Error("数値が不正です");
+        if(args[3].IndexOf(',')>=0){
+            p2=new float[]{0,0,0};
+            n2=ParseUtil.XyzSub(args[3],p2);
+            if(n2!=n) return sh.io.Error("座標が不正または次数が一致していません");
+        } else if(!float.TryParse(args[3],out t)) return sh.io.Error("数値が不正です");
         if(p2==null){
-            sh.io.Print(sh.fmt.FPos((p1[0]-p0[0])*t+p0[0],(p1[1]-p0[1])*t+p0[1],(p1[2]-p0[2])*t+p0[2]));
+            if(n==3) sh.io.Print(sh.fmt.FPos((p1[0]-p0[0])*t+p0[0],(p1[1]-p0[1])*t+p0[1],(p1[2]-p0[2])*t+p0[2]));
+            else if(n==2) sh.io.Print(sh.fmt.FXY((p1[0]-p0[0])*t+p0[0],(p1[1]-p0[1])*t+p0[1]));
+            else sh.io.Print(sh.fmt.FVal((p1[0]-p0[0])*t+p0[0]));
         }else{
-            var nv=new Vector3(p1[0]-p0[0],p1[1]-p0[1],p1[2]-p0[2]);
-            var ll=nv.sqrMagnitude;
-            var sl=new Vector3(p2[0]-p0[0],p2[1]-p0[1],p2[2]-p0[2]);
-            sh.io.Print(sh.fmt.F0to1(Vector3.Dot(nv,sl)/ll));
+            if(n==3){
+                var nv=new Vector3(p1[0]-p0[0],p1[1]-p0[1],p1[2]-p0[2]);
+                var ll=nv.sqrMagnitude;
+                var sl=new Vector3(p2[0]-p0[0],p2[1]-p0[1],p2[2]-p0[2]);
+                sh.io.Print(sh.fmt.F0to1(Vector3.Dot(nv,sl)/ll));
+            }else if(n==2){
+                var v0=new Vector2(p1[0]-p0[0],p1[1]-p0[1]);
+                var ll=v0.sqrMagnitude;
+                var v1=new Vector2(p2[0]-p0[0],p2[1]-p0[1]);
+                sh.io.Print(sh.fmt.F0to1(Vector2.Dot(v0,v1)/ll));
+            }else{
+                sh.io.Print(sh.fmt.FVal((p2[0]-p0[0])/(p1[0]-p0[0])));
+            }
         }
         return 0;
     }

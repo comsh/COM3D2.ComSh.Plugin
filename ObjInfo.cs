@@ -19,6 +19,7 @@ public class ObjInfo : MonoBehaviour{
             if (this.data.originalMate != null) for (int i = 0; i < this.data.originalMate.Count; i++)
                 if(this.data.originalMateOwn[i]) UnityEngine.Object.Destroy(this.data.originalMate[i]);
             if (this.data.workMate!=null) foreach(var mate in this.data.workMate) UnityEngine.Object.Destroy(mate);
+            if(this.data.trash!=null) for(int i=0; i<this.data.trash.Length; i++) UnityEngine.Object.Destroy(this.data.trash[i]);
         }
     }
     public static ObjInfo AddObjInfo(Transform tr,string src,List<TMorph> morph=null){
@@ -143,6 +144,7 @@ public class ObjInfoData {
     public List<Material> originalMate;
     public List<bool> originalMateOwn;
     public List<Material> workMate;
+    public UnityEngine.Object[] trash;
 
     public void Backup(){
         if(originalMesh!=null) return;

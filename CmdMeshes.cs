@@ -25,6 +25,8 @@ public static class CmdMeshes {
         meshParamDic.Add("png",new CmdParam<SingleMesh>(MeshParamPNG));
         meshParamDic.Add("texloop",new CmdParam<SingleMesh>(MeshParamTexLoop));
         meshParamDic.Add("texloop.hsv",new CmdParam<SingleMesh>(MeshParamTexLoopHsv));
+        meshParamDic.Add("texfilter",new CmdParam<SingleMesh>(MeshParamTexFilter));
+        meshParamDic.Add("texexclude",new CmdParam<SingleMesh>(MeshParamTexExclude));
         meshParamDic.Add("findverno",new CmdParam<SingleMesh>(MeshParamFindVerno));
     }
     private static Dictionary<string,CmdParam<SingleMesh>> meshParamDic=new Dictionary<string,CmdParam<SingleMesh>>();
@@ -166,6 +168,7 @@ public static class CmdMeshes {
         }
         return 0;
     }
+    private static Vector2[] empty_uv=new Vector2[0];
     private static int MeshParamVerLoop(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null || val=="") return 0;
 
@@ -194,6 +197,9 @@ public static class CmdMeshes {
         var vta=m.vertices;
         var nma=m.normals;
         var uva=m.uv;
+        var uv2a=(m.uv2!=null)?m.uv2:empty_uv;
+        var uv3a=(m.uv3!=null)?m.uv3:empty_uv;
+        var uv4a=(m.uv4!=null)?m.uv4:empty_uv;
         
         var changes=new List<VerLoopChange>();
         byte changed=0;
@@ -207,14 +213,20 @@ public static class CmdMeshes {
             sh.env["_1"]=i.ToString();
             sh.env["_2"]=th.ToString();
 
-            string svt="",snm="",suv="";
+            string svt="",snm="",suv="",suv2="",suv3="",suv4="";
             svt=sh.fmt.FPos(vt);
             if(th<nma.Length) snm=sh.fmt.FPos(nma[th]);
             if(th<uva.Length) suv=sh.fmt.FXY(uva[th]);
+            if(th<uv2a.Length) suv2=sh.fmt.FXY(uv2a[th]);
+            if(th<uv3a.Length) suv3=sh.fmt.FXY(uv3a[th]);
+            if(th<uv4a.Length) suv4=sh.fmt.FXY(uv4a[th]);
 
             sh.env["_vertex"]=svt;
             sh.env["_normal"]=snm;
             sh.env["_uv"]=suv;
+            if(suv2.Length>0) sh.env["_uv2"]=suv2;
+            if(suv3.Length>0) sh.env["_uv3"]=suv3;
+            if(suv4.Length>0) sh.env["_uv4"]=suv4;
 
             psr.Reset();
             ret=sh.InterpretParser(psr);
@@ -236,6 +248,21 @@ public static class CmdMeshes {
                 if(c==null) c=new VerLoopChange(th);
                 c.uv=t;
                 changed|=4;
+            }
+            if(suv2!="" && (t=sh.env["_uv2"])!=suv2){
+                if(c==null) c=new VerLoopChange(th);
+                c.uv2=t;
+                changed|=8;
+            }
+            if(suv3!="" && (t=sh.env["_uv3"])!=suv3){
+                if(c==null) c=new VerLoopChange(th);
+                c.uv3=t;
+                changed|=16;
+            }
+            if(suv4!="" && (t=sh.env["_uv4"])!=suv4){
+                if(c==null) c=new VerLoopChange(th);
+                c.uv4=t;
+                changed|=32;
             }
             if(c!=null) changes.Add(c);
         }
@@ -266,11 +293,29 @@ public static class CmdMeshes {
                 if(xy==null){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
                 uva[c.idx]=new Vector2(xy[0],xy[1]);
             }
+            if(c.uv2!=null){
+                float[] xy=ParseUtil.Xy(c.uv2);
+                if(xy==null){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
+                uv2a[c.idx]=new Vector2(xy[0],xy[1]);
+            }
+            if(c.uv3!=null){
+                float[] xy=ParseUtil.Xy(c.uv3);
+                if(xy==null){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
+                uv3a[c.idx]=new Vector2(xy[0],xy[1]);
+            }
+            if(c.uv4!=null){
+                float[] xy=ParseUtil.Xy(c.uv4);
+                if(xy==null){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
+                uv4a[c.idx]=new Vector2(xy[0],xy[1]);
+            }
         }
         if(ret<0){ sh.io.output=orig; return ret; }
         if((changed&1)!=0) m.vertices=vta;
         if((changed&2)!=0) m.normals=nma;
         if((changed&4)!=0) m.uv=uva;
+        if((changed&8)!=0) m.uv2=uv2a;
+        if((changed&16)!=0) m.uv3=uv3a;
+        if((changed&32)!=0) m.uv4=uv4a;
         if(remove.Count>0) RemoveVertex(m,sm,remove);
 
         sh.io.output=orig;
@@ -637,6 +682,28 @@ public static class CmdMeshes {
         }
         return SetTex(key,right,mode,wrap,m,orig);
     }
+    private static int MeshParamTexFilter(ComShInterpreter sh,SingleMesh sm,string val){
+        if(val==null || val=="") return 0;
+        var fa=TexFilterSub(sh,val);
+        if(fa==null) return -1;
+        sm.area=fa;
+        return 1;
+    }
+    private static int MeshParamTexExclude(ComShInterpreter sh,SingleMesh sm,string val){
+        if(val==null || val=="") return 0;
+        var fa=TexFilterSub(sh,val);
+        if(fa==null) return -1;
+        sm.areaex=fa;
+        return 1;
+    }
+    private static float[] TexFilterSub(ComShInterpreter sh,string val){
+        float[] sz=new float[4];
+        int n=ParseUtil.XyzSub(val,sz);
+        if(n!=4){ sh.io.Error("範囲指定が不正です"); return null; }
+        float x0=sz[0],y0=sz[1],w=sz[2],h=sz[3];
+        if(x0<0||y0<0||w<=0||h<=0){ sh.io.Error("範囲指定が不正です"); return null;}
+        return new float[]{x0,y0,w,h};
+    }
     private static int MeshParamTexLoop(ComShInterpreter sh,SingleMesh sm,string val){ return MeshParamTexLoopSub(sh,sm,val,0); }
     private static int MeshParamTexLoopHsv(ComShInterpreter sh,SingleMesh sm,string val){ return MeshParamTexLoopSub(sh,sm,val,1); }
     private static int MeshParamTexLoopSub(ComShInterpreter sh,SingleMesh sm,string val,int hsvq){
@@ -660,23 +727,34 @@ public static class CmdMeshes {
         var sbo=new ComShInterpreter.SubShOutput();
         int ret=0;
         sh.io.output=new ComShInterpreter.Output(sbo.Output);
-        ret=PixelLoop(sh,psr,mate,prop,tx,hsvq,mate0);
+        ret=PixelLoop(sh,sm,psr,mate,prop,tx,hsvq,mate0);
         sh.io.output=orig;
         if(ret>=0) sh.io.Print(sbo.GetSubShResult());
         return 1;
     }
-    private static int PixelLoop(ComShInterpreter sh,ComShParser psr,Material mate,string prop,Texture tx,int hsvq,Material orig){
+    private static int PixelLoop(ComShInterpreter sh,SingleMesh sm,ComShParser psr,Material mate,string prop,Texture tx,int hsvq,Material orig){
         int ret=0;
-        Texture2D t2=TextureUtil.CloneBitmap(tx);
+        var origtex=orig.GetTexture(prop);
+        Texture2D t2;
+        bool t2cloneq=false;
+        if(origtex==tx || !ReferenceEquals(tx.GetType(),typeof(Texture2D))){
+            t2=TextureUtil.CloneTexture(tx);
+            t2cloneq=true;
+        }else t2=(Texture2D)tx;
         int width=t2.width,height=t2.height;
-        Color[] ca=t2.GetPixels();
+        var r=sm.GetTexXYRange(width,height);
+        Color[] ca=t2.GetPixels(r.x,r.y,r.w,r.h);
         bool changed=false;
-        if(hsvq==0) for(int y=0; y<height; y++) for(int x=0; x<width; x++){
-            int i=y*width+x;
+        if(hsvq==0) for(int dy=0; dy<r.h; dy++) for(int dx=0; dx<r.w; dx++){
+            int x=r.x+dx,y=r.y+dy;
+            int i=dy*r.w+dx;
+            if(sm.ApplyTexFilter(x,y)==0) continue;
             sh.env["_1"]=sh.fmt.FVal((float)x/width);
             sh.env["_2"]=sh.fmt.FVal((float)y/height);
             sh.env["_3"]=width.ToString();
             sh.env["_4"]=height.ToString();
+            sh.env["_5"]=x.ToString();
+            sh.env["_6"]=y.ToString();
             sh.env["_r"]=sh.fmt.F0to1(ca[i].r);
             sh.env["_g"]=sh.fmt.F0to1(ca[i].g);
             sh.env["_b"]=sh.fmt.F0to1(ca[i].b);
@@ -685,7 +763,7 @@ public static class CmdMeshes {
             ret=sh.InterpretParser(psr);
             if(ret<0 || sh.exitq){
                 ret=sh.io.exitStatus; sh.exitq=false;
-                UnityEngine.Object.Destroy(t2);
+                if(t2cloneq) UnityEngine.Object.Destroy(t2);
                 return ret;
             }
             Color c2;
@@ -693,7 +771,7 @@ public static class CmdMeshes {
             ||!float.TryParse(sh.env["_g"],out c2.g)
             ||!float.TryParse(sh.env["_b"],out c2.b)
             ||!float.TryParse(sh.env["_a"],out c2.a)){
-                UnityEngine.Object.Destroy(t2);
+                if(t2cloneq) UnityEngine.Object.Destroy(t2);
                 return sh.io.Error("色の指定が不正です");
             }
             c2.r=Mathf.Clamp01(c2.r);
@@ -701,14 +779,18 @@ public static class CmdMeshes {
             c2.b=Mathf.Clamp01(c2.b);
             c2.a=Mathf.Clamp01(c2.a);
             if(!ColorEq(c2,ca[i])){ ca[i]=c2; changed=true; }
-        }else for(int y=0; y<height; y++) for(int x=0; x<width; x++){
-            int i=y*width+x;
+        }else for(int dy=0; dy<r.h; dy++) for(int dx=0; dx<r.w; dx++){
+            int x=r.x+dx, y=r.y+dy;
+            int i=dy*r.w+dx;
+            if(sm.ApplyTexFilter(x,y)==0) continue;
             float h,s,v,a=ca[i].a;
             Color.RGBToHSV(ca[i],out h,out s,out v);
             sh.env["_1"]=sh.fmt.FVal((float)x/width);
             sh.env["_2"]=sh.fmt.FVal((float)y/height);
             sh.env["_3"]=width.ToString();
             sh.env["_4"]=height.ToString();
+            sh.env["_5"]=x.ToString();
+            sh.env["_6"]=y.ToString();
             sh.env["_h"]=sh.fmt.F0to1(h);
             sh.env["_s"]=sh.fmt.F0to1(s);
             sh.env["_v"]=sh.fmt.F0to1(v);
@@ -717,14 +799,14 @@ public static class CmdMeshes {
             ret=sh.InterpretParser(psr);
             if(ret<0 || sh.exitq){
                 ret=sh.io.exitStatus; sh.exitq=false;
-                UnityEngine.Object.Destroy(t2);
+                if(t2cloneq) UnityEngine.Object.Destroy(t2);
                 return ret;
             }
             if(!float.TryParse(sh.env["_h"],out h)
             ||!float.TryParse(sh.env["_s"],out s)
             ||!float.TryParse(sh.env["_v"],out v)
             ||!float.TryParse(sh.env["_a"],out a)){
-                UnityEngine.Object.Destroy(t2);
+                if(t2cloneq) UnityEngine.Object.Destroy(t2);
                 return sh.io.Error("色の指定が不正です");
             }
             h=Mathf.Clamp01(h);
@@ -736,19 +818,20 @@ public static class CmdMeshes {
             if(!ColorEq(c2,ca[i])){ ca[i]=c2; changed=true; }
         }
         if(changed){
-            t2.SetPixels(ca);
+            t2.SetPixels(r.x,r.y,r.w,r.h,ca);
             t2.Apply();
-            texiid.Add(t2);
-            var old=mate.GetTexture(prop);
-            var origtex=orig.GetTexture(prop);
-            if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old);
-            mate.SetTexture(prop,t2);
+            if(t2cloneq){
+                texiid.Add(t2);
+                var old=mate.GetTexture(prop);
+                if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old);
+                mate.SetTexture(prop,t2);
+            }
         }
         return ret;
     }
     private static bool ColorEq(Color c1,Color c2){
         float t=c1.r-c2.r;
-        if(t<-0.003||0.003<t) return false; // 1/256=0.039
+        if(t<-0.003||0.003<t) return false; // 1/256=0.0039
         t=c1.g-c2.g;
         if(t<-0.003||0.003<t) return false;
         t=c1.b-c2.b;
@@ -864,6 +947,9 @@ public static class CmdMeshes {
         public string vertex;
         public string normal;
         public string uv;
+        public string uv2;
+        public string uv3;
+        public string uv4;
         public VerLoopChange(int idx){ this.idx=idx; }
     }
     private class SingleMesh {
@@ -872,6 +958,8 @@ public static class CmdMeshes {
         public SingleMesh(int no,MeshInfo mi){ this.submeshno=no; this.mi=mi; }
         public float[] filter=null;
         public float[] exclude=null;
+        public float[] area=null;
+        public float[] areaex=null;
         public int[] list=null;
         public int ApplyFilter(Vector3 vt){
             if(filter!=null){
@@ -894,6 +982,19 @@ public static class CmdMeshes {
                     if(exclude[3] >= x*x+y*y+z*z ) return 0;
                 }
             }
+            return 1;
+        }
+        public struct Rect{ // UnityEngine.Rectでもいいんだけど利用時のcastが面倒なのでint版
+            public int x; public int y; public int w; public int h;
+            public Rect(int x,int y,int w,int h){this.x=x;this.y=y;this.w=w;this.h=h;}
+        }
+        public Rect GetTexXYRange(int w,int h){
+            if(area!=null) return new Rect((int)area[0],(int)area[1],(int)area[2],(int)area[3]);
+            return new Rect(0,0,w,h);
+        }
+        public int ApplyTexFilter(int x,int y){
+            // areaの方はGetTexXYRange()で終わってる
+            if(areaex!=null) if( areaex[0]<=x && x<=areaex[0]+areaex[2]-1 && areaex[1]<=y && y<=areaex[1]+areaex[3]-1 ) return 0;
             return 1;
         }
     }
@@ -956,6 +1057,7 @@ public static class CmdMeshes {
             UnityEngine.Object.Destroy(e.mesh);
             e.mesh=newMesh;
             oid.workMesh[midx]=e;
+            oid.workMesh.UpdateIndices3(submeshno);
             return 0;
         }
         public void EditMaterial(){

@@ -1457,7 +1457,7 @@ public static class CmdMaidMan {
         subsh.env.args.Add("");
         act=()=>{
             subsh.env.args[0]=((DateTime.UtcNow.Ticks-stime)/TimeSpan.TicksPerMillisecond).ToString();
-            psr.Reset();
+            psr.Reset(); subsh.exitq=false;
             int ret=subsh.InterpretParser(psr);
             if(m.body0.m_Bones==null || ret!=0) m.body0.OnLateUpdate-=act;
         };
@@ -1484,7 +1484,7 @@ public static class CmdMaidMan {
         subsh.env.args.Add("");
         System.Action act=()=>{
             subsh.env.args[0]=((DateTime.UtcNow.Ticks-stime)/TimeSpan.TicksPerMillisecond).ToString();
-            psr.Reset();
+            psr.Reset(); subsh.exitq=false;
             ret=subsh.InterpretParser(psr);
         };
         // OnLateUpdateEndは毎フレームクリアされるようなので、毎フレーム登録する
@@ -1875,7 +1875,7 @@ public static class MaidUtil {
     public static string GetCloth(Maid m,MPN mpn){
         MaidProp mp=m.GetProp(mpn);
         string name=(!string.IsNullOrEmpty(mp.strTempFileName) && mp.nTempFileNameRID!=0)?mp.strTempFileName:mp.strFileName;
-        if (name=="" || mp.strFileName.EndsWith("_del.menu",Ordinal)) return string.Empty;
+        if (name=="" || name.EndsWith("_del.menu",Ordinal)) return string.Empty;
         return name;
     }
     public static MPN[] mpnBody={       // 身体系MPN

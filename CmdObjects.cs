@@ -277,13 +277,13 @@ public static class CmdObjects {
         var oi=ObjInfo.GetObjInfo(tr);
         if(jmpq==2) UTIL.ResetTr(tr);
         tr.SetParent(to,jmpq==0);
-        oi2.data.UpdateBones();
         if(oi!=null){
             if(System.Object.ReferenceEquals(oi.transform,tr)){
                 oi.enabled=false;
                 ObjUtil.objDic.Remove(tr.name);
             }else oi.data.UpdateBones();
         }
+        oi2.data.UpdateBones();
         return 1;
     }
     private static int ObjParamDetach(ComShInterpreter sh,Transform tr,string val){
@@ -1159,7 +1159,6 @@ public static class CmdObjects {
         }
         for (int i=ja.Count-1; i>=1; i--){
             var o=ja[i].position;
-            //var q=Quaternion.FromToRotation((ja[i-1].position-o).normalized,(pa[i-1]-o).normalized);
             var q=RYRX(ja[i-1].position-o,pa[i-1]-o);
             ja[i].rotation=q*ja[i].rotation;
         }
@@ -1169,16 +1168,12 @@ public static class CmdObjects {
         Quaternion ret=Quaternion.identity;
         Vector3 fn=from.normalized, tn=to.normalized;
         Vector3 p0=fn;
-        float ll=to.x*to.x+to.z*to.z;
-        if(ll>=0.00000001){ 
+        float ll=tn.x*tn.x+tn.z*tn.z;
+        if(ll>=0.000001){ 
             p0=new Vector3(tn.x,fn.y,tn.z).normalized;
             ret=Quaternion.FromToRotation(fn,p0);
         }
-        ll=to.y*to.y+to.z*to.z;
-        if(ll>=0.00000001){ 
-            ret*=Quaternion.FromToRotation(p0,tn);
-        }
-        return ret;
+        return ret*Quaternion.FromToRotation(p0,tn);
     }
     private static int ObjParamShadow(ComShInterpreter sh,Transform tr,string val){
         if(val==null) return 0;
@@ -1307,6 +1302,7 @@ public static class ObjUtil {
         if(o==null) o=Resources.Load<GameObject>("BG/2_0/"+src);
         List<TMorph> morph=null;
         MenuObj mo=null;
+        List<UnityEngine.Object> trash=null;
         if(o==null){
             if(dummyMaid==null){ // LoadSkinMesh_Rを呼ぶためだけのニセMaid
                 dummyMaid=new GameObject().AddComponent<FakeMaid>();
@@ -1320,6 +1316,8 @@ public static class ObjUtil {
                 dummyMaid.body0.goSlot=new List<TBodySkin>(1);
                 dummyMaid.body0.goSlot.Add(new TBodySkin(dummyMaid.body0,"body",0,false));
             }
+            trash=dummyMaid.body0.goSlot[0].listDEL;
+            trash.Clear();
             string fname=Path.GetFileNameWithoutExtension(src);
             string ext=src.Substring(fname.Length);
             if(ext!=".model"){
@@ -1351,7 +1349,8 @@ public static class ObjUtil {
         b.transform.localPosition=pos;
         b.transform.localRotation=Quaternion.Euler(rot);
         b.transform.localScale=scl;
-        ObjInfo.AddObjInfo(b,src,morph);
+        var oi=ObjInfo.AddObjInfo(b,src,morph);
+        if(trash!=null) oi.data.trash=trash.ToArray();
         return b;
     }
     public static GameObject CloneObject(string name,Transform obase,Transform pr){
