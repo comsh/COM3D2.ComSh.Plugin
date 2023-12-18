@@ -531,6 +531,7 @@ public static class Command {
             string kw=args[i];
             int wordPos=text.LastIndexOf(kw+":",Ordinal);
             if(wordPos<0) continue;
+            if(wordPos!=0 && text[wordPos-1]!='\n') continue;
             int head=wordPos+kw.Length+1;
             int tail=text.IndexOf('\n',head);
             if(tail<0) tail=text.Length-1;
@@ -1632,7 +1633,7 @@ public static class Command {
         }
         sh.io.output=orig;
         if(ret>=0) sh.io.Print(subout.GetSubShResult());
-        return 0;
+        return ret;
     }
 
     public class PubSubEntry {
