@@ -529,9 +529,12 @@ public static class Command {
         }
         for(int i=key0; i<args.Count; i++){
             string kw=args[i];
-            int wordPos=text.LastIndexOf(kw+":",Ordinal);
-            if(wordPos<0) continue;
-            if(wordPos!=0 && text[wordPos-1]!='\n') continue;
+            int wordPos=0;
+            if(!text.StartsWith(kw+":",Ordinal)){
+                wordPos=text.IndexOf("\n"+kw+":",Ordinal);
+                if(wordPos<0) continue;
+                wordPos++;
+            }
             int head=wordPos+kw.Length+1;
             int tail=text.IndexOf('\n',head);
             if(tail<0) tail=text.Length-1;
