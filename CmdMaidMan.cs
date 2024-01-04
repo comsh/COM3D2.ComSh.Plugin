@@ -4,7 +4,6 @@ using UnityEngine;
 using static System.StringComparison;
 using static COM3D2.ComSh.Plugin.Command;
 using System;
-using System.Reflection;
 
 namespace COM3D2.ComSh.Plugin {
 
@@ -101,6 +100,7 @@ public static class CmdMaidMan {
         CmdParamPosRotCp(maidParamDic,"lrot","rot");
 
         for(int i=0; i<manParams.Length; i++) manParamDic.Add(manParams[i],maidParamDic[manParams[i]]);
+        manParamDic.Add("chinko",new CmdParam<Maid>(MaidParamChinko));
     }
     private static Dictionary<string,CmdParam<Maid>> maidParamDic=new Dictionary<string,CmdParam<Maid>>();
     private static Dictionary<string,CmdParam<Maid>> manParamDic=new Dictionary<string,CmdParam<Maid>>();
@@ -108,7 +108,7 @@ public static class CmdMaidMan {
         "position","rotation","scale","pos","rot",
         "motion","shape","iid","list","motion.time","motion.speed","motion.layer","motion.length",
         "motion.weight","motion.timep","motion.timel","motion.timelp","motion.frame",
-        "attach","detach","lookat","ik",
+        "attach","detach","lookat","ik","cloth","style","shape.verlist",
         "wpos","wrot","lpos","lrot","opos","orot","lquat","wquat",
 
         "position.x","position.y","position.z",
@@ -121,7 +121,7 @@ public static class CmdMaidMan {
         "wrot.x","wrot.y","wrot.z",
         "scale.x","scale.y","scale.z",
         "prot","pquat",
-        "ap","handle","describe","select","later","evenlater","bbox",
+        "ap","ap.wpos","handle","describe","select","later","evenlater","bbox",
         "l2w","w2l"
     };
 
@@ -785,6 +785,12 @@ public static class CmdMaidMan {
     private static int MaidParamPreset(ComShInterpreter sh,Maid m,string val){
         if(sh.IsSafeMode()) return sh.io.Error("この機能はセーフモードでは使用できません");
         if(val==null) return 0;
+        int mode=2;
+        if(val.Length>2 && val[val.Length-2]==','){
+            mode=val[val.Length-1]-'0';
+            if(mode<0||mode>2) return sh.io.Error("読込モードは0～2で指定してください");
+            val=val.Substring(0,val.Length-2);
+        }
         CharacterMgr cm=GameMain.Instance.CharacterMgr;
         CharacterMgr.Preset preset=null;
         string fname=cm.PresetDirectory+"\\"+UTIL.Suffix(val,".preset");
@@ -793,6 +799,13 @@ public static class CmdMaidMan {
         else if(File.Exists(fname)) preset=cm.PresetLoad(fname);
         Resources.UnloadAsset(ta);
         if(preset==null) return sh.io.Error("プリセットファイルが読み込めません");
+        if(mode==0){
+            if(preset.ePreType==CharacterMgr.PresetType.Wear) return 1;
+            preset.ePreType=CharacterMgr.PresetType.Body;
+        }else if(mode==1){
+            if(preset.ePreType==CharacterMgr.PresetType.Body) return 1;
+            preset.ePreType=CharacterMgr.PresetType.Wear;
+        }
         cm.PresetSet(m,preset);
         m.boAllProcPropBUSY=false;
         m.AllProcProp();
@@ -801,8 +814,13 @@ public static class CmdMaidMan {
     private static int MaidParamCloth(ComShInterpreter sh,Maid m,string val){
         if(val==null){
             string ret;
-            foreach(MPN mpn in MaidUtil.mpnClothing)
-                if((ret=MaidUtil.GetCloth(m,mpn))!=string.Empty) sh.io.Print($"{mpn}:{ret}\n");
+            if(m.boMAN){
+                if((ret=MaidUtil.GetCloth(m,MPN.body))!=string.Empty) sh.io.Print($"body:{ret}\n");
+                if((ret=MaidUtil.GetCloth(m,MPN.head))!=string.Empty) sh.io.Print($"head:{ret}\n");
+            }else{
+                foreach(MPN mpn in MaidUtil.mpnClothing)
+                    if((ret=MaidUtil.GetCloth(m,mpn))!=string.Empty) sh.io.Print($"{mpn}:{ret}\n");
+            }
             return 0;
         }
         if(val=="") return 1;
@@ -811,8 +829,17 @@ public static class CmdMaidMan {
             string fname=UTIL.Suffix(menus[i],".menu");
             byte[] buf=MaidUtil.ReadMenu(fname,out string cate);
             if(buf==null) return sh.io.Error("menuファイルの読込に失敗しました");
-            m.SetProp(cate,fname,0,true);
-            if(cate=="eye_hi") m.SetProp(MPN.eye_hi_r,fname,0,true);
+            if(m.boMAN){
+                if(cate=="body"||cate=="head"){
+                    if(fname.StartsWith("m"+cate,Ordinal)) m.SetProp(cate,fname,0);
+                }else if(cate=="def"){
+                    if(fname.StartsWith("_i_man_",Ordinal)) Menu.ProcScript(m,fname);
+                }
+            }else{
+                if(cate=="body"||(cate=="head" && fname.StartsWith("mhead",Ordinal))) continue;
+                m.SetProp(cate,fname,0,true);
+                if(cate=="eye_hi") m.SetProp(MPN.eye_hi_r,fname,0,true);
+            }
         }
         m.body0.FixMaskFlag();
         m.body0.FixVisibleFlag();
@@ -865,6 +892,15 @@ public static class CmdMaidMan {
         int sw=ParseUtil.OnOff(val);
         if(sw<0) return sh.io.Error(ParseUtil.error);
         MaidUtil.MekureZurashi(m,sw,MaidUtil.ZURASI,MPN.panz,MPN.mizugi);
+        return 1;
+    }
+    private static int MaidParamChinko(ComShInterpreter sh,Maid m,string val){
+        if(m.body0==null) return 0;
+        if(val==null){
+            sh.io.Print(m.body0.GetChinkoVisible()?"1":"0");
+            return 0;
+        }
+        if(val=="1"||val=="0") m.body0.SetChinkoVisible(val=="1");
         return 1;
     }
     private static int MaidParamShape(ComShInterpreter sh,Maid m,string val){
@@ -923,7 +959,13 @@ public static class CmdMaidMan {
     }
     private static int MaidParamStyle(ComShInterpreter sh,Maid m,string val){
         if(val==null){
-            for(int i=0; i<MaidUtil.mpnBody.Length; i++){
+            if(m.boMAN){
+                MaidProp mp=m.GetProp(MPN.Hara);
+                if(mp!=null){
+                    int v=(mp.boTempDut||mp.boTempExecuted)?mp.temp_value:mp.value;
+                    sh.io.PrintLn2(MPN.Hara.ToString()+":",sh.fmt.F0to1(v));
+                }
+            }else for(int i=0; i<MaidUtil.mpnBody.Length; i++){
                 MaidProp mp=m.GetProp(MaidUtil.mpnBody[i]);
                 if(mp!=null){
                     int v=(mp.boTempDut||mp.boTempExecuted)?mp.temp_value:mp.value;
@@ -1238,7 +1280,9 @@ public static class CmdMaidMan {
         if(val==string.Empty) return 1;
 
         string ptn;
+
         byte[] ba=UTIL.AReadAll(val);
+        if(ba==null) ba=UTIL.AReadAll(val+".txt");
         if(ba!=null){
             ptn=System.Text.Encoding.ASCII.GetString(ba);
         }else{
@@ -1884,7 +1928,7 @@ public static class MaidUtil {
         MPN.EyeClose,MPN.EyeBallPosX,MPN.EyeBallPosY,MPN.EyeBallSclX,MPN.EyeBallSclY,
         MPN.EarNone,MPN.EarElf,MPN.EarRot,MPN.EarScl,MPN.NosePos,MPN.NoseScl,
         MPN.FaceShape,MPN.FaceShapeSlim,MPN.MayuShapeIn,MPN.MayuShapeOut,MPN.MayuX,MPN.MayuY,MPN.MayuRot,
-        MPN.HeadX,MPN.HeadY,MPN.DouPer,MPN.sintyou,MPN.koshi,MPN.kata,MPN.west,
+        MPN.HeadX,MPN.HeadY,MPN.DouPer,MPN.sintyou,MPN.koshi,MPN.kata,MPN.west,MPN.Hara,
         MPN.MuneUpDown,MPN.MuneYori,MPN.MuneYawaraka,MPN.MayuThick,MPN.MayuLong,MPN.Yorime
     };
     public static MPN[] mpnClothing={   // 衣装系MPN。動的に変える事がなさそうなのは省く

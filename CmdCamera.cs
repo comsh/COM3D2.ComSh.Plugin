@@ -278,7 +278,7 @@ public static class CmdCamera {
         if(xyz==null) return sh.io.Error(ParseUtil.error);
         Vector3 xy=mc.camera.WorldToScreenPoint(new Vector3(xyz[0],xyz[1],xyz[2]));
         // このxyは左下を0,0とする系。左上起点になおして表示
-        sh.io.PrintLn($"{(long)xy[0]},{(long)Mathf.Round(mc.camera.pixelHeight-1-xy[1])}");
+        sh.io.PrintLn($"{(long)xy.x},{(long)Mathf.Round(mc.camera.pixelHeight-1-xy.y)}");
         return 0;
     }
     private static int CameraParamScreenSize(ComShInterpreter sh,CameraMain mc,string val){

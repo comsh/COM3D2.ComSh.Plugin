@@ -18,6 +18,7 @@ public static class CmdMeshes {
         meshParamDic.Add("reset",new CmdParam<SingleMesh>(MeshParamReset));
         meshParamDic.Add("commit",new CmdParam<SingleMesh>(MeshParamCommit));
         meshParamDic.Add("texture",new CmdParam<SingleMesh>(MeshParamTexture));
+        meshParamDic.Add("texture.new",new CmdParam<SingleMesh>(MeshParamTextureNew));
         meshParamDic.Add("mipmap",new CmdParam<SingleMesh>(MeshParamMipmap));
         meshParamDic.Add("recalc",new CmdParam<SingleMesh>(MeshParamRecalc));
         meshParamDic.Add("rq",new CmdParam<SingleMesh>(MeshParamRQ));
@@ -296,16 +297,31 @@ public static class CmdMeshes {
             if(c.uv2!=null){
                 float[] xy=ParseUtil.Xy(c.uv2);
                 if(xy==null){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
+                if(uv2a.Length<=c.idx){
+                    var old=uv2a;
+                    uv2a=new Vector2[vta.Length];
+                    old.CopyTo(uv2a,0);
+                }
                 uv2a[c.idx]=new Vector2(xy[0],xy[1]);
             }
             if(c.uv3!=null){
                 float[] xy=ParseUtil.Xy(c.uv3);
                 if(xy==null){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
+                if(uv3a.Length<=c.idx){
+                    var old=uv3a;
+                    uv3a=new Vector2[vta.Length];
+                    old.CopyTo(uv3a,0);
+                }
                 uv3a[c.idx]=new Vector2(xy[0],xy[1]);
             }
             if(c.uv4!=null){
                 float[] xy=ParseUtil.Xy(c.uv4);
                 if(xy==null){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
+                if(uv4a.Length<=c.idx){
+                    var old=uv4a;
+                    uv4a=new Vector2[vta.Length];
+                    old.CopyTo(uv4a,0);
+                }
                 uv4a[c.idx]=new Vector2(xy[0],xy[1]);
             }
         }
@@ -354,13 +370,13 @@ public static class CmdMeshes {
         if(val==null) return 0;
         string[] kv;
         if(val.IndexOf('=')<0){
-            if(!sm.mi.material[sm.submeshno].HasProperty(val))
-                return sh.io.Error("指定されたプロパティは現在のシェーダでは無効です");
+            var m=sm.mi.material[sm.submeshno];
+            if(!m.HasProperty(val)) return sh.io.Error("指定されたプロパティは現在のシェーダでは無効です");
             if(val.EndsWith("Color",StringComparison.Ordinal)){
-                var c=sm.mi.material[sm.submeshno].GetColor(val);
+                var c=m.GetColor(val);
                 sh.io.Print(sh.fmt.RGBA(c));
             }else{
-                var f=sm.mi.material[sm.submeshno].GetFloat(val);
+                var f=m.GetFloat(val);
                 sh.io.Print(sh.fmt.FVal(f));
             }
             return 0;
@@ -373,17 +389,18 @@ public static class CmdMeshes {
         }else if(kv[1]=="off"){
             sm.mi.material[sm.submeshno].DisableKeyword(kv[0]);
         }else if(kv[1].IndexOf(',')>=0){
-            if((err=SetColorProp(sm.mi.material[sm.submeshno],kv[0],kv[1]))!="") return sh.io.Error(err);
+            if((err=SetVectorProp(sm.mi.material[sm.submeshno],kv[0],kv[1]))!="") return sh.io.Error(err);
         }else{
             if((err=SetFloatProp(sm.mi.material[sm.submeshno],kv[0],kv[1]))!="") return sh.io.Error(err);
         }
         return 1;
     }
-    public static string SetColorProp(Material m, string key, string val){
+    public static string SetVectorProp(Material m, string key, string val){
         if(!m.HasProperty(key)) return "指定されたプロパティは現在のシェーダでは無効です";
-        float[] fa=ParseUtil.RgbaLenient(val);
-        if(fa==null) return ParseUtil.error;
-        m.SetColor(key,new Color(fa[0],fa[1],fa[2],fa[3]));
+        float[] fa={0,0,0,0};
+        int n=ParseUtil.XyzSub(val,fa);
+        if(n==0||n>4) return "値が不正です";
+        m.SetVector(key,new Vector4(fa[0],fa[1],fa[2],fa[3]));
         return "";
     }
     public static string SetFloatProp(Material m, string key, string val){
@@ -552,23 +569,19 @@ public static class CmdMeshes {
         return 1;
     }
 
+    private static string[] texnames={
+        "_AlphaTex", "_BumpMap", "_Caustics", "_DerivativeTex", "_DetailNormalMap", "_EmissionMap",
+        "_EnvMap", "_FlowTex", "_Fresnel", "_HiTex", "_LightMap", "_MainTex", "_MultiColTex",
+        "_NormalMap", "_OcculusionMap", "_OutlineTex", "_OutlineToonRamp", "_OutlineWidthTex",
+        "_ParallaxMap", "_ReflectionTex", "_ReflectiveColor", "_ReflectiveColorCube", "_RefractionTex",
+        "_RuleTex", "_ShadowRateToon", "_ShadowTex", "_Tex1", "_Tex2", "_ToonRamp"
+    };
     private static HashSet<Texture> texiid=new HashSet<Texture>();
     private static int MeshParamTexture(ComShInterpreter sh,SingleMesh sm,string val){
         Material mate;
         if(val==null){
             mate=sm.mi.material[sm.submeshno];
-            PrintTextureInfo(sh,mate,"_MainTex");
-            PrintTextureInfo(sh,mate,"_ShadowTex");
-            PrintTextureInfo(sh,mate,"_ToonRamp");
-            PrintTextureInfo(sh,mate,"_ShadowRateToon");
-            PrintTextureInfo(sh,mate,"_HiTex");
-            PrintTextureInfo(sh,mate,"_LightMap");
-            PrintTextureInfo(sh,mate,"_OutlineTex");
-            PrintTextureInfo(sh,mate,"_OutlineToonRamp");
-            PrintTextureInfo(sh,mate,"_OutlineWidthTex");
-            PrintTextureInfo(sh,mate,"_NormalMap");
-            PrintTextureInfo(sh,mate,"_BumpMap");
-            PrintTextureInfo(sh,mate,"_ParallaxMap");
+            for(int i=0; i<texnames.Length; i++) PrintTextureInfo(sh,mate,texnames[i]);
             return 0;
         }
         if(val=="") return 0;
@@ -578,6 +591,7 @@ public static class CmdMeshes {
 
         string prop="_MainTex",right="";
         string[] lr=ParseUtil.LeftAndRight(val,'=');
+        if(lr[1]=="") lr=ParseUtil.LeftAndRight(val,':');
         if(lr[1]=="") right=lr[0]; else { prop=lr[0]; right=lr[1]; }
         if(!mate.HasProperty(prop)) return sh.io.Error("指定されたプロパティは現在のシェーダでは無効です");
 
@@ -589,7 +603,7 @@ public static class CmdMeshes {
         if(!mate.HasProperty(prop)) return;
         Texture tx=mate.GetTexture(prop);
         if(tx==null) return;
-        sh.io.PrintLn($"{prop}:{tx.name}{sh.ofs}{tx.width}x{tx.height}");
+        sh.io.PrintLn($"{prop}:{tx.name}{sh.ofs}{tx.width}x{tx.height}{sh.ofs}{tx.GetType().Name}");
     }
     private static string SetTex(string prop,string name,int mode,int wrap,Material mate,Material orig){
         Camera cam;
@@ -681,6 +695,45 @@ public static class CmdMeshes {
             if(opts.Length>=2 && (!int.TryParse(opts[1],out mode) || mode<0 || mode>1)) return "書式が不正です";
         }
         return SetTex(key,right,mode,wrap,m,orig);
+    }
+    private static int MeshParamTextureNew(ComShInterpreter sh,SingleMesh sm,string val){
+        if(val==null || val=="") return 0;
+
+        sm.mi.EditMaterial();
+        Material mate=sm.mi.material[sm.submeshno];
+        string prop="_MainTex",right="";
+        string[] lr=ParseUtil.LeftAndRight(val,':');
+        if(lr[1]=="") right=lr[0]; else { prop=lr[0]; right=lr[1]; }
+
+        Material orig=sm.mi.oid.originalMate[sm.submeshno];
+        var origtex=(orig==null)?null:orig.GetTexture(prop);
+
+        string[] sa=right.Split(ParseUtil.comma);
+        int w=0,h=0,wrap=0;
+        if(sa.Length>=1){
+            if(!int.TryParse(sa[0],out w) || w<=0)
+                return sh.io.Error("数値が不正です");
+            h=w;
+        }
+        if(sa.Length>=2){
+            if(!int.TryParse(sa[1],out h) || h<=0)
+                return sh.io.Error("数値が不正です");
+        }
+        if(sa.Length>=3){
+            switch(sa[2]){
+            case "0": wrap=0; break;
+            case "1": wrap=1; break;
+            default: return sh.io.Error("数値が不正です");
+            }
+        }
+
+        var t2d=new Texture2D(w,h);
+        t2d.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
+        var old=mate.GetTexture(prop);
+        if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
+        mate.SetTexture(prop,t2d);
+        texiid.Add(t2d);
+        return 1;
     }
     private static int MeshParamTexFilter(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null || val=="") return 0;

@@ -105,13 +105,24 @@ public static class CmdMisc {
         if(cmd=="bgm.time"||cmd=="dance.time"){
             if(val==null){
                 var asm=GetASMgr(0);
-                if(asm!=null&&asm.audiosource!=null&&asm.audiosource.isPlaying)
+                if(asm!=null&&asm.audiosource!=null&&asm.audiosource.isPlaying&&asm.audiosource.clip.length>0)
                     sh.io.PrintLn(((int)((asm.audiosource.time%asm.audiosource.clip.length)*1000)).ToString());
             }else{
                 float t=ParseUtil.ParseFloat(val);
                 if(float.IsNaN(t)||t<0) return sh.io.Error("数値の指定が不正です");
                 var asm=GetASMgr(0);
                 if(asm!=null&&asm.audiosource!=null&&asm.audiosource.isPlaying) asm.audiosource.time=t/1000;
+            }
+        }else if(cmd=="bgm.timep"||cmd=="dance.timep"){
+            if(val==null){
+                var asm=GetASMgr(0);
+                if(asm!=null&&asm.audiosource!=null&&asm.audiosource.isPlaying&&asm.audiosource.clip.length>0)
+                    sh.io.PrintLn(sh.fmt.F0to1(asm.audiosource.time/asm.audiosource.clip.length));
+            }else{
+                float t=ParseUtil.ParseFloat(val);
+                if(float.IsNaN(t)||t<0) return sh.io.Error("数値の指定が不正です");
+                var asm=GetASMgr(0);
+                if(asm!=null&&asm.audiosource!=null&&asm.audiosource.isPlaying) asm.audiosource.time=t*asm.audiosource.clip.length;
             }
         }else if(cmd=="bgm.length"||cmd=="dance.length"){
             var asm=GetASMgr(0);
@@ -124,19 +135,37 @@ public static class CmdMisc {
                 int n=0;
                 if(sa.Length>1 && (!int.TryParse(sa[1],out n) || n<0 || n>1)) return sh.io.Error("ループ指定が不正です");
                 sm.PlaySe(UTIL.Suffix(sa[0],".ogg"),n==1);
+                var asm=GetASMgr(2);
+                if(asm!=null&&asm.audiosource!=null) asm.audiosource.time=0;
             }
         }else if(cmd=="bgm"){
             if(val==null){ PrintSound(sh,0); return 0;}
-            if(val.Length==0) sm.StopBGM(0f); else sm.PlayBGM(UTIL.Suffix(val,".ogg"), 0, true);
+            if(val.Length==0) sm.StopBGM(0f); else{
+                sm.PlayBGM(UTIL.Suffix(val,".ogg"), 0, true);
+                var asm=GetASMgr(0);
+                if(asm!=null&&asm.audiosource!=null) asm.audiosource.time=0;
+            }
         }else if(cmd=="dance"){
             if(val==null){ PrintSound(sh,0); return 0;}
-            if(val.Length==0) sm.StopBGM(0f); else sm.PlayDanceBGM(UTIL.Suffix(val,".ogg"), 0f,false);
+            if(val.Length==0) sm.StopBGM(0f); else{
+                sm.PlayDanceBGM(UTIL.Suffix(val,".ogg"), 0f,false);
+                var asm=GetASMgr(0);
+                if(asm!=null&&asm.audiosource!=null) asm.audiosource.time=0;
+            }
         }else if(cmd=="dancep"){
             if(val==null){ PrintSound(sh,0); return 0;}
-            if(val.Length==0) sm.StopBGM(0f); else sm.PlayDanceBGMParallel(UTIL.Suffix(val,".ogg"), 0f,false);
+            if(val.Length==0) sm.StopBGM(0f); else{
+                sm.PlayDanceBGMParallel(UTIL.Suffix(val,".ogg"), 0f,false);
+                var asm=GetASMgr(0);
+                if(asm!=null&&asm.audiosource!=null) asm.audiosource.time=0;
+            }
         }else if(cmd=="env"){
             if(val==null){ PrintSound(sh,1); return 0;}
-            if(val.Length==0) sm.StopEnv(0f); else sm.PlayEnv(UTIL.Suffix(val,".ogg"),0f);
+            if(val.Length==0) sm.StopEnv(0f); else{
+                sm.PlayEnv(UTIL.Suffix(val,".ogg"),0f);
+                var asm=GetASMgr(1);
+                if(asm!=null&&asm.audiosource!=null) asm.audiosource.time=0;
+            }
         }else return sh.io.Error("パラメータが不正です");
         return 1;
     }
@@ -362,17 +391,21 @@ public static class CmdMisc {
             return new float[][]{min,max};
         }
         public float Distance(){
-            var fa=new float[dim];
+            if(count<=1) return 0;
             float l=0;
-            for(int i=1; i<=count; i++){
-                int n=ip-i;
+            int n=ip-1;
+            if(n<0) n+=buf.Length;
+            float[] fa=buf[n];
+            for(int i=2; i<=count; i++){
+                n=ip-i;
                 if(n<0) n+=buf.Length;
-                if(dim==1) l+=buf[n][0];
+                if(dim==1) l+=Mathf.Abs(buf[n][0]-fa[0]);
                 else{
                     float t=0;
-                    for(int d=0; d<dim; d++) t+=buf[n][d]*buf[n][d];
+                    for(int d=0; d<dim; d++){float off=buf[n][d]-fa[d]; t+=off*off;}
                     l+=Mathf.Sqrt(t);
                 }
+                fa=buf[n];
             }
             return l;
         }

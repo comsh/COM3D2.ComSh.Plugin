@@ -192,6 +192,7 @@ public partial class ComShInterpreter {
         public bool isSource=false;
         public bool enableSleep=false;
         public int line0=0;
+        public Queue<ComShParser> init;
         public List<ComShParser> lines;
     	public Dictionary<string, string> svars=new Dictionary<string,string>(10); // static変数
         public ScriptStatus(bool funcq=false,bool scriptq=false){
@@ -201,15 +202,22 @@ public partial class ComShInterpreter {
         }
         public bool hasNext(){ return lines.Count-1>current; }
         public void rewind(){
+            if(init!=null && init.Count>0) foreach(var p in init) p.Reset();
             for(int i=0; i<lines.Count; i++) lines[i].Reset();
             current=-1;
         }
         public int next(ComShInterpreter sh){
+            if(init!=null && init.Count>0){
+                int ret=sh.InterpretParser(init.Dequeue());
+                if(init.Count==0) init=null;
+                return ret;
+            }
             // ここからの実行だけsleep許可(funcやsource時は不可)
             return sh.InterpretParser(lines[++current],enableSleep);
         }
         public void Add(ComShParser p){
-            this.lines.Add(p);
+            if(this.init!=null) this.init.Enqueue(p);
+            else this.lines.Add(p);
         }
         public int read(ComShInterpreter sh,string scriptName,string full){
             try {
@@ -256,6 +264,10 @@ public partial class ComShInterpreter {
                                     target.line0=lno;
                                     sh.func[funcname]=target;   // 既にあっても上書き
                                 }
+                                continue;
+                            }else if(tokens[0]=="func.init"){
+                                if(tokens.Count!=1 || target==this) return sh.io.Error("funcの書式が不正です");
+                                target.init=new Queue<ComShParser>();
                                 continue;
                             }else if(tokens[0]=="func.end"){
                                 if(tokens.Count!=1 || target==this) return sh.io.Error("funcの書式が不正です");
@@ -433,9 +445,9 @@ public partial class ComShInterpreter {
     }
     public FMT fmt=new FMT();
     public class FMT {
-        private string fmt_01="F4";
-        private string fmt_int="F3";
-        private string fmt_val="F8";
+        private string fmt_01="0.####";
+        private string fmt_int="0.###";
+        private string fmt_val="0.########";
         public void Update(VarDic e){
             string s;
             if((s=GetFromEnv("_format_0to1",e))!=string.Empty) fmt_01=s;

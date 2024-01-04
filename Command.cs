@@ -100,7 +100,11 @@ public static class Command {
         cmdTbl.Add("substr",new Cmd(CmdSubstr));
         cmdTbl.Add("repeat",new Cmd(CmdRepeat));
         cmdTbl.Add("ref",new Cmd(CmdRefer));
+        cmdTbl.Add("isref",new Cmd(CmdIsRef));
+        cmdTbl.Add("static",new Cmd(CmdStatic));
         cmdTbl.Add("anmlist", new Cmd(CmdAnmList));
+        cmdTbl.Add("dancelist", new Cmd(CmdDanceList));
+        cmdTbl.Add("scene", new Cmd(CmdScene));
         cmdTbl.Add("fps",new Cmd(CmdFps));
         cmdTbl.Add("vsync", new Cmd(CmdVSync));
         cmdTbl.Add("timescale", new Cmd(CmdTimeScale));
@@ -127,6 +131,8 @@ public static class Command {
         cmdTbl.Add("clean", new Cmd(CmdClean));
         cmdTbl.Add("gc", new Cmd(CmdGC));
         cmdTbl.Add("evalkag", new Cmd(CmdEvalKag));
+        cmdTbl.Add("logbx", new Cmd(CmdLogBX));
+        cmdTbl.Add("pow", new Cmd(CmdPow));
 
         cmdTbl.Add("__res",new Cmd(Cmd__Resource));
         cmdTbl.Add("__files",new Cmd(Cmd__Files));
@@ -192,6 +198,131 @@ public static class Command {
         string prev="";
         foreach(string fn in files) if(fn!=prev){ Debug.Log(fn); prev=fn; }
         System.GC.Collect();
+        return 0;
+    }
+    private class DanceDt {
+        public string ogg;
+        public string scene;
+        public string name;
+        public StringBuilder anm=new StringBuilder();
+        public StringBuilder kp=new StringBuilder();
+        public int n;
+        public void SetAnm(List<string>str,int cnt){SetSb(anm,str,cnt,".anm");}
+        public void SetKp(List<string>str,int cnt){SetSb(kp,str,cnt,"");}
+        private void SetSb(StringBuilder sb,List<string> str,int cnt,string sfx){
+            sb.Length=0;
+            if(str==null||str.Count==0) return;
+            sb.Append(UTIL.Suffix2(str[0],sfx));
+            for(int i=1; i<cnt; i++){
+                sb.Append(',');
+                if(str.Count>i){
+                    sb.Append(UTIL.Suffix2(str[i],sfx));
+                }
+            }
+        }
+    };
+    private static int CmdDanceList(ComShInterpreter sh,List<string> args){
+        long dur=30;    // シーン読み込みタイムアウト デフォルト30秒
+        if(args.Count==2){
+            if(!long.TryParse(args[1],out dur)||dur<=0) return sh.io.Error("数値が不正です");
+        }
+        dur*=1000*TimeSpan.TicksPerMillisecond;
+        var nei=DanceSelect.GetDanceDataList();
+        if(nei.Count==0) return 0;
+        var result=new List<DanceDt>(nei.Count);
+        foreach(var dd in nei){
+            DanceDt dt=new DanceDt();
+            dt.ogg=UTIL.Suffix2(dd.bgm_file_name,".ogg");
+            if(dt.ogg!="") if(!GameUty.IsExistFile(dt.ogg,GameUty.FileSystem)) continue;
+            dt.scene=dd.scene_name; dt.name=dd.title; dt.n=dd.select_chara_num;
+            dt.SetAnm(dd.motionFileList,dt.n); dt.SetKp(dd.kuchiPakuFileList,dt.n);
+            result.Add(dt);
+        }
+        nei=null;
+        string scene0=GameMain.Instance.GetNowSceneName();
+        bool bak=NDebug.m_bQuitWhenAssert;
+        NDebug.m_bQuitWhenAssert=false;     // Assertでアプリが落ちないように
+        int idx=0;
+        for(;idx<result.Count; idx++){
+            try{GameMain.Instance.LoadScene(result[idx].scene);}catch{continue;}
+            break;
+        }
+        if(idx==result.Count){ export(result); NDebug.m_bQuitWhenAssert=bak; return 0; }
+        long timeout=0;
+        ComShBg.cron.AddJob("__dance",0,0,(t)=>{
+            if(timeout==0) timeout=t+dur;
+            bool done=false;
+            UnityEngine.SceneManagement.Scene sc=UnityEngine.SceneManagement.SceneManager.GetSceneByName(result[idx].scene);
+            if(!sc.IsValid()) timeout=0;
+            else if(sc.isLoaded && sc.name==result[idx].scene){
+                var oa=sc.GetRootGameObjects();
+                DanceMain dm=null;
+                for(int i=0; i<oa.Length; i++){
+                    var ca=oa[i].GetComponentsInChildren<DanceMain>(true);
+                    if(ca!=null && ca.Length>0){ dm=ca[0]; break; }
+                }
+                if(dm!=null){
+                    string ogg=result[idx].ogg;
+                    if(ogg==""){
+                        ogg=dm.m_strMasterAudioFileName;
+                        if(ogg==null || (ogg!="" && !GameUty.IsExistFile(ogg,GameUty.FileSystem))) ogg="";
+                        result[idx].ogg=ogg;
+                    }
+                    if(ogg!=""){ 
+                        var dt=result[idx];
+                        if(dt.anm.Length<dt.n && dm.m_listAnimName!=null) dt.SetAnm(dm.m_listAnimName,dt.n);
+                        if(dt.kp.Length<dt.n && dm.m_listKuchiPakuFile!=null) dt.SetKp(dm.m_listKuchiPakuFile,dt.n);
+                    }
+                    done=true;
+                }
+            }
+            if(done || t>timeout){
+                if(!done) result[idx].ogg="";
+                for(idx++;idx<result.Count; idx++){
+                    try{GameMain.Instance.LoadScene(result[idx].scene);}catch{continue;}
+                    break;
+                }
+                if(idx==result.Count){
+                    export(result);
+                    try{GameMain.Instance.LoadScene(scene0);}catch{}
+                    Resources.UnloadUnusedAssets();
+                    NDebug.m_bQuitWhenAssert=bak;
+                    return -1;
+                }
+                timeout=t+dur;
+            }
+            return 0;
+        });
+        return 0;
+        void export(List<DanceDt> data){
+            string datadir=ComShInterpreter.scriptFolder+"export\\";
+            Directory.CreateDirectory(datadir);
+            try{
+                using(StreamWriter sw=new StreamWriter(datadir+"dancelist",false,Encoding.UTF8)){
+                    sw.WriteLine("dancelist={\\");
+                    string last="";
+                    foreach(var dt in data){
+                        if(dt.ogg=="") continue;
+                        string cur=$"{dt.n.ToString()}\t{dt.ogg}\t{dt.anm.ToString()}\t{dt.kp.ToString()}";
+                        if(cur==last) continue;
+                        sw.WriteLine(dt.name+"\t"+cur+"}\"\\n\"{\\");
+                        last=cur;
+                    }
+                    sw.WriteLine("}");
+                }
+            }catch{}
+        }
+    }
+    private static int CmdScene(ComShInterpreter sh,List<string> args){
+        if(args.Count==1 || args[1]==""){
+            UnityEngine.SceneManagement.Scene sc=UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            if(sc.IsValid()) sh.io.PrintJoin(sh.ofs,sc.name,sc.path,sc.buildIndex.ToString());
+            return 0;
+        }
+        if(int.TryParse(args[1],out int id))
+            try{ UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(id);}catch{}
+        else
+            try{ UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(args[1]);}catch{}
         return 0;
     }
     private static int CmdAnmList(ComShInterpreter sh,List<string> args){
@@ -457,7 +588,7 @@ public static class Command {
         return 0;
 	}
     private static int CmdEnv(ComShInterpreter sh,List<string> args){
-        foreach(var kv in sh.env) sh.io.Print($"{kv.Key}={kv.Value.Get()}\n");
+        foreach(var kv in sh.env) if(kv.Key[0]!=' ') sh.io.Print($"{kv.Key}={kv.Value.Get()}\n");
         foreach(var kv in Variables.g) sh.io.Print($"{kv.Key}={kv.Value}\n");
         if(sh.runningScript!=null) foreach(var kv in sh.runningScript.svars) sh.io.Print($"{kv.Key}={kv.Value}\n");
         return 0;
@@ -1236,27 +1367,40 @@ public static class Command {
     }
     private static int CmdRndN(ComShInterpreter sh,List<string> args){
         if(args.Count!=2 && args.Count!=3) return sh.io.Error("使い方: rndn 最大値 [シード]");
-        if(!int.TryParse(args[1],out int n)||n==0) return sh.io.Error("数値の指定が不正です");
+        if(!float.TryParse(args[1],out float n)||n==0) return sh.io.Error("数値の指定が不正です");
         if(args.Count==3){
             if(!int.TryParse(args[2],out int s)) return sh.io.Error("数値の指定が不正です");
             UnityEngine.Random.InitState(s);
         }
-        sh.io.Print(UnityEngine.Random.Range(0,n+1).ToString());
+        sh.io.Print(((int)UnityEngine.Random.Range(0,n+1)).ToString());
         return 0;
     }
     private static int CmdPerlinNoise(ComShInterpreter sh,List<string> args){
-        if(args.Count!=3 && args.Count!=5) return sh.io.Error("使い方: perlinnoise x y [半径 角度]");
-
-        if(!float.TryParse(args[1],out float x)) return sh.io.Error("数値の指定が不正です");
-        if(!float.TryParse(args[2],out float y)) return sh.io.Error("数値の指定が不正です");
-        if(args.Count==5){
-            if(!float.TryParse(args[3],out float r)||r<=0) return sh.io.Error("数値の指定が不正です");
-            if(!float.TryParse(args[4],out float d)) return sh.io.Error("数値の指定が不正です");
-            float rad=d*Mathf.Deg2Rad;
-            x+=r*Mathf.Cos(rad);
-            y+=r*Mathf.Sin(rad);
+        const string usage="使い方: perlinnoise x y [半径 角度]";
+        if(args.Count<2) return sh.io.Error(usage);
+        int p=args[1].IndexOf(',');
+        float[] xy;
+        if(p>=0){
+            if(args.Count!=2 && args.Count!=4) return sh.io.Error(usage);
+            xy=ParseUtil.Xy(args[1]);
+            if(xy==null) return sh.io.Error(ParseUtil.error);
+            p=2;
+        }else{
+            if(args.Count!=3 && args.Count!=5) return sh.io.Error(usage);
+            xy=new float[2];
+            if(!float.TryParse(args[1],out xy[0])) return sh.io.Error("数値の指定が不正です");
+            if(!float.TryParse(args[2],out xy[1])) return sh.io.Error("数値の指定が不正です");
+            p=3;
         }
-        sh.io.Print(sh.fmt.FVal(Mathf.PerlinNoise(x,y)));
+
+        if(args.Count>=p+2){
+            if(!float.TryParse(args[p],out float r)||r<=0) return sh.io.Error("数値の指定が不正です");
+            if(!float.TryParse(args[p+1],out float d)) return sh.io.Error("数値の指定が不正です");
+            float rad=d*Mathf.Deg2Rad;
+            xy[0]+=r*Mathf.Cos(rad);
+            xy[1]+=r*Mathf.Sin(rad);
+        }
+        sh.io.Print(sh.fmt.FVal(Mathf.PerlinNoise(xy[0],xy[1])));
         return 0;
     }
     private static int CmdQuat(ComShInterpreter sh,List<string> args){
@@ -1554,7 +1698,11 @@ public static class Command {
             if(args[i][0]=='/') Variables.g.Remove(args[i]);
             else if(args[i][0]=='.') {
                 if(sh.runningScript!=null) sh.runningScript.svars.Remove(args[i]);
-            }else {sh.env.Remove(args[i]); changed=true; }
+            }else {
+                sh.env.Remove(args[i]);
+                sh.env.Remove(" "+args[i]); // staticで作った匿名変数
+                changed=true;
+            }
         }
         if(changed) sh.envChanged=true;
         return 0;
@@ -1617,8 +1765,9 @@ public static class Command {
     }
     private static int CmdRepeat(ComShInterpreter sh,List<string> args){
         if(args.Count!=3) return sh.io.Error("使い方: repeat 回数 コマンド");
-        if(!float.TryParse(args[1],out float f)||f<=0) return sh.io.Error("数値の指定が不正です");
+        if(!float.TryParse(args[1],out float f)) return sh.io.Error("数値の指定が不正です");
         int n=(int)f;
+        if(n<=0) return 0;
 
         var psr=EvalParser(sh,2);
         if(psr==null) return -1;
@@ -1749,6 +1898,27 @@ public static class Command {
         }else return sh.io.Error("その変数はrefの対象にできません");
         return 0;
     }
+    private static int CmdIsRef(ComShInterpreter sh,List<string> args){
+        const string usage="使い方: isref 変数名";
+        if(args.Count!=2) return sh.io.Error(usage);
+        sh.io.Print(sh.env.IsRef(args[1])?"1":"0");
+        return 0;
+    }
+    private static int CmdStatic(ComShInterpreter sh,List<string> args){
+        const string usage="使い方: static 変数[=初期値] ...";
+        if(args.Count==1) return sh.io.Error(usage);
+        for(int i=1; i<args.Count; i++){
+            var key=ParseUtil.LeftOf(args[i],'=');
+            if(!ParseUtil.IsLVarName(key)||ParseUtil.IsVar1Name(key)) return sh.io.Error("変数名が不正です");
+            if(sh.env.IsRef(key)) sh.env.Remove(" "+key); // 上書きする場合は匿名変数の実体は消す
+            sh.env.SetRef(key," "+key); // 匿名変数のrefを作るだけ
+        }
+        for(int i=1; i<args.Count; i++){
+            if(args[i].IndexOf('=')<=0) continue;
+            sh.Interpret(args[i]);  // 初期化
+        }
+        return 0;
+    }
 
     private const string escapechr=" \\\"\'$;|>#";
     private static int CmdEscape(ComShInterpreter sh,List<string> args){
@@ -1844,6 +2014,21 @@ public static class Command {
         }
         return 0;
     }
+    private static int CmdLogBX(ComShInterpreter sh,List<string> args){
+        if(args.Count!=3) return sh.io.Error("使い方:logbx 基数 真数");
+        if( !float.TryParse(args[1],out float b)||b<=0
+         || !float.TryParse(args[2],out float x)||x<=0 ) return sh.io.Error("数値が不正です");
+        sh.io.Print(sh.fmt.FVal(Mathf.Log(x,b)));
+        return 0;
+    }
+    private static int CmdPow(ComShInterpreter sh,List<string> args){
+        if(args.Count!=3) return sh.io.Error("使い方:pow 底 指数");
+        if( !float.TryParse(args[1],out float b)
+         || !float.TryParse(args[2],out float x) ) return sh.io.Error("数値が不正です");
+        sh.io.Print(sh.fmt.FVal(Mathf.Pow(b,x)));
+        return 0;
+    }
+
 
     private static string tagdir=ComShInterpreter.scriptFolder+@"tagconfig\";
     private static int CmdTag(ComShInterpreter sh,List<string> args){
@@ -2174,6 +2359,10 @@ public static class UTIL {
     private static int seqId=0;
     public static string GetSeqId(){ return (seqId=(seqId+1)%int.MaxValue).ToString(); }
     public static string Suffix(string str,string sfx){
+        return str.EndsWith(sfx,Ordinal)?str:str+sfx;
+    }
+    public static string Suffix2(string str,string sfx){
+        if(str=="") return "";
         return str.EndsWith(sfx,Ordinal)?str:str+sfx;
     }
     public static Vector3 V3(float[] v){ return new Vector3(v[0],v[1],v[2]); }

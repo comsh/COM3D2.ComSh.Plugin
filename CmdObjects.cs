@@ -533,7 +533,7 @@ public static class CmdObjects {
                 mate.DisableKeyword(p);
             }else if(v.IndexOf(',')>=0){
                 mate=op.EditMaterial();
-                if((err=CmdMeshes.SetColorProp(mate,p,v))!="") return sh.io.Error(err);
+                if((err=CmdMeshes.SetVectorProp(mate,p,v))!="") return sh.io.Error(err);
             }else{
                 mate=op.EditMaterial();
                 if((err=CmdMeshes.SetFloatProp(mate,p,v))!="") return sh.io.Error(err);
@@ -706,7 +706,7 @@ public static class CmdObjects {
                 mate.DisableKeyword(p);
             }else if(v.IndexOf(',')>=0){
                 mate=par.EditMaterial();
-                if((err=CmdMeshes.SetColorProp(mate,p,v))!="") return sh.io.Error(err);
+                if((err=CmdMeshes.SetVectorProp(mate,p,v))!="") return sh.io.Error(err);
             }else{
                 mate=par.EditMaterial();
                 if((err=CmdMeshes.SetFloatProp(mate,p,v))!="") return sh.io.Error(err);
@@ -936,7 +936,7 @@ public static class CmdObjects {
                 mi.material[n].DisableKeyword(kv[0]);
             }else if(kv[1].IndexOf(',')>=0){
                 mi.EditMaterial();
-                if((err=CmdMeshes.SetColorProp(mi.material[n],kv[0],kv[1]))!="") return sh.io.Error(err);
+                if((err=CmdMeshes.SetVectorProp(mi.material[n],kv[0],kv[1]))!="") return sh.io.Error(err);
             }else{
                 mi.EditMaterial();
                 if((err=CmdMeshes.SetFloatProp(mi.material[n],kv[0],kv[1]))!="") return sh.io.Error(err);
