@@ -77,8 +77,10 @@ public static class StudioMode {
 
     // 男head,body変更 スタジオモードUI経由
     public static int ManHeadBodyStudio(Maid m,string item){
+        if(pwm==null) return 0;
         Maid orig=pwm.select_maid;
         var pw=GetPlacementWindow();
+        if(pw==null) return 0;
         int no=m.ActiveSlotNo;
         string manname=(no==0)?"主人公":$"男{no}";
         MaidSelectStudio(pw,"",manname);
