@@ -111,7 +111,8 @@ public static class CmdMisc {
                 float t=ParseUtil.ParseFloat(val);
                 if(float.IsNaN(t)||t<0) return sh.io.Error("数値の指定が不正です");
                 var asm=GetASMgr(0);
-                if(asm!=null&&asm.audiosource!=null&&asm.audiosource.isPlaying) asm.audiosource.time=t/1000;
+                if(asm!=null&&asm.audiosource!=null&&asm.audiosource.isPlaying&&asm.audiosource.clip.length>0)
+                    asm.audiosource.time=Mathf.Clamp(t/1000,0,asm.audiosource.clip.length);
             }
         }else if(cmd=="bgm.timep"||cmd=="dance.timep"){
             if(val==null){
@@ -122,7 +123,8 @@ public static class CmdMisc {
                 float t=ParseUtil.ParseFloat(val);
                 if(float.IsNaN(t)||t<0) return sh.io.Error("数値の指定が不正です");
                 var asm=GetASMgr(0);
-                if(asm!=null&&asm.audiosource!=null&&asm.audiosource.isPlaying) asm.audiosource.time=t*asm.audiosource.clip.length;
+                if(asm!=null&&asm.audiosource!=null&&asm.audiosource.isPlaying&&asm.audiosource.clip.length>0)
+                    asm.audiosource.time=Mathf.Clamp01(t)*asm.audiosource.clip.length;
             }
         }else if(cmd=="bgm.length"||cmd=="dance.length"){
             var asm=GetASMgr(0);

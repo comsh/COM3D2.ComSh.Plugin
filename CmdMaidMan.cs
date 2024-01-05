@@ -831,7 +831,8 @@ public static class CmdMaidMan {
             if(buf==null) return sh.io.Error("menuファイルの読込に失敗しました");
             if(m.boMAN){
                 if(cate=="body"||cate=="head"){
-                    if(fname.StartsWith("m"+cate,Ordinal)) m.SetProp(cate,fname,0);
+                    if(fname.StartsWith("m"+cate,Ordinal))
+                        if(StudioMode.ManHeadBodyStudio(m,fname)==0) m.SetProp(cate,fname,0);
                 }else if(cate=="def"){
                     if(fname.StartsWith("_i_man_",Ordinal)) Menu.ProcScript(m,fname);
                 }

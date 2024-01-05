@@ -74,6 +74,40 @@ public static class StudioMode {
             EventDelegate.Add(okbtn.onClick,OnPeOffOkClick,true);
         }
     }
+
+    // 男head,body変更 スタジオモードUI経由
+    public static int ManHeadBodyStudio(Maid m,string item){
+        Maid orig=pwm.select_maid;
+        var pw=GetPlacementWindow();
+        int no=m.ActiveSlotNo;
+        string manname=(no==0)?"主人公":$"男{no}";
+        MaidSelectStudio(pw,"",manname);
+        int ret=ManHeadBodyStudio(item);
+        if(orig.boMAN){
+            no=orig.ActiveSlotNo;
+            manname=(no==0)?"主人公":$"男{no}";
+            MaidSelectStudio(pw,"",manname);
+        }else MaidSelectStudio(pw,orig.status.lastName,orig.status.firstName);
+        return ret;
+    }
+    public static int ManHeadBodyStudio(string item){
+        var fw=GetWindow<FaceWindow>(PhotoWindowManager.WindowType.Face);
+        if(fw==null) return 0;
+        UIWFTabPanel panel;
+        if(item.StartsWith("mbody",Ordinal)) panel=fw.BodyItemTabPanel;
+        else if(item.StartsWith("mhead",Ordinal)) panel=fw.HeadItemTabPanel;
+        else return 0;
+        string rid=item.ToLower().GetHashCode().ToString();
+        var btns=panel.GetComponentsInChildren<UIWFTabButton>();
+        for(int i=0; i<btns.Length; i++) if(btns[i].name==rid){
+            for(int j=0; j<i; j++) btns[j].SetSelect(false);
+            for(int j=i+1; j<btns.Length; j++) btns[j].SetSelect(false);
+            btns[i].SetSelect(true);
+            return 1;
+        }
+        return 0;
+    }
+
     private static void OnPeOffOkClick(){
         Maid m=pwm.select_maid;
         Animation anim=m.GetAnimation();

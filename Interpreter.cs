@@ -445,9 +445,9 @@ public partial class ComShInterpreter {
     }
     public FMT fmt=new FMT();
     public class FMT {
-        private string fmt_01="0.####";
-        private string fmt_int="0.###";
-        private string fmt_val="0.########";
+        private string fmt_01="F4";
+        private string fmt_int="F3";
+        private string fmt_val="F8";
         public void Update(VarDic e){
             string s;
             if((s=GetFromEnv("_format_0to1",e))!=string.Empty) fmt_01=s;
