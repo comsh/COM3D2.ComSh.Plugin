@@ -367,8 +367,7 @@ public partial class ComShInterpreter {
         public string pipedText;
         public void PrintStart(char peol){
             printSb.Length=0;
-            pipedText=(peol=='|')?env.output:null;
-            env.output="";
+            if(peol=='|') pipedText=env.output; else {pipedText=null; env.output="";}
         }
         public IO Print(char c){ printSb.Append(c); return this;}
         public IO Print(string str){ printSb.Append(str); return this;}

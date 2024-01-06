@@ -775,12 +775,12 @@ public static class Command {
         if(cmp==1){
             var psr=EvalParser(sh,args.Count-n,false);
             if(psr==null) return -1;
-            psr.Reset();
+            psr.Reset(sh.currentParser.prevEoL);
             return sh.InterpretParser(psr);
         }else if(n==2){
             var psr=EvalParser(sh,args.Count-1,false);
             if(psr==null) return -1;
-            psr.Reset();
+            psr.Reset(sh.currentParser.prevEoL);
             return sh.InterpretParser(psr);
         }
         return 0;

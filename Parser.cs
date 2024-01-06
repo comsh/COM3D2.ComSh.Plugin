@@ -61,6 +61,7 @@ public class ComShParser {
         Reset();
         return Analyze(text);
     }
+    public void Reset(char eol){Reset();prevEoL=eol;}
     public void Reset(){
         error=null;
         prevEoL=';'; envChanged=false;
