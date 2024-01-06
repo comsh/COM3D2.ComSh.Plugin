@@ -137,8 +137,6 @@ public static class CmdMisc {
                 int n=0;
                 if(sa.Length>1 && (!int.TryParse(sa[1],out n) || n<0 || n>1)) return sh.io.Error("ループ指定が不正です");
                 sm.PlaySe(UTIL.Suffix(sa[0],".ogg"),n==1);
-                var asm=GetASMgr(2);
-                if(asm!=null&&asm.audiosource!=null) asm.audiosource.time=0;
             }
         }else if(cmd=="bgm"){
             if(val==null){ PrintSound(sh,0); return 0;}
@@ -158,15 +156,11 @@ public static class CmdMisc {
             if(val==null){ PrintSound(sh,0); return 0;}
             if(val.Length==0) sm.StopBGM(0f); else{
                 sm.PlayDanceBGMParallel(UTIL.Suffix(val,".ogg"), 0f,false);
-                var asm=GetASMgr(0);
-                if(asm!=null&&asm.audiosource!=null) asm.audiosource.time=0;
             }
         }else if(cmd=="env"){
             if(val==null){ PrintSound(sh,1); return 0;}
             if(val.Length==0) sm.StopEnv(0f); else{
                 sm.PlayEnv(UTIL.Suffix(val,".ogg"),0f);
-                var asm=GetASMgr(1);
-                if(asm!=null&&asm.audiosource!=null) asm.audiosource.time=0;
             }
         }else return sh.io.Error("パラメータが不正です");
         return 1;
