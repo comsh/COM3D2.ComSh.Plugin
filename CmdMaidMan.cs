@@ -53,6 +53,7 @@ public static class CmdMaidMan {
         maidParamDic.Add("ik",new CmdParam<Maid>(MaidParamIK));
         maidParamDic.Add("preset",new CmdParam<Maid>(MaidParamPreset));
         maidParamDic.Add("cloth",new CmdParam<Maid>(MaidParamCloth));
+        maidParamDic.Add("cloth2",new CmdParam<Maid>(MaidParamCloth2));
         maidParamDic.Add("mekure",new CmdParam<Maid>(MaidParamMekure));
         maidParamDic.Add("mekureF",new CmdParam<Maid>(MaidParamMekureF));
         maidParamDic.Add("mekureB",new CmdParam<Maid>(MaidParamMekureB));
@@ -812,6 +813,13 @@ public static class CmdMaidMan {
         return 1;
     }
     private static int MaidParamCloth(ComShInterpreter sh,Maid m,string val){
+        return MaidParamClothSub(sh,m,val,true);
+    }
+    private static int MaidParamCloth2(ComShInterpreter sh,Maid m,string val){
+        if(sh.IsSafeMode()) return sh.io.Error("この機能はセーフモードでは使用できません");
+        return MaidParamClothSub(sh,m,val,false);
+    }
+    private static int MaidParamClothSub(ComShInterpreter sh,Maid m,string val,bool tmpq){
         if(val==null){
             string ret;
             if(m.boMAN){
@@ -827,19 +835,19 @@ public static class CmdMaidMan {
         string[] menus=val.Split(ParseUtil.comma);
         for(int i=0; i<menus.Length; i++){
             string fname=UTIL.Suffix(menus[i],".menu");
-            byte[] buf=MaidUtil.ReadMenu(fname,out string cate);
-            if(buf==null) return sh.io.Error("menuファイルの読込に失敗しました");
+            var mh=MaidUtil.ReadMenuHeader(fname);
+            if(mh==null) return sh.io.Error("menuファイルの読込に失敗しました");
             if(m.boMAN){
-                if(cate=="body"||cate=="head"){
-                    if(fname.StartsWith("m"+cate,Ordinal))
-                        if(StudioMode.ManHeadBodyStudio(m,fname)==0) m.SetProp(cate,fname,0);
-                }else if(cate=="def"){
+                if(mh.cate=="body"||mh.cate=="head"){
+                    if(fname.StartsWith("m"+mh.cate,Ordinal))
+                        if(StudioMode.ManHeadBodyStudio(m,fname)==0) m.SetProp(mh.cate,fname,0);
+                }else if(mh.cate=="def"){
                     if(fname.StartsWith("_i_man_",Ordinal)) Menu.ProcScript(m,fname);
                 }
             }else{
-                if(cate=="body"||(cate=="head" && fname.StartsWith("mhead",Ordinal))) continue;
-                m.SetProp(cate,fname,0,true);
-                if(cate=="eye_hi") m.SetProp(MPN.eye_hi_r,fname,0,true);
+                if(mh.cate=="body"||(mh.cate=="head" && fname.StartsWith("mhead",Ordinal))) continue;
+                m.SetProp(mh.cate,fname,0,tmpq);
+                if(mh.cate=="eye_hi") m.SetProp(MPN.eye_hi_r,fname,0,tmpq);
             }
         }
         m.body0.FixMaskFlag();
@@ -1920,7 +1928,7 @@ public static class MaidUtil {
     public static string GetCloth(Maid m,MPN mpn){
         MaidProp mp=m.GetProp(mpn);
         string name=(!string.IsNullOrEmpty(mp.strTempFileName) && mp.nTempFileNameRID!=0)?mp.strTempFileName:mp.strFileName;
-        if (name=="" || name.EndsWith("_del.menu",Ordinal)) return string.Empty;
+        if (name=="" || name.Contains("_del_") || name.EndsWith("_del.menu",Ordinal)) return string.Empty;
         return name;
     }
     public static MPN[] mpnBody={       // 身体系MPN
@@ -2220,19 +2228,24 @@ public static class MaidUtil {
 
     public static Dictionary<int,string[]> ikObj=new Dictionary<int,string[]>();
 
-    public static byte[] ReadMenu(string fileName,out string cate) {
-        cate="";
+    public class MenuHeader{
+        public string name;
+        public string cate;
+    }
+    public static MenuHeader ReadMenuHeader(string fileName) {
         byte[] buffer=UTIL.AReadAll(fileName);
         if(buffer==null) return null;
+        var mh=new MenuHeader();
         try{
             using(BinaryReader br=new BinaryReader(new MemoryStream(buffer))){
                 string hdr=br.ReadString();
                 if(hdr!="CM3D2_MENU") return null;
-                br.ReadInt32(); br.ReadString(); br.ReadString();
-                cate=br.ReadString();
+                br.ReadInt32(); br.ReadString();
+                mh.name=br.ReadString();
+                mh.cate=br.ReadString();
             }
         }catch{ return null; }
-        return buffer;
+        return mh;
     }
     public static string GetCurrentMotion(Maid m){
         foreach(AnimationState ast in m.body0.m_Animation)

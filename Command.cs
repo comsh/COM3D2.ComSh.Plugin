@@ -104,6 +104,7 @@ public static class Command {
         cmdTbl.Add("static",new Cmd(CmdStatic));
         cmdTbl.Add("anmlist", new Cmd(CmdAnmList));
         cmdTbl.Add("dancelist", new Cmd(CmdDanceList));
+        cmdTbl.Add("menulist", new Cmd(CmdMenuList));
         cmdTbl.Add("scene", new Cmd(CmdScene));
         cmdTbl.Add("fps",new Cmd(CmdFps));
         cmdTbl.Add("vsync", new Cmd(CmdVSync));
@@ -367,18 +368,21 @@ public static class Command {
         }
         return 0;
     }
-    private static int WriteFileList(string filename,List<string> files){
+    private static int WriteFileList(string filename,List<string> files){ return WriteFileList2(filename,files,"","",""); }
+    private static int WriteFileList2(string filename,List<string> files,string eol,string begin,string end){
         try{
             string datadir=ComShInterpreter.scriptFolder+"export\\";
             Directory.CreateDirectory(datadir);
             using(StreamWriter sw=new StreamWriter(datadir+filename,false,Encoding.UTF8)){
+                sw.WriteLine(begin);
                 string prev="";
                 foreach(string fn in files) if(fn!=prev){
                     string[] sa=fn.Split('\\');
                     prev=fn;
-                    if(sa.Length==1) sw.WriteLine(sa[0]);
-                    else sw.WriteLine($"{sa[0]}\\{sa[1]}");
+                    if(sa.Length==1) sw.WriteLine(sa[0]+eol);
+                    else sw.WriteLine($"{sa[0]}\\{sa[1]}{eol}");
                 }
+                sw.WriteLine(end);
             }
         }catch{
             System.GC.Collect();
@@ -399,7 +403,47 @@ public static class Command {
         if(i<=0||i>=s.Length-1) return null;
         return s.Substring(i+1);
     }
-
+    private static int CmdMenuList(ComShInterpreter sh,List<string> args){
+        var dup=new HashSet<string>();
+        var list=new List<string>();
+        string[] fa;
+        try{
+            fa=Directory.GetFiles(ComShInterpreter.homeDir+@"Mod\","*.menu",SearchOption.AllDirectories);
+            Add2MenuList(fa,list,dup);
+        }catch{}
+        fa=GameUty.FileSystem.GetList("parts",AFileSystemBase.ListType.AllFile);
+        Add2MenuList(fa,list,dup);
+        fa=GameUty.FileSystemOld.GetList("menu",AFileSystemBase.ListType.AllFile);
+        Add2MenuList(fa,list,dup);
+        if(list.Count>0){
+            list.Sort();
+            if(WriteFileList2("menulist",list,"\\n\\","menulist=\"\\","\"")<0) return sh.io.Error("ファイルが作成できません");
+        }
+        return 0;
+    }
+    private static void Add2MenuList(string[] files,List<string> result,HashSet<string> hs){
+        for(int i=0; i<files.Length; i++) if(files[i].EndsWith(".menu",Ordinal)){
+            if(files[i].Contains("\\man\\")) continue;
+            string name=Last1(files[i],'\\').ToLower();
+            if(name==null) continue;
+            if(name.Contains("_zurashi")||name.Contains("_mekure")||name.Contains("_mekure_back")||name.Contains("_porori")) continue;
+            var mh=MaidUtil.ReadMenuHeader(name);
+            if(mh==null) continue;
+            var cate=mh.cate.ToLower();
+            if(cate=="def" ||cate=="moza"||cate=="seieki_hara"||cate.StartsWith("set_",Ordinal)||cate.Contains("color")||cate.Contains("folder")) continue;
+            if(cate=="body"||cate.Contains("skin")||cate=="head"||cate=="eye"||cate=="eyewhite"||cate=="mayu"
+             ||cate=="matsuge_up"||mh.cate=="matsuge_low"||mh.cate=="futae"||cate=="underhair"||cate=="chikubi") continue;
+            if(mh.name=="無し"||mh.name=="なし"){
+                if(name=="_i_handiteml_del.menu") mh.name="handitemL無し";
+                if(name=="_i_handitemr_del.menu") mh.name="handitemR無し";
+                else mh.name=cate+mh.name;
+            }
+            if(name.Contains("_del_")||name.EndsWith("_del.menu")) mh.name=" "+mh.name;
+            name=Path.GetFileNameWithoutExtension(name);
+            if(mh.name=="") mh.name=name;
+            if(hs.Add(name)) result.Add(mh.name+"\t"+cate+"\t"+name);
+        }
+    }
 	private static int CmdExit(ComShInterpreter sh,List<string> args){
         sh.exitq=true; 
         return CmdReturn(sh,args);
@@ -713,7 +757,7 @@ public static class Command {
         var psr=EvalParser(sh,1);
         if(psr==null) return -1;
         psr.Reset();
-        return sh.InterpretParser(psr);
+        return sh.InterpretParserSingleSubCmd(psr);
     }
     private static int CmdEvalKag(ComShInterpreter sh,List<string> args){
         if(args.Count!=2) return sh.io.Error("使い方: evalkag スクリプト");
@@ -776,12 +820,12 @@ public static class Command {
             var psr=EvalParser(sh,args.Count-n,false);
             if(psr==null) return -1;
             psr.Reset(sh.currentParser.prevEoL);
-            return sh.InterpretParser(psr);
+            return sh.InterpretParserSingleSubCmd(psr);
         }else if(n==2){
             var psr=EvalParser(sh,args.Count-1,false);
             if(psr==null) return -1;
             psr.Reset(sh.currentParser.prevEoL);
-            return sh.InterpretParser(psr);
+            return sh.InterpretParserSingleSubCmd(psr);
         }
         return 0;
     }
@@ -1556,6 +1600,7 @@ public static class Command {
         }else if(args.Count==3 && sh.io.pipedText!=null){
             val=sh.io.pipedText; before=args[1]; after=args[2];
         }else return sh.io.Error(usage);
+        if(before==""){ sh.io.Print(val); return 0;}
         sh.io.Print(val.Replace(before,after));
         return 0;
     }

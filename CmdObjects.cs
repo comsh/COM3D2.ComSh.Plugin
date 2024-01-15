@@ -1511,7 +1511,7 @@ public static class ObjUtil {
                 _=r.ReadString(); // name
                 _=r.ReadString(); // category
                 _=r.ReadString(); // setumei
-                _=r.ReadInt32();    // 謎数値
+                _=r.ReadInt32();
                 while(r.PeekChar()>=0){
                     // labels
                     int n=r.ReadByte();

@@ -69,6 +69,16 @@ public partial class ComShInterpreter {
         currentParser=parser_bak;
         return io.OK();
     }
+    public int InterpretParserSingleSubCmd(ComShParser parser){
+        var sbo=new SubShOutput();
+        var orig=io.output;
+        io.output=new Output(sbo.Output);
+        int ret=InterpretParser(parser);
+        string result=sbo.GetSubShResult();
+        io.output=orig;
+        io.Print(result);
+        return ret;
+    }
     private int InterpretTokens(List<string> tokens,char prevEoL,char currentEoL,bool canSleep){
         int ret=0;
         Command.Cmd cmd;
@@ -390,7 +400,7 @@ public partial class ComShInterpreter {
             return this;
         }
         public void PrintEnd(char eol){
-            if(printSb.Length==0) return;
+            if(printSb.Length==0){env.output=""; return; }
             int tail=printSb.Length-1;
             string txt=(printSb[tail]=='\n')?printSb.ToString(0,tail):printSb.ToString();
             env.output=txt;

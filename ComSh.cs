@@ -122,7 +122,7 @@ namespace COM3D2.ComSh.Plugin {
 
         public RectOffset nomargin=new RectOffset(0,0,0,0);
 		private Vector2 scroll_position = new Vector2(0, float.MaxValue);
-		public Rect windowrect = new Rect(0, 0, 1, 1);
+		public Rect windowrect = new Rect(2, 2, 1, 1);
         private RectOffset wmargin=new RectOffset(4,4,2,6);
 		private WindowStyle ws;
 		private GUIStyle wstyle;
@@ -152,12 +152,15 @@ namespace COM3D2.ComSh.Plugin {
 
 		public void Draw() {
             if(ComShWM.updateTime>nextTick){
-                nextTick=ComShWM.updateTime+200*TimeSpan.TicksPerMillisecond;
-                UpdStyle();
-                int ph=hover;
-                hover=windowrect.Contains(Event.current.mousePosition)?1:2;
-                if(ph!=hover) enter=hover; else enter=0;
-                if(enter==1) OnEnter(); else if(enter==2) OnLeave();
+                nextTick=ComShWM.updateTime+500*TimeSpan.TicksPerMillisecond;
+                Vector2 mp=Event.current.mousePosition;
+                if(mp.x>0 && mp.y>0){ // IMEの都合でときどき0,0になる
+                    UpdStyle();
+                    int ph=hover;
+                    hover=windowrect.Contains(mp)?1:2;
+                    if(ph!=hover) enter=hover; else enter=0;
+                    if(enter==1) OnEnter(); else if(enter==2) OnLeave();
+                }
             }
             windowrect=GUILayout.Window(ComShProperties.windowID, windowrect, Terminal, "",wstyle);
         }
