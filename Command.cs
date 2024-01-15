@@ -374,7 +374,7 @@ public static class Command {
             string datadir=ComShInterpreter.scriptFolder+"export\\";
             Directory.CreateDirectory(datadir);
             using(StreamWriter sw=new StreamWriter(datadir+filename,false,Encoding.UTF8)){
-                sw.WriteLine(begin);
+                sw.Write(begin);
                 string prev="";
                 foreach(string fn in files) if(fn!=prev){
                     string[] sa=fn.Split('\\');
@@ -382,7 +382,7 @@ public static class Command {
                     if(sa.Length==1) sw.WriteLine(sa[0]+eol);
                     else sw.WriteLine($"{sa[0]}\\{sa[1]}{eol}");
                 }
-                sw.WriteLine(end);
+                sw.Write(end);
             }
         }catch{
             System.GC.Collect();
@@ -417,7 +417,7 @@ public static class Command {
         Add2MenuList(fa,list,dup);
         if(list.Count>0){
             list.Sort();
-            if(WriteFileList2("menulist",list,"\\n\\","menulist=\"\\","\"")<0) return sh.io.Error("ファイルが作成できません");
+            if(WriteFileList2("menulist",list,"\\n\\","menulist=\"\\","\"\n")<0) return sh.io.Error("ファイルが作成できません");
         }
         return 0;
     }
