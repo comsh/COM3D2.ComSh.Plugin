@@ -810,8 +810,10 @@ public static class CmdMaidMan {
         cm.PresetSet(m,preset);
         m.boAllProcPropBUSY=false;
         m.AllProcProp();
+        StudioMode.FixMyposeIK(m);
         return 1;
     }
+
     private static int MaidParamCloth(ComShInterpreter sh,Maid m,string val){
         return MaidParamClothSub(sh,m,val,true);
     }

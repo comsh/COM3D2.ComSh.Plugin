@@ -75,6 +75,16 @@ public static class StudioMode {
         }
     }
 
+    public static void FixMyposeIK(Maid m){
+        if(pwm==null) return;
+        var go=GameObject.Find("IKDragPointParent/"+m.status.guid);
+        if(go==null) return;
+        var ca=go.GetComponentsInChildren<IKDragPoint>();
+        if(ca==null) return;
+        for(int i=0; i<ca.Length; i++)
+            if(ca[i]!=null) ca[i].SetTargetIKPoint(ca[i].target_ik_point_trans.gameObject);
+    }
+
     // 男head,body変更 スタジオモードUI経由
     public static int ManHeadBodyStudio(Maid m,string item){
         if(pwm==null) return 0;
