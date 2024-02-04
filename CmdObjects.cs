@@ -66,6 +66,8 @@ public static class CmdObjects {
         objParamDic.Add("shadow",new CmdParam<Transform>(ObjParamShadow));
         objParamDic.Add("join",new CmdParam<Transform>(ObjParamJoin));
         objParamDic.Add("bakemesh",new CmdParam<Transform>(ObjParamBakeMesh));
+        objParamDic.Add("visible",new CmdParam<Transform>(ObjParamVisible));
+        objParamDic.Add("iid",new CmdParam<Transform>(_CmdParamIid));
         
         objParamDic.Add("l2w",new CmdParam<Transform>(_CmdParamL2W));
         objParamDic.Add("w2l",new CmdParam<Transform>(_CmdParamW2L));
@@ -156,24 +158,29 @@ public static class CmdObjects {
             }
             return 0;
         }
-        //return CmdObjectSub(sh,args[1].Split(ParseUtil.colon),args,2);
         return CmdObjectSub(sh,new ParseUtil.ColonDesc(args[1]),args,2);
     }
     public static List<Transform> GetObjList(ComShInterpreter sh){
         var ret=new List<Transform>(64);
         var oset=new HashSet<string>(); // 重複削除
-        Transform pftr;
+        Transform pftr=ObjUtil.GetPhotoPrefabTr2(sh);
+
         if(sh.objRef.Length>0){ // スタジオモード分参照
-            pftr= UTIL.GetObjRoot(sh.objRef);
-            if(pftr!=null) for(int i=0; i<pftr.childCount; i++){
-                Transform tr=pftr.GetChild(i);
-                if(tr==null) continue;
-                oset.Add(tr.name);
-                ret.Add(tr);
+            var stdlist=StudioMode.GetObjectList();
+            if(stdlist!=null) for(int i=0; i<stdlist.Count; i++) ObjUtil.objDic[stdlist[i].name]=stdlist[i];
+        }
+        // BG
+        var bg=GameMain.Instance.BgMgr.BgObject;
+        if(bg!=null && bg.transform==pftr){ // 子が1つもないBGはそれ自身を一覧に出す
+            bool has_child=false;
+            for(int i=0; i<bg.transform.childCount; i++){
+                var c=bg.transform.GetChild(i);
+                if(c!=null&&c.GetComponent<ObjInfo>()==null){has_child=true;break;}
             }
+            if(!has_child) ObjUtil.objDic[bg.name]=bg.transform;
         }
         // 現root直下のobject
-        if((pftr=ObjUtil.GetPhotoPrefabTr(sh))!=null){
+        if(pftr!=null){
             for(int i=0; i<pftr.childCount; i++){
                 Transform tr=pftr.GetChild(i);
                 if(tr==null) continue;
@@ -303,14 +310,15 @@ public static class CmdObjects {
                 if(!string.IsNullOrEmpty(t.name)) sh.io.PrintLn(t.name);
                 return 0;
             });
-        }else if(val=="t"||val=="tree"){
+        }else if(val=="t"||val=="T"||val=="tree"||val=="Tree"){
+            bool rootq=val[0]=='T';
             UTIL.TraverseTr(tr,(Transform t,int d)=>{
                 if(!string.IsNullOrEmpty(t.name)){
                     for(int i=0; i<d; i++) sh.io.Print("  ");
                     sh.io.PrintLn(t.name);
                 }
                 return 0;
-            });
+            },rootq);
         }else return sh.io.Error("list種別に child か descendant か tree を指定してください");
         return 0;
     }
@@ -498,20 +506,23 @@ public static class CmdObjects {
             }
             return 0;
         }
-        string[] kv=ParseUtil.LeftAndRight(val,'=');
-        string[] np=ParseUtil.LeftAndRight(kv[0],'.');
-        string n=np[0],p=np[1],v=kv[1];
-        if(p==""){ p=n; n=""; }
-        int ret;
-        if(n!=""){
-            bool found=false;
-            for(int i=0; i<op.Length; i++) if(op[i].emit.name==n){
-                found=true;
-                if((ret=OldParticleSub(sh,op[i],p,v))<0) return ret;
+        string[] sa=val.Split(ParseUtil.lf);
+        for(int pi=0; pi<sa.Length; pi++){
+            string[] kv=ParseUtil.LeftAndRight(sa[pi],ParseUtil.eqcln);
+            string[] np=ParseUtil.LeftAndRight(kv[0],'.');
+            string n=np[0],p=np[1],v=kv[1];
+            if(p==""){ p=n; n=""; }
+            int ret;
+            if(n!=""){
+                bool found=false;
+                for(int i=0; i<op.Length; i++) if(op[i].emit.name==n){
+                    found=true;
+                    if((ret=OldParticleSub(sh,op[i],p,v))<0) return ret;
+                }
+                if(!found) return sh.io.Error("指定されたパーティクルは存在しません");
+            }else{
+                for(int i=0; i<op.Length; i++) if((ret=OldParticleSub(sh,op[i],p,v))<0) return ret;
             }
-            if(!found) return sh.io.Error("指定されたパーティクルは存在しません");
-        }else{
-            for(int i=0; i<op.Length; i++) if((ret=OldParticleSub(sh,op[i],p,v))<0) return ret;
         }
         return 1;
     }
@@ -631,6 +642,8 @@ public static class CmdObjects {
         case "simspeed":
         case "shape":
         case "stretch":
+        case "png":
+        case "rot":
             return sh.io.Error("パーティクルが旧形式のため設定できません");
         default:
             return sh.io.Error("パラメータ名が不正です");
@@ -644,7 +657,7 @@ public static class CmdObjects {
         public ParticleSystemRenderer render;
         public ParticleInfo pi;
         public Material EditMaterial(){
-            if(pi==null) sys.gameObject.AddComponent<ParticleInfo>();
+            if(pi==null) pi=sys.gameObject.AddComponent<ParticleInfo>();
             return render.material;
         }
     }   
@@ -666,21 +679,24 @@ public static class CmdObjects {
             }
             return 0;
         }
-        string[] kv=ParseUtil.LeftAndRight(val,'=');
-        string[] np=ParseUtil.LeftAndRight(kv[0],'.');
-        string n=np[0],p=np[1],v=kv[1];
-        int ret;
-        if(p==""){ p=n; n=""; }
-        if(n!=""){  // 名前指定があれば一致するものだけ
-            bool found=false;
-            for(int i=0; i<par.Length; i++) if(n==par[i].sys.name){
-                found=true;
-                if((ret=ParticleSub(sh,par[i],p,v))<0) return ret;
+        string[] sa=val.Split(ParseUtil.lf);
+        for(int pi=0; pi<sa.Length; pi++){
+            string[] kv=ParseUtil.LeftAndRight(sa[pi],ParseUtil.eqcln);
+            string[] np=ParseUtil.LeftAndRight(kv[0],'.');
+            string n=np[0],p=np[1],v=kv[1];
+            int ret;
+            if(p==""){ p=n; n=""; }
+            if(n!=""){  // 名前指定があれば一致するものだけ
+                bool found=false;
+                for(int i=0; i<par.Length; i++) if(n==par[i].sys.name){
+                    found=true;
+                    if((ret=ParticleSub(sh,par[i],p,v))<0) return ret;
+                }
+                if(!found) return sh.io.Error("指定されたパーティクルは存在しません");
+            }else{      // 名前指定がなければ全部
+                for(int i=0; i<par.Length; i++)
+                    if((ret=ParticleSub(sh,par[i],p,v))<0) return ret;
             }
-            if(!found) return sh.io.Error("指定されたパーティクルは存在しません");
-        }else{      // 名前指定がなければ全部
-            for(int i=0; i<par.Length; i++)
-                if((ret=ParticleSub(sh,par[i],p,v))<0) return ret;
         }
         return 1;
     }
@@ -718,6 +734,29 @@ public static class CmdObjects {
             if(shader==null) return sh.io.Error("指定されたシェーダは見つかりません");
             mate=par.EditMaterial();
             mate.shader=shader;
+            break;
+        case "png":
+            string file="";
+            if(v!="" && v.IndexOf('\\')<0){
+                if(v[0]=='*'){
+                    var tf=DataFiles.CreateTempFile(v.Substring(1),"");
+                    file=tf.filename;
+                }else if(UTIL.CheckFileName(v)>=0){
+                    file=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+UTIL.Suffix(v,".png");
+                }
+            }
+            if(file=="") return sh.io.Error("ファイル名が不正です");
+            var tex=par.render.sharedMaterial.GetTexture("_MainTex");
+            if(tex!=null){
+                int ret=CmdMeshes.MeshParamPNGSub2(sh,tex,file,p);
+                if(ret<0) return -1;
+            }
+            break;
+        case "rot":
+            fa=ParseUtil.MinMax(v);
+            if(fa==null||fa[0]<0||fa[1]<0) return sh.io.Error("数値の形式が不正です");
+            main.startRotation3D=false;
+            main.startRotation=new ParticleSystem.MinMaxCurve(fa[0],fa[1]);
             break;
         case "lifetime":
             fa=ParseUtil.MinMax(v);
@@ -860,11 +899,9 @@ public static class CmdObjects {
             }else return sh.io.Error("shapeの指定が不正です");
             break;
         case "stretch":
-            if(par.render.renderMode==ParticleSystemRenderMode.Billboard){
-                if(v=="1") par.render.renderMode=ParticleSystemRenderMode.Stretch;
-            }else if(par.render.renderMode==ParticleSystemRenderMode.Stretch){
-                if(v=="0") par.render.renderMode=ParticleSystemRenderMode.Billboard;
-            }else return sh.io.Error("このパーティクルには対応していません");
+            if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
+            par.render.velocityScale=f;
+            if(f>0) par.render.renderMode=ParticleSystemRenderMode.Stretch;
             break;
         default:
             return sh.io.Error("パラメータ名が不正です");
@@ -967,31 +1004,49 @@ public static class CmdObjects {
     }
     private static int ObjParamBakeMesh(ComShInterpreter sh,Transform tr,string val){
         if(val==null) return sh.io.Error("オブジェクト名を指定してください");
-        if(!UTIL.ValidName(val)) return sh.io.Error("その名前は使用できません");
+        bool clonetexq=false;
+        string[] lr=ParseUtil.LeftAndRight(val,',');
+        if(lr[1]!=""){
+            if(lr[1]!="1"&&lr[1]!="0") return sh.io.Error("0か1を指定してください");
+            clonetexq=lr[1]=="1";
+        }
+
+        if(!UTIL.ValidName(lr[0])) return sh.io.Error("その名前は使用できません");
         Transform pftr=ObjUtil.GetPhotoPrefabTr(sh,true);
         if(pftr==null) return sh.io.Error("オブジェクト作成に失敗しました");
-        if(ObjUtil.FindObj(sh,val)!=null||LightUtil.FindLight(sh,val)!=null) return sh.io.Error("その名前は既に使われています");
+        if(ObjUtil.FindObj(sh,lr[0])!=null||LightUtil.FindLight(sh,lr[0])!=null) return sh.io.Error("その名前は既に使われています");
         GameObject go;
         SkinnedMeshRenderer[] smra=tr.GetComponentsInChildren<SkinnedMeshRenderer>();
         if(smra==null || smra.Length==0){ // MeshFilterならcloneと同じ
-            go=ObjUtil.CloneObject(val,tr,pftr);
+            go=ObjUtil.CloneObject(lr[0],tr,pftr);
             if(go==null) return sh.io.Error("オブジェクト作成に失敗しました");
             ObjUtil.objDic.Add(go.transform.name,go.transform);
             return 1;
         }
-        go=new GameObject(val);
+        go=new GameObject(lr[0]);
         go.transform.SetParent(pftr);
         go.transform.position=tr.position;
         go.transform.rotation=tr.rotation;
         go.transform.localScale=tr.localScale;
-        for(int i=0; i<smra.Length; i++) CreateBakeMeshObj(smra[i].name,smra[i],go.transform);
+        for(int i=0; i<smra.Length; i++) CreateBakeMeshObj(smra[i].name,smra[i],go.transform,clonetexq);
         var oi=ObjInfo.AddObjInfo(go.transform,"");
         ObjUtil.objDic.Add(go.transform.name,go.transform);
         oi.data.Backup();
         oi.data.OwnMesh();
         return 1;
     }
-    private static GameObject CreateBakeMeshObj(string name,SkinnedMeshRenderer smr,Transform parent){
+    private static int ObjParamVisible(ComShInterpreter sh,Transform tr,string val){
+        if(val==null){
+            var r=tr.GetComponentInChildren<Renderer>();
+            if(r!=null) sh.io.Print((r.enabled)?"1":"0");
+            return 0;
+        }
+        if(val!="1"&&val!="0") return sh.io.Error("1か0で指定してください");
+        var ra=tr.GetComponentsInChildren<Renderer>();
+        for(int i=0; i<ra.Length; i++) ra[i].enabled=val=="1";
+        return 1;
+    }
+    private static GameObject CreateBakeMeshObj(string name,SkinnedMeshRenderer smr,Transform parent,bool clonetexq=false){
         Mesh mesh=new Mesh();
         smr.BakeMesh(mesh);
         var go=new GameObject(name);
@@ -1002,7 +1057,13 @@ public static class CmdObjects {
         MeshFilter mf=go.AddComponent<MeshFilter>();
         mf.mesh=mesh;
         MeshRenderer mr=go.AddComponent<MeshRenderer>();
-        mr.materials=smr.sharedMaterials;
+        var ma=smr.sharedMaterials;
+        if(clonetexq) for(int i=0; i<ma.Length; i++){
+            var m=UnityEngine.Object.Instantiate(ma[i]);
+            TextureUtil.CloneAllTexture(m);
+            ma[i]=m;
+        }
+        mr.materials=ma;
         return go;
     }
     private static int ObjParamLookAt(ComShInterpreter sh,Transform tr,string val){
@@ -1125,6 +1186,9 @@ public static class CmdObjects {
         int bn=(int)xyzn[3];
         if(bn<1) return sh.io.Error("ボーン数が不正です");
 
+        var goal=new Vector3(xyzn[0],xyzn[1],xyzn[2]);
+        if(Vector3.Distance(tr.position,goal)<0.003) return 1;
+
         var ja=new List<Transform>(10);
         Transform p=tr;
         for(int i=0; i<bn+1; i++){
@@ -1140,13 +1204,12 @@ public static class CmdObjects {
         for(int i=0; i<pa.Count-1; i++) la.Add(Vector3.Distance(pa[i],pa[i+1]));
 
         var root=pa[pa.Count-1];
-        var goal=new Vector3(xyzn[0],xyzn[1],xyzn[2]);
         float prev=0;
         for (int r=0; r<10; r++){
-            float d=Vector3.Distance(pa[0],goal);
+            float d=(goal-pa[0]).sqrMagnitude;
             float mv=Mathf.Abs(d-prev);
             prev=d;
-            if (d<0.001||mv<0.0002) break;
+            if (d<0.000009||mv<0.000009) break;
             pa[0]=goal;
             for(int i=1; i<pa.Count; i++){
                 pa[i]=pa[i-1]+(pa[i]-pa[i-1]).normalized*la[i-1];
@@ -1159,24 +1222,51 @@ public static class CmdObjects {
         }
         for (int i=ja.Count-1; i>=1; i--){
             var o=ja[i].position;
-            var q=RYRX(ja[i-1].position-o,pa[i-1]-o);
+            var q=RYRX(ja[i],ja[i-1].position-o,pa[i-1]-o);
             ja[i].rotation=q*ja[i].rotation;
         }
         return 1;
     }
-    private static Quaternion RYRX(Vector3 from,Vector3 to){
-        Quaternion ret=Quaternion.identity;
+    private static Quaternion RYRX(Transform tr,Vector3 from,Vector3 to){
         Vector3 fn=from.normalized, tn=to.normalized;
-        Vector3 p0=fn;
-        float ll=tn.x*tn.x+tn.z*tn.z;
-        if(ll>=0.000001){ 
-            p0=new Vector3(tn.x,fn.y,tn.z).normalized;
-            ret=Quaternion.FromToRotation(fn,p0);
+        var normal=Vector3.Cross(fn,tn).normalized;
+        if(normal==Vector3.zero) return Quaternion.identity;
+        Vector3 p;
+        Quaternion q;
+        if(Mathf.Abs(Vector3.Dot(normal,Vector3.up))>=0.2){ 
+            p=new Vector3(tn.x,fn.y,tn.z).normalized;
+            q=Quaternion.FromToRotation(fn,p);
+        }else{
+            var lp=tr.localPosition;
+            int fwno=UTIL.MaxIdx(lp.z,lp.x,lp.y);
+            if(fwno==0){
+                p=RotWaypoint(new Vector3[]{tr.right,tr.up,tr.forward},normal,fn,tn);
+            }else if(fwno==1){
+                p=RotWaypoint(new Vector3[]{tr.forward,tr.up,tr.right},normal,fn,tn);
+            }else{
+                p=RotWaypoint(new Vector3[]{tr.forward,tr.right,tr.up},normal,fn,tn);
+            }
+            q=Quaternion.FromToRotation(fn,p);
         }
-        return ret*Quaternion.FromToRotation(p0,tn);
+        return q*Quaternion.FromToRotation(p,tn);
+    }
+    private static Vector3 RotWaypoint(Vector3[] ax,Vector3 normal,Vector3 from,Vector3 to){
+        Vector3 a=ax[UTIL.MaxIdx(
+            Mathf.Abs(Vector3.Dot(normal,ax[0])),
+            Mathf.Abs(Vector3.Dot(normal,ax[1])),
+            Mathf.Abs(Vector3.Dot(normal,ax[2]))*0.5f
+        )];
+        Vector3 vf=Vector3.Dot(from,a)*a, vt=Vector3.Dot(to,a)*a;
+        return (to-vt+vf).normalized;
     }
     private static int ObjParamShadow(ComShInterpreter sh,Transform tr,string val){
-        if(val==null) return 0;
+        if(val==null){
+            Renderer r=tr.GetComponentInChildren<Renderer>();
+            char c0=(char)('0'+(int)r.shadowCastingMode);
+            char c1=r.receiveShadows?'1':'0';
+            sh.io.Print(c0).Print(',').Print(c1);
+            return 0;
+        }
         var sa=val.Split(ParseUtil.comma);
         if(sa==null || sa.Length==0 || sa.Length>2 || sa[0]=="") return sh.io.Error("書式が不正です");
 
@@ -1278,11 +1368,19 @@ public static class ObjUtil {
         }
         tr.name=name;
     }
-    public static Transform GetPhotoPrefabTr(ComShInterpreter sh,bool create=false){
+    public static Transform GetPhotoPrefabTr2(ComShInterpreter sh,bool create=false){
+        // 一覧のみこっちを使う
         if(sh.objBase==string.Empty){
             GameObject bg=GameMain.Instance.BgMgr.BgObject;
             if(bg!=null) return bg.transform;
-            return UTIL.GetObjRoot("");
+            return UTIL.GetObjRoot("ComShPrefab");
+        }else return UTIL.GetObjRoot(sh.objBase,create);
+    }
+    public static Transform GetPhotoPrefabTr(ComShInterpreter sh,bool create=false){
+        if(sh.objBase==string.Empty){
+            GameObject bg=GameMain.Instance.BgMgr.BgObject;
+            if(bg!=null && bg.activeSelf) return bg.transform;
+            return UTIL.GetObjRoot("ComShPrefab",create);
         }else return UTIL.GetObjRoot(sh.objBase,create);
     }
 

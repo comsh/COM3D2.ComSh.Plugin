@@ -2,6 +2,7 @@
 using UnityEngine;
 using System.Collections.Generic;
 using static System.StringComparison;
+using System.Reflection;
 
 namespace COM3D2.ComSh.Plugin {
 public static class StudioMode {
@@ -166,6 +167,18 @@ public static class StudioMode {
             }
         }
         return -1;
+    }
+    private static FieldInfo targetlist=typeof(ObjectManagerWindow).GetField("target_list_",BindingFlags.Instance | BindingFlags.NonPublic);
+    public static List<Transform> GetObjectList(){
+        var omw=GetWindow<ObjectManagerWindow>(PhotoWindowManager.WindowType.ObjectManager);
+        if(omw==null) return null;
+        var ret=new List<Transform>();
+        try{
+            var list=(List<PhotoTransTargetObject>)targetlist.GetValue(omw);
+            foreach(var pto in list)
+                if(pto.type==PhotoTransTargetObject.Type.Prefab) ret.Add(pto.obj.transform);
+        }catch{}
+        return ret;
     }
 
     // ロード完了のタイミングを拾うための細工

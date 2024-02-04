@@ -152,9 +152,10 @@ namespace COM3D2.ComSh.Plugin {
 
 		public void Draw() {
             if(ComShWM.updateTime>nextTick){
-                nextTick=ComShWM.updateTime+500*TimeSpan.TicksPerMillisecond;
+                nextTick=ComShWM.updateTime+100*TimeSpan.TicksPerMillisecond;
                 Vector2 mp=Event.current.mousePosition;
-                if(mp.x>0 && mp.y>0){ // IMEの都合でときどき0,0になる
+                int k=GUIUtility.keyboardControl;
+                if((k==0||k==logId||k==cmdId) && mp.x>0 && mp.y>0){
                     UpdStyle();
                     int ph=hover;
                     hover=windowrect.Contains(mp)?1:2;
@@ -162,7 +163,8 @@ namespace COM3D2.ComSh.Plugin {
                     if(enter==1) OnEnter(); else if(enter==2) OnLeave();
                 }
             }
-            windowrect=GUILayout.Window(ComShProperties.windowID, windowrect, Terminal, "",wstyle);
+            windowrect=GUILayout.Window(ComShProperties.windowID, windowrect, Terminal,"",wstyle);
+            if(windowrect.Contains(Event.current.mousePosition)) Input.ResetInputAxes();
         }
         private long styleDate=0;
         private void UpdStyle(){
@@ -439,6 +441,7 @@ namespace COM3D2.ComSh.Plugin {
                 }
             }
   			windowrect=GUILayout.Window(wid,windowrect,Menu,"",wstyle);
+            if(windowrect.Contains(Event.current.mousePosition)) Input.ResetInputAxes();
         }
         private Vector2 scroll_position = new Vector2(0, 0);
         public void Menu(int wid){

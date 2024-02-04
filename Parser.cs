@@ -427,6 +427,7 @@ public static class ParseUtil {
     public static char[] lf={'\n'};
     public static char[] cr={'\r'};
     public static char[] crlf={'\r','\n'};
+    public static char[] eqcln={':','='};
 
     public static string[] NormalizeParams(List<string> args,string[] dflt,int start=0){
         string[] ret=new string[dflt.Length];
@@ -695,6 +696,10 @@ public static class ParseUtil {
         if(str.IndexOf(',')>=0) return Rgb2(str);
         float[] ret=new float[3];
         if(!int.TryParse(str,System.Globalization.NumberStyles.HexNumber,null,out int rgb)){
+            if(float.TryParse(str,out float f)&&f<=1&&f>=0){
+                ret[0]=ret[1]=ret[2]=f;
+                return ret;
+            }
             error="色指定が不正です";
             return null;
         }
@@ -812,6 +817,29 @@ public static class ParseUtil {
     public static string[] LeftAndRight(string txt,char dlm){
         int idx=txt.IndexOf(dlm);
         if(idx<0) return new string[]{ txt,"" };
+        return new string[]{ txt.Substring(0,idx),txt.Substring(idx+1) };
+    }
+    public static string[] LeftAndRight(string txt,char[] dlm){
+        int idx=-1;
+        for(int i=0; i<dlm.Length; i++){
+            idx=txt.IndexOf(dlm[i]);
+            if(idx>=0) break;
+        }
+        if(idx<0) return new string[]{txt,""};
+        return new string[]{ txt.Substring(0,idx),txt.Substring(idx+1) };
+    }
+    public static string[] LeftAndRight2(string txt,char dlm){
+        int idx=txt.IndexOf(dlm);
+        if(idx<0) return new string[]{ "",txt };
+        return new string[]{ txt.Substring(0,idx),txt.Substring(idx+1) };
+    }
+    public static string[] LeftAndRight2(string txt,char[] dlm){
+        int idx=-1;
+        for(int i=0; i<dlm.Length; i++){
+            idx=txt.IndexOf(dlm[i]);
+            if(idx>=0) break;
+        }
+        if(idx<0) return new string[]{"",txt};
         return new string[]{ txt.Substring(0,idx),txt.Substring(idx+1) };
     }
     public static int CountChar(string txt,char c){

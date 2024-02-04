@@ -20,7 +20,6 @@ public class ComShPanel {
     public Rect closeRect=new Rect(0,2,0,0);
 
     public void OnVisibleChange(bool v){}
-    private long nextChk=0;
     private bool lastEnabled=false;
     public void Draw(){
         if(PanelStyleCache.updDate>styleDate){
@@ -40,21 +39,22 @@ public class ComShPanel {
             ComboWin.Draw();
             GUI.BringWindowToFront(ComboWin.wid);
         }
-        if(ComShWM.updateTime>nextChk){
-            shell.env["panelx"]=((int)windowrect.x).ToString();
-            shell.env["panely"]=((int)windowrect.y).ToString();
 
-            bool enabled=windowrect.Contains(Event.current.mousePosition); // mouseenter/leave
-            if(enabled && !lastEnabled){
+        shell.env["panelx"]=((int)windowrect.x).ToString();
+        shell.env["panely"]=((int)windowrect.y).ToString();
+
+        bool enabled=windowrect.Contains(Event.current.mousePosition);
+        if(enabled){
+            Input.ResetInputAxes();
+            if(!lastEnabled){
                 if(UIInput.selection!=null) UIInput.selection.isSelected=false;
                 var ia=GameObject.FindObjectsOfType<UIInput>();
                 foreach(var ip in ia) ip.isSelected=false;
                 UIInput.selection=null;
                 UICamera.selectedObject=null;
             }
-            lastEnabled=enabled;
-            nextChk=ComShWM.updateTime+200*TimeSpan.TicksPerMillisecond;
-        }
+        }else if(lastEnabled) GUIUtility.keyboardControl=0;
+        lastEnabled=enabled;
     }
     public void Panel(int wid){
         GUI.Label(titleRect,title,ws.title);
@@ -478,6 +478,7 @@ public static class ComboWin {
     public static void Toggle(){ visible=!visible; }
     public static void Draw(){
         windowrect=GUI.Window(wid,windowrect,Select,"",panel.style.comboWin);
+        if(windowrect.Contains(Event.current.mousePosition)) Input.ResetInputAxes();
     }
     private static int selIdx=-1;
     private static Vector2 scr=new Vector2(0,0);

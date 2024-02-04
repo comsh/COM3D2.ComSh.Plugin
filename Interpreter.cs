@@ -25,6 +25,7 @@ public partial class ComShInterpreter {
     public ComShPanel panel=null;
     public string ofs=" ";
     public string ns="";
+    public int lastcmp=1;
 
 	public ComShInterpreter(Output op=null, VarDic parentEnv=null,Dictionary<string,ScriptStatus> parentFunc=null,string ns="") {
         env=(parentEnv!=null)?new VarDic(parentEnv):new VarDic();

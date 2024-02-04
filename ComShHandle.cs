@@ -12,9 +12,10 @@ public class ComShHandle:GizmoRender {
     // 子にはせず、常時追従させる
 
     public override void OnRenderObject(){
-        if(target==null || (maid!=null && maid.body0.m_trBones==null)){  // ちゃんと後片付けできる子になーれ
+        if(target==null || (maid!=null &&(maid.body0==null || maid.body0.m_trBones==null))){
             UTIL.RemoveFromList(hdllst,this);
             GameObject.Destroy(this.gameObject);
+            GameObject.Destroy(this);
             return;
         }
         transform.position=target.position;
@@ -43,6 +44,13 @@ public class ComShHandle:GizmoRender {
     }
 
     private static List<ComShHandle> hdllst=new List<ComShHandle>();
+    public static void Clear(){
+        foreach(var h in hdllst){
+            GameObject.Destroy(h.gameObject);
+            GameObject.Destroy(h);
+        }
+        hdllst.Clear();
+    }
     public static ComShHandle GetHandle(Transform tr){
         for(int i=0; i<hdllst.Count; i++) if(hdllst[i].target==tr) return hdllst[i];
         return null;

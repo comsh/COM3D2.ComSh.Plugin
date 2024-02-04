@@ -60,6 +60,7 @@ public static class CmdMisc {
         if(cmd=="pos"||cmd=="wpos"||cmd=="position") return _CmdParamWPos;
         if(cmd=="rot"||cmd=="wrot"||cmd=="rotation") return _CmdParamWRot;
         if(cmd=="scale") return _CmdParamScale;
+        if(cmd=="iid") return _CmdParamIid;
         return null;
     }
     private static void SetBg(string val){

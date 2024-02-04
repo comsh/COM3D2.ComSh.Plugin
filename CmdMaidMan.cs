@@ -811,6 +811,7 @@ public static class CmdMaidMan {
         m.boAllProcPropBUSY=false;
         m.AllProcProp();
         StudioMode.FixMyposeIK(m);
+        MaidUtil.FixGravity(m);
         return 1;
     }
 
@@ -1641,6 +1642,8 @@ public static class CmdMaidMan {
         }
         if(val!="on" && val!="off") return sh.io.Error("onまたはoffを指定してください");
         if(val=="on"){
+            skin.bonehair.Init();
+            skin.bonehair3.Uninit();
             skin.bonehair.SearchGameObj(skin.obj,
                 skin.bonehair3.InitGameObject(skin.obj,skin.m_ParentMPN));
         }else{
@@ -2212,6 +2215,12 @@ public static class MaidUtil {
         gtc.SetTargetSlods((cate=="skirt")?sidSkirt:sidHair);
         gtc.forceRate=1.0f;
         return gtc;
+    }
+    public static void FixGravity(Maid m){
+        var t=GetGravity(m,"hair");
+        if(t!=null) t.OnChangeMekure();
+        t=GetGravity(m,"skirt");
+        if(t!=null) t.OnChangeMekure();
     }
     private static TBody.SlotID[] sidHair={     // 髪用重力の対象(それ用のボーンがあれば)
         TBody.SlotID.hairAho, TBody.SlotID.hairF, TBody.SlotID.hairR, TBody.SlotID.hairS, TBody.SlotID.hairT,

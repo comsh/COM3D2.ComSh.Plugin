@@ -19,6 +19,7 @@ public class MiniSed {
 
     public int rcnt=int.MaxValue;    // 最大置換回数。gオプションなしのとき1[回]
     public RegexOptions opt;    // i,g
+    public char tropt;          // d,s
     // s//2 などはできない
 
     public Regex rrex;
@@ -30,7 +31,7 @@ public class MiniSed {
     delegate void MiniSedAct(Line l,bool adrq);
 
     public string Process(string txt){
-        StringBuilder sb=new StringBuilder(4096);
+        StringBuilder sb=new StringBuilder(1024);
         if(cmd=='d'){
             Filter(txt,(Line l,bool adrq)=>{ if(!adrq) sb.Append(txt,l.head,l.LengthLn); });
         }else if(cmd=='s'){
@@ -41,9 +42,28 @@ public class MiniSed {
         }else if(cmd=='y'){
             Filter(txt,(Line l,bool adrq)=>{
                 if(adrq){
-                    char[] ca=l.TextLn.ToCharArray();
-                    for(int i=0; i<ca.Length; i++) for(int j=0; j<ptn0.Length; j++) if(ca[i]==ptn0[j]) ca[i]=ptn1[j];
-                    sb.Append(ca);
+                    string src=l.TextLn;
+                    switch(tropt){
+                    case 'd':
+                        for(int i=0; i<src.Length; i++){
+                            int found=ptn0.IndexOf(src[i]);
+                            if(found<0) sb.Append(src[i]);
+                        } break;
+                    case 's':   // unix trコマンドと仕様が違ってたのでsはリファレンスに載せないでおく
+                        for(int i=0; i<src.Length; i++){
+                            int found=ptn0.IndexOf(src[i]);
+                            if(found<0) sb.Append(src[i]); else{
+                                char c=ptn1[Math.Min(found,ptn1.Length-1)];
+                                int sblen=sb.Length;
+                                if(sblen==0 || c!=sb[sblen-1]) sb.Append(c);
+                            }
+                        } break;
+                    default:
+                        for(int i=0; i<src.Length; i++){
+                            int found=ptn0.IndexOf(src[i]);
+                            sb.Append((found<0)?src[i]:ptn1[Math.Min(found,ptn1.Length-1)]);
+                        } break;
+                    }
                 }else sb.Append(txt,l.head,l.LengthLn);
             });
         }
@@ -111,8 +131,12 @@ public class MiniSed {
             i=GetPattern(cmd,i+1,out ptn0);
             if(i<0||ptn0=="") {error="パターンが不正です"; return; }
             i=GetPattern(cmd,i,out ptn1);
-            if(i<0||ptn0.Length!=ptn1.Length) { error="パターンが不正です"; return;}
-            i++;
+            if(i<0) { error="パターンが不正です"; return;}
+            i=GetTrOpt(cmd,i+1,out tropt);
+            if(i<0){ error="パターンが不正です"; return;}
+            if((tropt=='d'&&ptn1!="")||ptn1==""){ error="パターンが不正です"; return;}
+            ptn0=ExtractTrPtn(ptn0);
+            ptn1=ExtractTrPtn(ptn1);
         }
         if(i!=cmd.Length){ error="書式が不正です"; return; }
         return;
@@ -172,6 +196,14 @@ public class MiniSed {
         }
         return i;
     }
+    private static int GetTrOpt(string cmd,int pos, out char tropt){
+        tropt='\0';
+        if(pos>=cmd.Length) return pos;
+        char c=cmd[pos];
+        if(!(c=='d'||c=='s')) return pos;
+        tropt=c;
+        return pos+1;
+    }
     public static Regex GetPtnAndOpt(string txt,int pos=0){
         if(pos>=txt.Length) return null;
         int i=pos;
@@ -180,6 +212,23 @@ public class MiniSed {
         i=GetPtnOpt(txt,i+1,out int rcnt, out RegexOptions opt);
         if(i!=txt.Length) return null;
         try{ return new Regex(ptn,opt); }catch{ return null; }
+    }
+    private static string ExtractTrPtn(string ptn){
+        StringBuilder buf=new StringBuilder(ptn.Length);
+        bool escape=false;
+        bool range=false;
+        for(int i=0; i<ptn.Length; i++){
+            if(ptn[i]=='\\'){escape=true;continue;}
+            if(escape) escape=false; else{
+                if(ptn[i]=='-' && buf.Length>0){range=true; continue;}
+                if(range){
+                    for(int code=buf[buf.Length-1]+1; code<ptn[i]; code++) buf.Append((char)code);
+                    range=false;
+                }
+            }
+            buf.Append(ptn[i]);
+        }
+        return buf.ToString();
     }
     public class Line {
         public string txt;

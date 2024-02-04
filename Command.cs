@@ -80,6 +80,10 @@ public static class Command {
         cmdTbl.Add("unset",new Cmd(CmdUnset));
         cmdTbl.Add("cmp",new Cmd(CmdCmp));
         cmdTbl.Add("if",new Cmd(CmdTest));
+        cmdTbl.Add("thenif",new Cmd(CmdThenIf));
+        cmdTbl.Add("elseif",new Cmd(CmdElseIf));
+        cmdTbl.Add("then",new Cmd(CmdThen));
+        cmdTbl.Add("else",new Cmd(CmdElse));
         cmdTbl.Add("sed",new Cmd(CmdSed));
         cmdTbl.Add("meminfo",new Cmd(CmdMemInfo));
         cmdTbl.Add("escape",new Cmd(CmdEscape));
@@ -134,6 +138,8 @@ public static class Command {
         cmdTbl.Add("evalkag", new Cmd(CmdEvalKag));
         cmdTbl.Add("logbx", new Cmd(CmdLogBX));
         cmdTbl.Add("pow", new Cmd(CmdPow));
+        cmdTbl.Add("allhandleoff", new Cmd(CmdAllHandleClear));
+        cmdTbl.Add("mouse", new Cmd(CmdMouse));
 
         cmdTbl.Add("__res",new Cmd(Cmd__Resource));
         cmdTbl.Add("__files",new Cmd(Cmd__Files));
@@ -756,7 +762,7 @@ public static class Command {
         if(args.Count!=2) return sh.io.Error("使い方: eval コマンド文字列");
         var psr=EvalParser(sh,1);
         if(psr==null) return -1;
-        psr.Reset();
+        psr.Reset(sh.currentParser.prevEoL);
         return sh.InterpretParserSingleSubCmd(psr);
     }
     private static int CmdEvalKag(ComShInterpreter sh,List<string> args){
@@ -816,6 +822,8 @@ public static class Command {
         int n=args.Count%4;
         if(args.Count<4 || (n!=1&&n!=2)) return sh.io.Error(usage);
         int cmp=CmdCmpSub(args,args.Count-n);
+        if(cmp<0) return sh.io.Error(usage);
+        sh.lastcmp=cmp;
         if(cmp==1){
             var psr=EvalParser(sh,args.Count-n,false);
             if(psr==null) return -1;
@@ -829,6 +837,10 @@ public static class Command {
         }
         return 0;
     }
+    private static int CmdThen(ComShInterpreter sh,List<string> args){if(sh.lastcmp==1) return CmdEval(sh,args); return 0; }
+    private static int CmdElse(ComShInterpreter sh,List<string> args){if(sh.lastcmp==0) return CmdEval(sh,args); return 0; }
+    private static int CmdThenIf(ComShInterpreter sh,List<string> args){if(sh.lastcmp==1) return CmdTest(sh,args); return 0;}
+    private static int CmdElseIf(ComShInterpreter sh,List<string> args){if(sh.lastcmp==0) return CmdTest(sh,args); return 0;}
     private static int CmdCmp(ComShInterpreter sh,List<string> args){
         const string usage="使い方: cmp 対象1 比較演算子 対象2\n"
                     +"比較演算子   eq|ne|ge|le|gt|lt|has|and|or\n"
@@ -837,6 +849,7 @@ public static class Command {
         if(args.Count<4 || args.Count%4!=0) return sh.io.Error(usage);
         int cmp=CmdCmpSub(args,args.Count);
         if(cmp<0) return sh.io.Error(usage);
+        sh.lastcmp=cmp;
         sh.io.Print(cmp==1?"1":"0");
         return 0;
     }
@@ -1824,6 +1837,7 @@ public static class Command {
         int ret=0;
         for(int i=0; i<n; i++){
             sh.env["_1"]=i.ToString();
+            sh.env["_2"]=(i+1).ToString();
             psr.Reset();
             ret=sh.InterpretParser(psr);
             if(ret<0 || sh.exitq){ ret=sh.io.exitStatus; sh.exitq=false; break; }
@@ -1994,16 +2008,28 @@ public static class Command {
         return 0;
     }
     private static int CmdUniq(ComShInterpreter sh,List<string> args){
+        const string usage="使い方: uniq 文字列 [区切り文字]";
         string val;
+        char dlmt='\n';
         if(args.Count==1){
             if(sh.io.pipedText!=null) val=sh.io.pipedText;
-            else return sh.io.Error("使い方: uniq 文字列");
-        } else val=args[1];
-        var sa=val.Split('\n');
+            else return sh.io.Error(usage);
+        }else if(args.Count==2){
+            if(sh.io.pipedText!=null){
+                if(args[1].Length==0) return sh.io.Error(usage);
+                val=sh.io.pipedText;
+                dlmt=args[1][0];
+            }else val=args[1];
+            val=args[1];
+        }else if(args.Count==3){
+            val=args[1];
+            dlmt=args[2][0];
+        }else return sh.io.Error(usage);
+        var sa=val.Split(dlmt);
         var set=new HashSet<string>();
         if(sa.Length>0){
             set.Add(sa[0]); sh.io.Print(sa[0]);
-            for(int i=1; i<sa.Length; i++) if(set.Add(sa[i])) sh.io.Print("\n").Print(sa[i]);
+            for(int i=1; i<sa.Length; i++) if(set.Add(sa[i])) sh.io.Print(dlmt).Print(sa[i]);
         }
         return 0;
     }
@@ -2073,7 +2099,20 @@ public static class Command {
         sh.io.Print(sh.fmt.FVal(Mathf.Pow(b,x)));
         return 0;
     }
-
+    private static int CmdAllHandleClear(ComShInterpreter sh,List<string> args){
+        ComShHandle.Clear();
+        return 0;
+    }
+    private static int CmdMouse(ComShInterpreter sh,List<string> args){
+        var b1=Input.GetMouseButtonDown(0)?"2":(Input.GetMouseButtonUp(0)?"-1":(Input.GetMouseButton(0)?"1":"0"));
+        var b2=Input.GetMouseButtonDown(1)?"2":(Input.GetMouseButtonUp(1)?"-1":(Input.GetMouseButton(1)?"1":"0"));
+        var b3=Input.GetMouseButtonDown(2)?"2":(Input.GetMouseButtonUp(2)?"-1":(Input.GetMouseButton(2)?"1":"0"));
+        var h=GameMain.Instance.MainCamera.camera.pixelHeight;
+        var pos=Input.mousePosition;
+        int x=(int)(pos.x), y=(int)(h-1-pos.y);
+        sh.io.PrintJoin(sh.ofs,x.ToString()+","+y.ToString(),b1,b2,b3);
+        return 0;
+    }
 
     private static string tagdir=ComShInterpreter.scriptFolder+@"tagconfig\";
     private static int CmdTag(ComShInterpreter sh,List<string> args){
@@ -2398,6 +2437,10 @@ public static class Command {
         ));
         return 0;
     }
+    public static int _CmdParamIid(ComShInterpreter sh,Transform tr,string val){
+        sh.io.Print(tr.GetInstanceID().ToString());
+        return 0;
+    }
 }
 
 public static class UTIL {
@@ -2421,7 +2464,7 @@ public static class UTIL {
     public static int TraverseTr(Transform tr,TraverseFunc act,bool rootq=true){
        if(rootq) return TraverseTrSub(tr,act,0);
        int ret=0;
-       for(int i=0; i<tr.childCount; i++) if((ret=TraverseTrSub(tr.GetChild(i),act,1))<0) return ret;
+       for(int i=0; i<tr.childCount; i++) if((ret=TraverseTrSub(tr.GetChild(i),act,rootq?1:0))<0) return ret;
        return 0;
     }
     private static int TraverseTrSub(Transform tr,TraverseFunc act,int depth){
@@ -2552,6 +2595,13 @@ public static class UTIL {
         if(i==tail) return;
         list[i]=list[tail];
         list.RemoveAt(tail);
+    }
+    public static int MaxIdx(params float[] values){
+        if(values.Length==0) return -1;
+        int idx=0;
+        float max=values[0];
+        for(int i=1; i<values.Length; i++) if(values[i]>max){max=values[i];idx=i;}
+        return idx;
     }
 }
 }

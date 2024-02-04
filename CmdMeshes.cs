@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using UnityEngine;
 using static COM3D2.ComSh.Plugin.Command;
 
@@ -15,6 +16,7 @@ public static class CmdMeshes {
         meshParamDic.Add("shader",new CmdParam<SingleMesh>(MeshParamShader));
         meshParamDic.Add("blend",new CmdParam<SingleMesh>(MeshParamBlend));
         meshParamDic.Add("prop",new CmdParam<SingleMesh>(MeshParamProp));
+        meshParamDic.Add("keyword",new CmdParam<SingleMesh>(MeshParamKeyword));
         meshParamDic.Add("reset",new CmdParam<SingleMesh>(MeshParamReset));
         meshParamDic.Add("commit",new CmdParam<SingleMesh>(MeshParamCommit));
         meshParamDic.Add("texture",new CmdParam<SingleMesh>(MeshParamTexture));
@@ -29,6 +31,9 @@ public static class CmdMeshes {
         meshParamDic.Add("texfilter",new CmdParam<SingleMesh>(MeshParamTexFilter));
         meshParamDic.Add("texexclude",new CmdParam<SingleMesh>(MeshParamTexExclude));
         meshParamDic.Add("findverno",new CmdParam<SingleMesh>(MeshParamFindVerno));
+        meshParamDic.Add("uvwh",new CmdParam<SingleMesh>(MeshParamUVWH));
+        meshParamDic.Add("graft",new CmdParam<SingleMesh>(MeshParamGraft));
+        meshParamDic.Add("reverse",new CmdParam<SingleMesh>(MeshParamReverse));
     }
     private static Dictionary<string,CmdParam<SingleMesh>> meshParamDic=new Dictionary<string,CmdParam<SingleMesh>>();
 
@@ -381,17 +386,20 @@ public static class CmdMeshes {
             }
             return 0;
         }
-        kv=ParseUtil.LeftAndRight(val,'=');
         string err;
         sm.mi.EditMaterial();
-        if(kv[1]=="on"){
-            sm.mi.material[sm.submeshno].EnableKeyword(kv[0]);
-        }else if(kv[1]=="off"){
-            sm.mi.material[sm.submeshno].DisableKeyword(kv[0]);
-        }else if(kv[1].IndexOf(',')>=0){
-            if((err=SetVectorProp(sm.mi.material[sm.submeshno],kv[0],kv[1]))!="") return sh.io.Error(err);
-        }else{
-            if((err=SetFloatProp(sm.mi.material[sm.submeshno],kv[0],kv[1]))!="") return sh.io.Error(err);
+        string[] sa=val.Split(ParseUtil.lf);
+        for(int pi=0; pi<sa.Length; pi++){
+            kv=ParseUtil.LeftAndRight(sa[pi],'=');
+            if(kv[1]=="on"){
+                sm.mi.material[sm.submeshno].EnableKeyword(kv[0]);
+            }else if(kv[1]=="off"){
+                sm.mi.material[sm.submeshno].DisableKeyword(kv[0]);
+            }else if(kv[1].IndexOf(',')>=0){
+                if((err=SetVectorProp(sm.mi.material[sm.submeshno],kv[0],kv[1]))!="") return sh.io.Error(err);
+            }else{
+                if((err=SetFloatProp(sm.mi.material[sm.submeshno],kv[0],kv[1]))!="") return sh.io.Error(err);
+            }
         }
         return 1;
     }
@@ -409,6 +417,23 @@ public static class CmdMeshes {
         if(float.IsNaN(f)) return ParseUtil.error;
         m.SetFloat(key,f);
         return "";
+    }
+    private static int MeshParamKeyword(ComShInterpreter sh,SingleMesh sm,string val){
+        if(val==null){
+            string[] kwa=sm.mi.material[sm.submeshno].shaderKeywords;
+            for(int i=0; i<kwa.Length; i++) sh.io.Print(kwa[i]);
+            return 0;
+        }
+        sm.mi.EditMaterial();
+        var arr=val.Split(ParseUtil.comma);
+        for(int i=0; i<arr.Length; i++) if(arr[i].Length>0){
+            var wd=arr[i];
+            var c=wd[wd.Length-1];
+            if(c=='-') sm.mi.material[sm.submeshno].DisableKeyword(wd.Substring(0,wd.Length-1));
+            else if(c=='+') sm.mi.material[sm.submeshno].EnableKeyword(wd.Substring(0,wd.Length-1));
+            else sm.mi.material[sm.submeshno].EnableKeyword(wd);
+        }
+        return 1;
     }
     private static int MeshParamBlend(ComShInterpreter sh,SingleMesh sm,string val){
         if(sm.mi.material[sm.submeshno].shader.name!="Standard"){
@@ -569,19 +594,12 @@ public static class CmdMeshes {
         return 1;
     }
 
-    private static string[] texnames={
-        "_AlphaTex", "_BumpMap", "_Caustics", "_DerivativeTex", "_DetailNormalMap", "_EmissionMap",
-        "_EnvMap", "_FlowTex", "_Fresnel", "_HiTex", "_LightMap", "_MainTex", "_MultiColTex",
-        "_NormalMap", "_OcculusionMap", "_OutlineTex", "_OutlineToonRamp", "_OutlineWidthTex",
-        "_ParallaxMap", "_ReflectionTex", "_ReflectiveColor", "_ReflectiveColorCube", "_RefractionTex",
-        "_RuleTex", "_ShadowRateToon", "_ShadowTex", "_Tex1", "_Tex2", "_ToonRamp"
-    };
     private static HashSet<Texture> texiid=new HashSet<Texture>();
     private static int MeshParamTexture(ComShInterpreter sh,SingleMesh sm,string val){
         Material mate;
         if(val==null){
             mate=sm.mi.material[sm.submeshno];
-            for(int i=0; i<texnames.Length; i++) PrintTextureInfo(sh,mate,texnames[i]);
+            for(int i=0; i<TextureUtil.texnames.Length; i++) PrintTextureInfo(sh,mate,TextureUtil.texnames[i]);
             return 0;
         }
         if(val=="") return 0;
@@ -590,9 +608,9 @@ public static class CmdMeshes {
         mate=sm.mi.material[sm.submeshno];
 
         string prop="_MainTex",right="";
-        string[] lr=ParseUtil.LeftAndRight(val,'=');
-        if(lr[1]=="") lr=ParseUtil.LeftAndRight(val,':');
-        if(lr[1]=="") right=lr[0]; else { prop=lr[0]; right=lr[1]; }
+        string[] lr=ParseUtil.LeftAndRight2(val,ParseUtil.eqcln);
+        if(lr[0]!="") prop=lr[0];
+        right=lr[1];
         if(!mate.HasProperty(prop)) return sh.io.Error("指定されたプロパティは現在のシェーダでは無効です");
 
         string msg=SetTexProp(mate,prop,right,sm.mi.oid.originalMate[sm.submeshno]);
@@ -603,38 +621,60 @@ public static class CmdMeshes {
         if(!mate.HasProperty(prop)) return;
         Texture tx=mate.GetTexture(prop);
         if(tx==null) return;
-        sh.io.PrintLn($"{prop}:{tx.name}{sh.ofs}{tx.width}x{tx.height}{sh.ofs}{tx.GetType().Name}");
+        string col="";
+        if(tx.GetType()==typeof(Texture2D)) col=sh.ofs+((Texture2D)tx).format.ToString();
+        sh.io.PrintLn($"{prop}:{tx.name}{sh.ofs}{tx.width}x{tx.height}{sh.ofs}{tx.GetType().Name}{col}");
     }
     private static string SetTex(string prop,string name,int mode,int wrap,Material mate,Material orig){
         Camera cam;
         var origtex=(orig==null)?null:orig.GetTexture(prop);
-        if(ObjUtil.objDic.TryGetValue(name,out Transform camTr) && (cam=camTr.GetComponent<Camera>())!=null){
+        if(name==""){
+            var old=mate.GetTexture(prop);
+            if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
+            mate.SetTexture(prop,null);
+        }else if(ObjUtil.objDic.TryGetValue(name,out Transform camTr) && (cam=camTr.GetComponent<Camera>())!=null){
+            var cc=camTr.GetComponent<CmdSubCamera.CubeCam>();
             if(mode==0){
-                var tex=cam.targetTexture;
+                var tex=(cc!=null)?cc.rt:cam.targetTexture;
                 tex.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
                 var old=mate.GetTexture(prop);
                 if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
                 mate.SetTexture(prop,tex);
             }else{
-                RenderTexture rt=cam.targetTexture;
-                Texture2D tx;
                 var old=mate.GetTexture(prop);
-                if(old==null) tx=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);
-                else {
-                    if(old.name=="__subcamera_pic_" && old.width==rt.width && old.height==rt.height) tx=(Texture2D)old;
-                    else{
-                        if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
-                        tx=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);
+                Texture t;
+                if(cc!=null){
+                    var rt=cc.rt;
+                    Cubemap cm;
+                    if(old==null) cm=new Cubemap(rt.width,TextureFormat.RGBA32,false); else{
+                        if(old.name=="__subcamera_pic_" && old.width==rt.width) cm=(Cubemap)old; else{
+                            if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
+                            cm=new Cubemap(rt.width,TextureFormat.RGBA32,false);
+                        }
                     }
+                    cam.RenderToCubemap(cm,63);
+                    t=cm;
+                }else{
+                    var rt=cam.targetTexture;
+                    Texture2D tx;
+                    if(old==null) tx=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);
+                    else {
+                        if(old.name=="__subcamera_pic_" && old.width==rt.width && old.height==rt.height) tx=(Texture2D)old;
+                        else{
+                            if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
+                            tx=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);
+                        }
+                    }
+                    RenderTexture bak=RenderTexture.active;
+                    RenderTexture.active=rt;
+                    tx.ReadPixels(new Rect(0,0,rt.width,rt.height),0,0);
+                    tx.Apply();
+                    t=tx;
+                    RenderTexture.active=bak;
                 }
-                RenderTexture bak=RenderTexture.active;
-                RenderTexture.active=rt;
-                tx.ReadPixels(new Rect(0,0,rt.width,rt.height),0,0);
-                tx.Apply();
-                tx.name="__subcamera_pic_";
-                RenderTexture.active=bak;
-                mate.SetTexture(prop,tx);
-                texiid.Add(tx);
+                t.name="__subcamera_pic_";
+                mate.SetTexture(prop,t);
+                texiid.Add(t);
             }
         }else {
             Texture tex0=Resources.Load<Texture>("SceneCreativeRoom/Debug/Textures/"+name);
@@ -757,14 +797,20 @@ public static class CmdMeshes {
         if(x0<0||y0<0||w<=0||h<=0){ sh.io.Error("範囲指定が不正です"); return null;}
         return new float[]{x0,y0,w,h};
     }
+
+    private static Regex shaderpropptn=new Regex(@"^_\w+:",RegexOptions.Compiled);
     private static int MeshParamTexLoop(ComShInterpreter sh,SingleMesh sm,string val){ return MeshParamTexLoopSub(sh,sm,val,0); }
     private static int MeshParamTexLoopHsv(ComShInterpreter sh,SingleMesh sm,string val){ return MeshParamTexLoopSub(sh,sm,val,1); }
     private static int MeshParamTexLoopSub(ComShInterpreter sh,SingleMesh sm,string val,int hsvq){
         if(val==null || val=="") return 0;
 
-        string[] lr=ParseUtil.LeftAndRight(val,':');
-        string prop=lr[0],cmd=lr[1];
-        if(cmd==""){cmd=prop; prop="_MainTex";}
+        string prop,cmd;
+        if(shaderpropptn.IsMatch(val)){
+            string[] lr=ParseUtil.LeftAndRight(val,':');
+            prop=lr[0]; cmd=lr[1];
+        }else{
+            prop="_MainTex"; cmd=val;
+        }
 
         sm.mi.EditMaterial();
         Material mate=sm.mi.material[sm.submeshno];
@@ -940,6 +986,30 @@ public static class CmdMeshes {
         sm.mi.material[sm.submeshno].renderQueue=n;
         return 1;
     }
+    private static int MeshParamUVWH(ComShInterpreter sh,SingleMesh sm,string val){
+        if(val==null) return 0;
+        string ts,prop;
+        var sa=ParseUtil.LeftAndRight(val,':');
+        if(sa[1]==""){
+            if(sa[0].IndexOf(',')>=0){ts=sa[0]; prop="_MainTex";}
+            else{
+                var m=sm.mi.material[sm.submeshno];
+                var xy=m.GetTextureOffset(sa[0]);
+                var wh=m.GetTextureScale(sa[0]);
+                sh.io.Print($"{sh.fmt.FXY(xy)},{sh.fmt.FXY(wh)}");
+                return 0;
+            }
+        }else{ts=sa[1]; prop=sa[0];}
+        float[] xywh={0,0,0,0};
+        int n=ParseUtil.XyzSub(ts,xywh);
+        if(n<0||(n!=2&&n!=4)) return sh.io.Error("書式が不正です");
+        sm.mi.EditMaterial();
+        var mate=sm.mi.material[sm.submeshno];
+        mate.SetTextureOffset(prop,new Vector2(xywh[0],xywh[1]));
+        if(n==2) return 1;
+        mate.SetTextureScale(prop,new Vector2(xywh[2],xywh[3]));
+        return 1;
+    }
     private static int MeshParamSS(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null) return 0;
         string fname,prop;
@@ -976,7 +1046,9 @@ public static class CmdMeshes {
     private static int MeshParamPNGSub(ComShInterpreter sh,SingleMesh sm,string fname,string prop){
         var tex=sm.mi.material[sm.submeshno].GetTexture(prop);
         if(tex==null) return sh.io.Error("テクスチャがありません");
-        
+        return MeshParamPNGSub2(sh,tex,fname,prop);
+    }
+    public static int MeshParamPNGSub2(ComShInterpreter sh,Texture tex,string fname,string prop){
         if(ReferenceEquals(tex.GetType(),typeof(RenderTexture))){
             if(TextureUtil.Rt2Png((RenderTexture)tex,fname)<0) return sh.io.Error("書き込みに失敗しました");
         }else if(ReferenceEquals(tex.GetType(),typeof(Texture2D))){
@@ -993,6 +1065,107 @@ public static class CmdMeshes {
             return sh.io.Error("未対応の形式です");
         }
         return 1;
+    }
+    private static int MeshParamReverse(ComShInterpreter sh,SingleMesh sm,string val){
+        sm.mi.EditMesh();
+        var tri=sm.mi.GetIndices3(sm.submeshno);
+        int[] tri2=new int[tri.Length];
+        HashSet<int> hs=new HashSet<int>();
+        for(int ti=0; ti<tri.Length; ti+=3){
+            tri2[ti]=tri[ti+2];tri2[ti+1]=tri[ti+1];tri2[ti+2]=tri[ti];
+            hs.Add(tri2[ti]); hs.Add(tri2[ti+1]); hs.Add(tri2[ti+2]);
+        }
+        sm.mi.mesh.SetIndices(tri2,MeshTopology.Triangles,sm.submeshno);
+        var mesh=sm.mi.mesh.FindMesh(sm.submeshno);
+        var normals=mesh.normals;
+        if(normals.Length>0) foreach(int i in hs) normals[i]=-normals[i];
+        mesh.normals=normals;
+        return 0;
+    }
+    private static int MeshParamGraft(ComShInterpreter sh,SingleMesh sm,string val){
+        if(val==null) return sh.io.Error("オブジェクト名を指定してください");
+        bool clonetexq=false;
+        string[] lr=ParseUtil.LeftAndRight(val,',');
+        if(lr[1]!=""){
+            if(lr[1]!="1"&&lr[1]!="0") return sh.io.Error("0か1を指定してください");
+            clonetexq=lr[1]=="1";
+        }
+        if(!UTIL.ValidName(lr[0])) return sh.io.Error("その名前は使用できません");
+        Transform pftr=ObjUtil.GetPhotoPrefabTr(sh,true);
+        if(pftr==null) return sh.io.Error("オブジェクト作成に失敗しました");
+        if(ObjUtil.FindObj(sh,lr[0])!=null||LightUtil.FindLight(sh,lr[0])!=null) return sh.io.Error("その名前は既に使われています");
+
+        int midx=sm.mi.mesh.FindMeshIdx(sm.submeshno);
+        Transform rendtr=sm.mi.mesh[midx].rend.transform;
+        GameObject go;
+        go=new GameObject(lr[0]);
+        go.transform.SetParent(pftr);
+        go.transform.position=rendtr.position;
+        go.transform.rotation=rendtr.rotation;
+        go.transform.localScale=rendtr.localScale;
+
+        var mf=go.AddComponent<MeshFilter>();
+        var mr=go.AddComponent<MeshRenderer>();
+        mf.sharedMesh=GraftMesh(sm,midx);
+        var mate=UnityEngine.Object.Instantiate(sm.mi.material[sm.submeshno]);
+        if(clonetexq) TextureUtil.CloneAllTexture(mate);
+        mr.sharedMaterial=mate;
+
+        var oi=ObjInfo.AddObjInfo(go.transform,"");
+        ObjUtil.objDic.Add(go.transform.name,go.transform);
+        oi.data.Backup();
+        oi.data.OwnMesh();
+        return 1;
+    }
+    private static Mesh GraftMesh(SingleMesh sm,int midx){
+        Mesh mesh=sm.mi.mesh[midx].mesh;
+        Mesh ret=UnityEngine.Object.Instantiate(mesh);
+        var va=mesh.vertices;
+        var tri=sm.mi.GetIndices3(sm.submeshno);
+
+        var hs=new HashSet<int>();
+        for(int i=0; i<tri.Length; i++) hs.Add(tri[i]);
+        if(sm.list!=null){
+            var hs2=new HashSet<int>();
+            for(int i=0; i<sm.list.Length; i++) hs2.Add(sm.list[i]);
+            hs.IntersectWith(hs2);
+        }
+        int[] idx=new int[hs.Count];
+        hs.CopyTo(idx);
+        Array.Sort(idx);
+
+        if(sm.filter!=null||sm.exclude!=null){
+            var idx2=new List<int>();
+            for(int i=0; i<idx.Length; i++){
+                int th=idx[i];
+                if(th>=va.Length) continue;
+                if(sm.ApplyFilter(va[th])==1) idx2.Add(th);
+            }
+            idx=idx2.ToArray();
+        }
+        ret.Clear();
+        ret.vertices=IdxArrCp(va,idx);
+        ret.normals=IdxArrCp(mesh.normals,idx);
+        ret.tangents=IdxArrCp(mesh.tangents,idx);
+        ret.uv=IdxArrCp(mesh.uv,idx);
+        ret.uv2=IdxArrCp(mesh.uv2,idx);
+        ret.uv3=IdxArrCp(mesh.uv3,idx);
+        ret.uv4=IdxArrCp(mesh.uv4,idx);
+        List<int> tri2=new List<int>();
+        for(int i=0; i<tri.Length; i+=3){
+            int a=Array.BinarySearch(idx,tri[i]),b=Array.BinarySearch(idx,tri[i+1]),c=Array.BinarySearch(idx,tri[i+2]);
+            if(a>=0&&b>=0&&c>=0){tri2.Add(a); tri2.Add(b); tri2.Add(c);}
+        }
+        ret.triangles=tri2.ToArray();
+
+        return ret;
+    }
+    private static T[] IdxArrCp<T>(T[] arr,int[] idx){
+        if(arr==null||arr.Length==0) return arr;
+        int l=Math.Min(arr.Length,idx.Length);
+        T[] rn=new T[l];
+        for(int i=0; i<l; i++) rn[i]=arr[idx[i]];
+        return rn;
     }
 
     private class VerLoopChange {
@@ -1146,6 +1319,14 @@ public static class CmdMeshes {
     }
 }
 public static class TextureUtil {
+    public static string[] texnames={
+        "_AlphaTex", "_BumpMap", "_Caustics", "_DerivativeTex", "_DetailNormalMap", "_EmissionMap",
+        "_EnvMap", "_FlowTex", "_Fresnel", "_HiTex", "_LightMap", "_MainTex", "_MultiColTex",
+        "_NormalMap", "_OcclusionMap", "_MetallicGlossMap","_SpecGlossMap",
+        "_OutlineTex", "_OutlineToonRamp", "_OutlineWidthTex",
+        "_ParallaxMap", "_ReflectionTex", "_ReflectiveColor", "_ReflectiveColorCube", "_RefractionTex",
+        "_RuleTex", "_ShadowRateToon", "_ShadowTex", "_Tex1", "_Tex2", "_ToonRamp"
+    };
     public static Texture2D CloneTexture(Texture src){ return CloneTexture(src,src.anisoLevel,src.mipMapBias,src.filterMode); }
     public static Texture2D CloneBitmap(Texture src){ return CloneTexture(src,0,0,FilterMode.Point); }
     public static Texture2D CloneTexture(Texture src,int anisolv,float mmb,FilterMode flt,bool useMipMap=false){ 
@@ -1166,7 +1347,6 @@ public static class TextureUtil {
         RenderTexture.ReleaseTemporary(rt);
         return ret;
     }
-
     public static int Rt2Png(RenderTexture rt,string fname){
         Texture2D tx=null;
         try{
@@ -1188,6 +1368,17 @@ public static class TextureUtil {
             if(tx!=null) UnityEngine.Object.Destroy(tx);
         }
         return 0;
+    }
+    public static List<Texture> CloneAllTexture(Material m){
+        var ret=new List<Texture>();
+        for(int i=0; i<texnames.Length; i++){
+            var src=m.GetTexture(texnames[i]);
+            if(src==null) continue;
+            var dst=CloneTexture(src);
+            m.SetTexture(texnames[i],dst);
+            ret.Add(dst);
+        }
+        return ret;
     }
 }
 }
