@@ -51,6 +51,7 @@ public static class CmdObjects {
         objParamDic.Add("layer",new CmdParam<Transform>(ObjParamLayer));
         objParamDic.Add("motion",new CmdParam<Transform>(ObjParamMotion));
         objParamDic.Add("particle",new CmdParam<Transform>(ObjParamParticle));
+        objParamDic.Add("particle.new",new CmdParam<Transform>(ObjParamParticleAdd));
         objParamDic.Add("handle",new CmdParam<Transform>(ObjParamHandle));
         objParamDic.Add("describe",new CmdParam<Transform>(ObjParamDesc));
         objParamDic.Add("type",new CmdParam<Transform>(ObjParamType));
@@ -102,7 +103,7 @@ public static class CmdObjects {
             GameObject go=ObjUtil.AddObject(pa[0],pa[1],pftr,
                new Vector3(pos[0],pos[1],pos[2]),new Vector3(rot[0],rot[1],rot[2]),new Vector3(scl[0],scl[1],scl[2]));
             if(go==null) return sh.io.Error("オブジェクト作成に失敗しました");
-            ObjUtil.objDic.Add(go.transform.name,go.transform);
+            ObjUtil.objDic[go.transform.name]=go.transform;
             return 0;
         }
         if(args[1]=="create"){
@@ -132,7 +133,7 @@ public static class CmdObjects {
             go.transform.SetParent(o.transform);
             ObjInfo.AddObjInfo(o,"."+type);
             o.transform.SetParent(pftr);
-            ObjUtil.objDic.Add(o.transform.name,o.transform);
+            ObjUtil.objDic[o.transform.name]=o.transform;
             return 0;
         }
         if(args[1]=="clone"){
@@ -144,17 +145,17 @@ public static class CmdObjects {
             if(ObjUtil.FindObj(sh,args[3])!=null||LightUtil.FindLight(sh,args[3])!=null) return sh.io.Error("その名前は既に使われています");
             GameObject go=ObjUtil.CloneObject(args[3],tr,pftr);
             if(go==null) return sh.io.Error("オブジェクト作成に失敗しました");
-            ObjUtil.objDic.Add(go.transform.name,go.transform);
+            ObjUtil.objDic[go.transform.name]=go.transform;
 		    return 0;
         }
         if(args[1]=="del" && args.Count>=3){
             for(int i=2; i<args.Count; i++){
                 Transform tr=ObjUtil.FindObj(sh,args[i].Split(ParseUtil.colon));
                 if(tr!=null){
-                    tr.parent=null; // 次フレームまでは消えてくれないので、FindObj()で探せなくしておく
+                    tr.parent=null; // FindObj()で探せないように
                     UnityEngine.Object.Destroy(tr.gameObject);
-                    ObjUtil.objDic.Remove(tr.name);
                 }
+                ObjUtil.objDic.Remove(args[i]);
             }
             return 0;
         }
@@ -661,6 +662,23 @@ public static class CmdObjects {
             return render.material;
         }
     }   
+    private static int ObjParamParticleAdd(ComShInterpreter sh,Transform tr,string val){
+        if(val==null) return 0;
+        var ps=tr.gameObject.GetComponent<ParticleSystem>();
+        if(ps!=null) return sh.io.Error("パーティクル追加済です");
+        ps=tr.gameObject.AddComponent<ParticleSystem>();
+        var pr=tr.gameObject.GetComponent<ParticleSystemRenderer>(); // 勝手に追加されるっぽい
+        if(pr==null) pr=tr.gameObject.AddComponent<ParticleSystemRenderer>();
+        ps.name=pr.name=val;
+        // とりあえず最低限の初期値
+        var emit=ps.emission;
+        emit.enabled=true;
+        emit.rateOverTime=1;
+        var mate=new Material(Shader.Find("Particles/Additive (Soft)"));
+        mate.SetTexture("_MainTex",Texture2D.blackTexture);
+        pr.sharedMaterial=mate;
+        return 1;
+    }
     private static int ObjParamParticle(ComShInterpreter sh,Transform tr,string val){
         var pa=tr.gameObject.GetComponentsInChildren<ParticleSystem>();
         if(pa==null||pa.Length==0) return ObjParamOldParticle(sh,tr,val);
@@ -756,7 +774,7 @@ public static class CmdObjects {
             fa=ParseUtil.MinMax(v);
             if(fa==null||fa[0]<0||fa[1]<0) return sh.io.Error("数値の形式が不正です");
             main.startRotation3D=false;
-            main.startRotation=new ParticleSystem.MinMaxCurve(fa[0],fa[1]);
+            main.startRotation=new ParticleSystem.MinMaxCurve(fa[0]*Mathf.Deg2Rad,fa[1]*Mathf.Deg2Rad);
             break;
         case "lifetime":
             fa=ParseUtil.MinMax(v);
@@ -837,7 +855,7 @@ public static class CmdObjects {
             d=ParseUtil.ParseInt(v,-1);
             if(d!=0&&d!=1) return sh.io.Error("値の範囲が不正です");
             if(d==1) main.scalingMode=ParticleSystemScalingMode.Hierarchy;
-            else main.scalingMode=ParticleSystemScalingMode.Local;
+            else main.scalingMode=ParticleSystemScalingMode.Shape;
             break;
         case "duration":
             if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
@@ -1020,7 +1038,7 @@ public static class CmdObjects {
         if(smra==null || smra.Length==0){ // MeshFilterならcloneと同じ
             go=ObjUtil.CloneObject(lr[0],tr,pftr);
             if(go==null) return sh.io.Error("オブジェクト作成に失敗しました");
-            ObjUtil.objDic.Add(go.transform.name,go.transform);
+            ObjUtil.objDic[go.transform.name]=go.transform;
             return 1;
         }
         go=new GameObject(lr[0]);
@@ -1030,7 +1048,7 @@ public static class CmdObjects {
         go.transform.localScale=tr.localScale;
         for(int i=0; i<smra.Length; i++) CreateBakeMeshObj(smra[i].name,smra[i],go.transform,clonetexq);
         var oi=ObjInfo.AddObjInfo(go.transform,"");
-        ObjUtil.objDic.Add(go.transform.name,go.transform);
+        ObjUtil.objDic[go.transform.name]=go.transform;
         oi.data.Backup();
         oi.data.OwnMesh();
         return 1;
@@ -1364,7 +1382,7 @@ public static class ObjUtil {
     public static void RenameTr(Transform tr, string name){
         if(ObjUtil.objDic.TryGetValue(tr.name,out Transform t) && ReferenceEquals(tr,t)){
             ObjUtil.objDic.Remove(tr.name);
-            ObjUtil.objDic.Add(name,tr);
+            ObjUtil.objDic[name]=tr;
         }
         tr.name=name;
     }
@@ -1389,7 +1407,7 @@ public static class ObjUtil {
     public static GameObject AddObject(string src, string name, Transform pr, Vector3 pos, Vector3 rot,Vector3 scl){
         GameObject o;
         bool instanceq=true;
-        if(src=="."){ o=new GameObject(); instanceq=false; }
+        if(src=="."){ o=new GameObject(""); instanceq=false; }
         else o=Resources.Load<GameObject>("Prefab/"+src);
         if(o==null) o=Resources.Load<GameObject>("SceneCreativeRoom/Debug/Prefab/"+src);
         if(o==null){

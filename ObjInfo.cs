@@ -11,7 +11,10 @@ public class ObjInfo : MonoBehaviour{
     public ObjInfoData data;
     public void InitBones(){ data=new ObjInfoData(transform); }
     public void OnDestroy(){
-        ObjUtil.objDic.Remove(name);
+        if(ObjUtil.objDic.TryGetValue(name,out Transform deltr)
+            && System.Object.ReferenceEquals(deltr,transform)){
+            ObjUtil.objDic.Remove(name);
+        }
         if(this.data!=null){
             if(this.data.originalMesh!=null) foreach(var m in this.data.originalMesh)
                 if(m.own) UnityEngine.Object.Destroy(m.mesh);

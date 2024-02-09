@@ -1112,7 +1112,7 @@ public static class CmdMeshes {
         mr.sharedMaterial=mate;
 
         var oi=ObjInfo.AddObjInfo(go.transform,"");
-        ObjUtil.objDic.Add(go.transform.name,go.transform);
+        ObjUtil.objDic[go.transform.name]=go.transform;
         oi.data.Backup();
         oi.data.OwnMesh();
         return 1;

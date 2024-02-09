@@ -1742,7 +1742,7 @@ public static class CmdMaidMan {
             if(!UTIL.ValidName(te[i])) return "その名前は使用できません";
             if(ObjUtil.FindObj(sh,te[i])!=null||LightUtil.FindLight(sh,te[i])!=null) return "その名前は既に使われています";
             Transform tr=CreateGrabNode(sh,m,te[i],leftq,handq);
-            ObjUtil.objDic.Add(tr.name,tr);
+            ObjUtil.objDic[tr.name]=tr;
             MaidUtil.GrabCron(m,tr,lr);
             if(handq){
                 if(leftq){ m.SetAutoTwist(Maid.AutoTwist.ShoulderL,true); m.SetAutoTwist(Maid.AutoTwist.WristL,true); }

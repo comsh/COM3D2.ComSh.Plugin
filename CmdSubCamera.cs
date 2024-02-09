@@ -67,7 +67,7 @@ public static class CmdSubCamera {
             cam.transform.position=Vector3.zero;
             cam.transform.rotation=Quaternion.identity;
             cam.targetTexture=rt;
-            ObjUtil.objDic.Add(go.transform.name,go.transform);
+            ObjUtil.objDic[go.transform.name]=go.transform;
             return 0;
         }
         if(args[1]=="del" && args.Count>=3){
