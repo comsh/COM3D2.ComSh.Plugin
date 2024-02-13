@@ -143,7 +143,7 @@ public partial class ComShInterpreter {
     }
     public void SourceRc(){
         Source("_comshrc");
-        ComShProperties.Update(env);
+        if(interactiveq) ComShProperties.Update(env);
     }
 
     public void OnEnvChanged(){

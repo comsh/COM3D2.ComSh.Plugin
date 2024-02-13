@@ -41,6 +41,7 @@ public static class CmdGui {
             if(sh.panel!=null) ComShWM.ClosePanel(sh.panel.wid);
             sh.panel=ComShWM.CreatePanel(sh,(int)xywh[0],(int)xywh[1],(int)xywh[2],(int)xywh[3],args[1],fs);
             if(sh.panel==null) return sh.io.Error("これ以上パネルを作成できません");
+            ComShWM.SetVisible(true);
         }else return sh.io.Error("使い方: panel タイトル x y 幅 高さ [フォントサイズ]");
         return 0;
     }

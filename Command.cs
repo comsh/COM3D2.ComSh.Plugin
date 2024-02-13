@@ -469,7 +469,6 @@ public static class Command {
         return 0;
     }
     private static int CmdClipBd(ComShInterpreter sh,List<string>args){
-        if(!sh.interactiveq) return 0;
         if(args.Count>1){
             var sb=new StringBuilder();
             sb.Append(args[1]);
@@ -543,6 +542,7 @@ public static class Command {
         return 0;
     }
     private static int CmdWinColor(ComShInterpreter sh,List<string> args){
+        if(!sh.interactiveq) return 0;
         if(args.Count>3||args.Count<2) return sh.io.Error("使い方: wincolor 背景色 [文字色]");
         float[] bcol=ParseUtil.Rgba(args[1]);
         if(bcol==null) return sh.io.Error(ParseUtil.error);
@@ -896,6 +896,7 @@ public static class Command {
             sel[row++]=new string[]{ (args[i].Length>0)?args[i]:args[i+1], args[i+1] };
         ComShWM.menu.SetMenu(title,sel);
         ComShWM.ShowMenu();
+        ComShWM.SetVisible(true);
         return 0;
 	}
     private static int CmdLS(ComShInterpreter sh,List<string> args){
@@ -926,6 +927,7 @@ public static class Command {
         }
         ComShWM.menu.SetMenu((args.Count==1)?"ComSh":args[1],sel);
         ComShWM.ShowMenu();
+        ComShWM.SetVisible(true);
         return 0;
     }
 

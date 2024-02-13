@@ -26,6 +26,7 @@ namespace COM3D2.ComSh.Plugin {
         public static ComShTerminal terminal;
         public static ComShMenu menu;
 
+        public static bool paused=false;
         private static int show=1;
         private static int lastwin=1;
 		private static bool visible=false;
@@ -36,7 +37,9 @@ namespace COM3D2.ComSh.Plugin {
                 toggleTick=updateTime+200*TimeSpan.TicksPerMillisecond;
             }
         }
+        public static bool IsVisible(){return visible;}
         public static void SetVisible(bool v) {
+            if(paused) return;
             var t=visible;
             visible=v;
             vchanged=t!=visible;
@@ -151,9 +154,9 @@ namespace COM3D2.ComSh.Plugin {
         }
 
 		public void Draw() {
+            Vector2 mp=Event.current.mousePosition;
             if(ComShWM.updateTime>nextTick){
                 nextTick=ComShWM.updateTime+100*TimeSpan.TicksPerMillisecond;
-                Vector2 mp=Event.current.mousePosition;
                 int k=GUIUtility.keyboardControl;
                 if((k==0||k==logId||k==cmdId) && mp.x>0 && mp.y>0){
                     UpdStyle();
@@ -164,7 +167,7 @@ namespace COM3D2.ComSh.Plugin {
                 }
             }
             windowrect=GUILayout.Window(ComShProperties.windowID, windowrect, Terminal,"",wstyle);
-            if(windowrect.Contains(Event.current.mousePosition)) Input.ResetInputAxes();
+            if(mp.x!=0 && mp.y!=0 && windowrect.Contains(mp)) Input.ResetInputAxes();
         }
         private long styleDate=0;
         private void UpdStyle(){
@@ -562,7 +565,9 @@ namespace COM3D2.ComSh.Plugin {
             output=OutputType.NONE;
             cui = new ComShInterpreter(new ComShInterpreter.Output(this.Stdout));
             cui.interactiveq=true;
+            ComShWM.paused=true;
 			cui.SourceRc();
+            ComShWM.paused=false;
 		}
 		public int Interpret(string line) {
             output=OutputType.STDOUT;

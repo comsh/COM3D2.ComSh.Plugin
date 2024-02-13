@@ -43,18 +43,21 @@ public class ComShPanel {
         shell.env["panelx"]=((int)windowrect.x).ToString();
         shell.env["panely"]=((int)windowrect.y).ToString();
 
-        bool enabled=windowrect.Contains(Event.current.mousePosition);
-        if(enabled){
-            Input.ResetInputAxes();
-            if(!lastEnabled){
-                if(UIInput.selection!=null) UIInput.selection.isSelected=false;
-                var ia=GameObject.FindObjectsOfType<UIInput>();
-                foreach(var ip in ia) ip.isSelected=false;
-                UIInput.selection=null;
-                UICamera.selectedObject=null;
-            }
-        }else if(lastEnabled) GUIUtility.keyboardControl=0;
-        lastEnabled=enabled;
+        Vector2 mp=Event.current.mousePosition;
+        if(mp.x!=0 && mp.y!=0){
+            bool enabled=windowrect.Contains(mp);
+            if(enabled){
+                Input.ResetInputAxes();
+                if(!lastEnabled){
+                    if(UIInput.selection!=null) UIInput.selection.isSelected=false;
+                    var ia=GameObject.FindObjectsOfType<UIInput>();
+                    foreach(var ip in ia) ip.isSelected=false;
+                    UIInput.selection=null;
+                    UICamera.selectedObject=null;
+                }
+            }else if(lastEnabled) GUIUtility.keyboardControl=0;
+            lastEnabled=enabled;
+        }
     }
     public void Panel(int wid){
         GUI.Label(titleRect,title,ws.title);
