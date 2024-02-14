@@ -896,7 +896,7 @@ public static class Command {
             sel[row++]=new string[]{ (args[i].Length>0)?args[i]:args[i+1], args[i+1] };
         ComShWM.menu.SetMenu(title,sel);
         ComShWM.ShowMenu();
-        ComShWM.SetVisible(true);
+        if(!ComShWM.IsVisible()){ ComShWM.SetVisible(true); ComShWM.HideTerm();}
         return 0;
 	}
     private static int CmdLS(ComShInterpreter sh,List<string> args){
@@ -927,7 +927,7 @@ public static class Command {
         }
         ComShWM.menu.SetMenu((args.Count==1)?"ComSh":args[1],sel);
         ComShWM.ShowMenu();
-        ComShWM.SetVisible(true);
+        if(!ComShWM.IsVisible()){ ComShWM.SetVisible(true); ComShWM.HideTerm();}
         return 0;
     }
 
