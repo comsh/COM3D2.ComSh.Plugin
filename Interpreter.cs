@@ -100,6 +100,7 @@ public partial class ComShInterpreter {
                 switch(cd.type){
                 case "maid": ret=CmdMaidMan.CmdMaidSub(this,cd.id,tokens,1); break;
                 case "man": ret=CmdMaidMan.CmdManSub(this,cd.id,tokens,1); break;
+                case "": 
                 case "obj": ret=CmdObjects.CmdObjectSub(this,cd,tokens,1); break;
                 case "light": ret=CmdLights.CmdLightSub(this,cd.id,tokens,1); break;
                 default: ret=io.Error("コマンドが存在しません"); break;

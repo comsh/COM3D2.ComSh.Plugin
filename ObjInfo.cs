@@ -2,7 +2,6 @@
 using UnityEngine;
 using System.Reflection;
 using static System.StringComparison;
-using System;
 
 namespace COM3D2.ComSh.Plugin {
 
@@ -156,6 +155,7 @@ public class ObjInfoData {
         originalMateOwn=new List<bool>();
         int meshno = 0;
         foreach(var b in bones){
+            if(!b.gameObject.activeInHierarchy) continue;
             var r=b.GetComponent<Renderer>();
             if(r==null) continue;
 
@@ -196,6 +196,7 @@ public class ObjInfoData {
         workMesh=new MeshList();
         int meshno = 0;
         foreach(var b in bones){
+            if(!b.gameObject.activeInHierarchy) continue;
             var r=b.GetComponent<Renderer>();
             if(r==null) continue;
             if (ReferenceEquals(r.GetType(), typeof(SkinnedMeshRenderer))){
@@ -268,6 +269,7 @@ public class ObjInfoData {
         if(workMate!=null) return;
         workMate=new List<Material>();
         foreach(var b in bones){
+            if(!b.gameObject.activeInHierarchy) continue;
             var r=b.GetComponent<Renderer>();
             if(r==null) continue;
             if (ReferenceEquals(r.GetType(), typeof(SkinnedMeshRenderer))) {
@@ -276,16 +278,26 @@ public class ObjInfoData {
                 int n=smr.sharedMesh.subMeshCount;
                 Material[] mate=smr.sharedMaterials;
                 n=(n>mate.Length)?mate.Length:n;    // 1サブメッシュ1マテリアルのみ対応
-                for(int j=0; j<n; j++) workMate.Add(UnityEngine.Object.Instantiate(mate[j]));
-                smr.sharedMaterials=workMate.ToArray();
+                var mate2=new Material[n];
+                for(int j=0; j<n; j++){
+                    var mi=UnityEngine.Object.Instantiate(mate[j]);
+                    mate2[j]=mi;
+                    workMate.Add(mi);
+                }
+                smr.sharedMaterials=mate2;
             }else{
                 MeshFilter mf=r.transform.GetComponent<MeshFilter>();
                 if(mf==null) continue;
                 int n=mf.sharedMesh.subMeshCount;
                 Material[] mate=r.sharedMaterials;
                 n=(n>mate.Length)?mate.Length:n;    // 1サブメッシュ1マテリアルのみ対応
-                for(int j=0; j<n; j++) workMate.Add(UnityEngine.Object.Instantiate(mate[j]));
-                r.sharedMaterials=workMate.ToArray();
+                var mate2=new Material[n];
+                for(int j=0; j<n; j++){
+                    var mi=UnityEngine.Object.Instantiate(mate[j]);
+                    mate2[j]=mi;
+                    workMate.Add(mi);
+                }
+                r.sharedMaterials=mate2;
             }
         }
         return;

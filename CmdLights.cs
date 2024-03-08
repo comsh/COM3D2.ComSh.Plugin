@@ -387,16 +387,8 @@ public static class CmdLights {
             val=val.Substring(0,opt);
         }
         string[] sa=val.Split(ParseUtil.colon);
-        if(sa.Length==3){
-            to=BoneUtil.FindBone(sh,val);
-            if(tr==null) return sh.io.Error("対象が見つかりません");
-        }else if(sa.Length==2 && sa[0]=="obj"){
-            to=ObjUtil.FindObj(sh,sa[1]);
-            if(tr==null) return sh.io.Error("対象が見つかりません");
-        }else if(sa.Length==1){
-            to=ObjUtil.FindObj(sh,sa[0]);
-            if(tr==null) return sh.io.Error("対象が見つかりません");
-        }else return sh.io.Error("アタッチ先を指定してください"); 
+        to=ObjUtil.FindObj(sh,sa);
+        if(tr==null) return sh.io.Error("対象が見つかりません");
         if(jmpq==2) UTIL.ResetTr(tr);
         tr.SetParent(to,jmpq==0);
         return 1;
@@ -497,7 +489,7 @@ public static class LightUtil{
         if(lt!=null) return lt;
         for(int i=0; i<tr.childCount; i++){
             Transform chtr=tr.GetChild(i);
-            if(chtr.gameObject.activeSelf) return GetLightFromTr(chtr);
+            if(chtr.gameObject.activeInHierarchy) return GetLightFromTr(chtr);
         }
         return null;
     }

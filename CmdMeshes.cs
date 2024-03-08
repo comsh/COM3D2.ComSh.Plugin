@@ -121,12 +121,15 @@ public static class CmdMeshes {
         sm.list=lst.ToArray();
         return 1;
     }
-    private static char[] verqueryletters={'c','l'};
+    private static char[] verqueryletters={'c','l','L'};
     private static int MeshParamFindVerno(ComShInterpreter sh,SingleMesh sm,string val){
         float[] fa={-1,-1,-1};
         if(ParseUtil.GetLetterFloat(val,verqueryletters,fa)<0) return sh.io.Error(ParseUtil.error);
-        int conn=(int)fa[0],loop=(int)fa[1];
-
+        int conn=(int)fa[0],loop=(int)fa[1],loop2=(int)fa[2];
+        if(loop2>=0){
+            if(loop>=0) return sh.io.Error("lとLは同時に指定できません");
+            loop=loop2;
+        }
         if(loop>=0){
             if(conn<0 && (sm.list==null || sm.list.Length==0))
                 return sh.io.Error("cまたはverlistを指定してください");
@@ -151,19 +154,26 @@ public static class CmdMeshes {
         if(loop>0){
             if(conn<0) cnd=hs;
             var all=new HashSet<int>(cnd);
-            var added=new HashSet<int>();
+            var edge=cnd;
             for(int l=0; l<loop; l++){
-                foreach(int th in cnd){
+                var added=new HashSet<int>();
+                foreach(int th in edge){
                     for(int ti=0; ti<tri.Length; ti+=3)
                         if(tri[ti]==th){ added.Add(tri[ti+1]); added.Add(tri[ti+2]);}
                         else if(tri[ti+1]==th){ added.Add(tri[ti]); added.Add(tri[ti+2]);}
                         else if(tri[ti+2]==th){ added.Add(tri[ti]); added.Add(tri[ti+1]);}
                 }
-                cnd.UnionWith(added);
-                cnd.ExceptWith(all);
+                added.ExceptWith(all);
+                if(added.Count==0) break;
                 all.UnionWith(added);
+                edge=added;
             }
-            //hs=new HashSet<int>(cnd);
+            if(loop2>0){
+                cnd.UnionWith(all);
+            }else{
+                all.ExceptWith(cnd);
+                cnd=all;
+            }
         }
         if(cnd.Count>0){
             int[] rslt=new int[cnd.Count];
@@ -387,7 +397,9 @@ public static class CmdMeshes {
             return 0;
         }
         string err;
+
         sm.mi.EditMaterial();
+
         string[] sa=val.Split(ParseUtil.lf);
         for(int pi=0; pi<sa.Length; pi++){
             kv=ParseUtil.LeftAndRight(sa[pi],'=');
@@ -437,7 +449,7 @@ public static class CmdMeshes {
     }
     private static int MeshParamBlend(ComShInterpreter sh,SingleMesh sm,string val){
         if(sm.mi.material[sm.submeshno].shader.name!="Standard"){
-            return sh.io.Error("blendはStandardシェーダでのみ有効です");
+            return sh.io.Error("Standardシェーダでのみ有効です");
         }
         if(val==null){
             string mode="不明";
@@ -633,9 +645,8 @@ public static class CmdMeshes {
             if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
             mate.SetTexture(prop,null);
         }else if(ObjUtil.objDic.TryGetValue(name,out Transform camTr) && (cam=camTr.GetComponent<Camera>())!=null){
-            var cc=camTr.GetComponent<CmdSubCamera.CubeCam>();
             if(mode==0){
-                var tex=(cc!=null)?cc.rt:cam.targetTexture;
+                var tex=cam.targetTexture;
                 tex.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
                 var old=mate.GetTexture(prop);
                 if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
@@ -643,35 +654,22 @@ public static class CmdMeshes {
             }else{
                 var old=mate.GetTexture(prop);
                 Texture t;
-                if(cc!=null){
-                    var rt=cc.rt;
-                    Cubemap cm;
-                    if(old==null) cm=new Cubemap(rt.width,TextureFormat.RGBA32,false); else{
-                        if(old.name=="__subcamera_pic_" && old.width==rt.width) cm=(Cubemap)old; else{
-                            if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
-                            cm=new Cubemap(rt.width,TextureFormat.RGBA32,false);
-                        }
+                var rt=cam.targetTexture;
+                Texture2D tx;
+                if(old==null) tx=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);
+                else {
+                    if(old.name=="__subcamera_pic_" && old.width==rt.width && old.height==rt.height) tx=(Texture2D)old;
+                    else{
+                        if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
+                        tx=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);
                     }
-                    cam.RenderToCubemap(cm,63);
-                    t=cm;
-                }else{
-                    var rt=cam.targetTexture;
-                    Texture2D tx;
-                    if(old==null) tx=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);
-                    else {
-                        if(old.name=="__subcamera_pic_" && old.width==rt.width && old.height==rt.height) tx=(Texture2D)old;
-                        else{
-                            if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
-                            tx=new Texture2D(rt.width,rt.height,TextureFormat.RGBA32,false);
-                        }
-                    }
-                    RenderTexture bak=RenderTexture.active;
-                    RenderTexture.active=rt;
-                    tx.ReadPixels(new Rect(0,0,rt.width,rt.height),0,0);
-                    tx.Apply();
-                    t=tx;
-                    RenderTexture.active=bak;
                 }
+                RenderTexture bak=RenderTexture.active;
+                RenderTexture.active=rt;
+                tx.ReadPixels(new Rect(0,0,rt.width,rt.height),0,0);
+                tx.Apply();
+                t=tx;
+                RenderTexture.active=bak;
                 t.name="__subcamera_pic_";
                 mate.SetTexture(prop,t);
                 texiid.Add(t);

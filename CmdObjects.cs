@@ -69,6 +69,13 @@ public static class CmdObjects {
         objParamDic.Add("bakemesh",new CmdParam<Transform>(ObjParamBakeMesh));
         objParamDic.Add("visible",new CmdParam<Transform>(ObjParamVisible));
         objParamDic.Add("iid",new CmdParam<Transform>(_CmdParamIid));
+        objParamDic.Add("collider",new CmdParam<Transform>(ObjParamCollider));
+        objParamDic.Add("rigidbody",new CmdParam<Transform>(ObjParamRigidbody));
+        objParamDic.Add("addforce",new CmdParam<Transform>(ObjParamAddForce));
+        objParamDic.Add("addtorque",new CmdParam<Transform>(ObjParamAddTorque));
+        objParamDic.Add("bounce",new CmdParam<Transform>(ObjParamBounce));
+        objParamDic.Add("friction",new CmdParam<Transform>(ObjParamFriction));
+        objParamDic.Add("active",new CmdParam<Transform>(ObjParamActive));
         
         objParamDic.Add("l2w",new CmdParam<Transform>(_CmdParamL2W));
         objParamDic.Add("w2l",new CmdParam<Transform>(_CmdParamW2L));
@@ -128,17 +135,16 @@ public static class CmdObjects {
                 go=GameObject.CreatePrimitive(PrimitiveType.Capsule);
             }else return sh.io.Error("種類にはcube|sphere|cylinder|quad|plane|capsuleのいずれかを指定してください");
             UTIL.ResetTr(go.transform);
-            var o=new GameObject(name);
-            UTIL.ResetTr(o.transform);
-            go.transform.SetParent(o.transform);
-            ObjInfo.AddObjInfo(o,"."+type);
-            o.transform.SetParent(pftr);
-            ObjUtil.objDic[o.transform.name]=o.transform;
+            go.name=name;
+            ObjInfo.AddObjInfo(go,"."+type);
+            go.transform.SetParent(pftr);
+            ObjUtil.objDic[go.transform.name]=go.transform;
             return 0;
         }
         if(args[1]=="clone"){
             if(args.Count!=4) return sh.io.Error("使い方: obj clone コピー元識別名 コピー先識別名");
             Transform tr=ObjUtil.FindObj(sh,args[2].Split(ParseUtil.colon));
+            if(tr==GameMain.Instance.MainCamera.camera.transform) return sh.io.Error("メインカメラにこの操作は行えません");
             if(tr==null) return sh.io.Error("対象が見つかりません");
             if(!UTIL.ValidName(args[3])) return sh.io.Error("その名前は使用できません");
             if((pftr=ObjUtil.GetPhotoPrefabTr(sh,true))==null) return sh.io.Error("オブジェクト作成に失敗しました");
@@ -152,6 +158,7 @@ public static class CmdObjects {
             for(int i=2; i<args.Count; i++){
                 Transform tr=ObjUtil.FindObj(sh,args[i].Split(ParseUtil.colon));
                 if(tr!=null){
+                    if(tr==GameMain.Instance.MainCamera.camera.transform) return sh.io.Error("メインカメラにこの操作は行えません");
                     tr.parent=null; // FindObj()で探せないように
                     UnityEngine.Object.Destroy(tr.gameObject);
                 }
@@ -220,29 +227,24 @@ public static class CmdObjects {
     }
 
     private static int ObjParamDel(ComShInterpreter sh,Transform tr,string val){
+        if(tr==GameMain.Instance.MainCamera.camera.transform) return sh.io.Error("メインカメラにこの操作は行えません");
         UnityEngine.Object.Destroy(tr.gameObject);
         ObjUtil.objDic.Remove(tr.name);
         return 0;
     }
     private static int ObjParamAttach(ComShInterpreter sh,Transform tr,string val){
         if(val==null) return 0;
+        if(tr==GameMain.Instance.MainCamera.camera.transform) return sh.io.Error("メインカメラにこの操作は行えません");
         Transform to;
         int opt,jmpq=0;
         if((opt=val.IndexOf(','))>=0){
             if(!int.TryParse(val.Substring(opt+1),out jmpq)) return sh.io.Error("数値の形式が不正です");
             val=val.Substring(0,opt);
         }
-        string[] sa=val.Split(ParseUtil.colon);
-        if(sa.Length==3){
-            to=BoneUtil.FindBone(sh,val);
-            if(to==null) return sh.io.Error("対象が見つかりません");
-        }else if(sa.Length==2 && sa[0]=="obj"){
-            to=ObjUtil.FindObj(sh,sa[1]);
-            if(to==null) return sh.io.Error("対象が見つかりません");
-        }else if(sa.Length==1){
-            to=ObjUtil.FindObj(sh,sa[0]);
-            if(to==null) return sh.io.Error("対象が見つかりません");
-        } else return sh.io.Error("アタッチ先を指定してください"); 
+        var cd=new ParseUtil.ColonDesc(val);
+        to=ObjUtil.FindObj(sh,cd);
+        if(to==null) return sh.io.Error("対象が見つかりません");
+
         // attach cronの実行順更新
         var ms=MaidUtil.GetParentMaidList(to,tr);
         if(ms==null) return sh.io.Error("親子関係がループになるため、アタッチできません");
@@ -262,16 +264,17 @@ public static class CmdObjects {
     }
     private static int ObjParamJoin(ComShInterpreter sh,Transform tr,string val){
         if(val==null) return 0;
+        if(tr==GameMain.Instance.MainCamera.camera.transform) return sh.io.Error("メインカメラにこの操作は行えません");
         int opt,jmpq=0;
         if((opt=val.IndexOf(','))>=0){
             if(!int.TryParse(val.Substring(opt+1),out jmpq)) return sh.io.Error("数値の形式が不正です");
             val=val.Substring(0,opt);
         }
         var cd=new ParseUtil.ColonDesc(val);
-        if(cd.type!="obj") return sh.io.Error("join対象にはオブジェクトのみ指定可能です");
+        if(cd.type!="" && cd.type!="obj") return sh.io.Error("join対象にはオブジェクトのみ指定可能です");
        
         // アッタッチ先(根)
-        var to0=ObjUtil.FindObj(sh,cd.id);
+        var to0=(cd.type=="")?ObjUtil.FindObj(sh,cd):ObjUtil.FindObj(sh,cd.id);
         if(to0==null) return sh.io.Error("対象が見つかりません");
         // アタッチ先(末端)
         var to=ObjUtil.FindObj(sh,cd);
@@ -295,10 +298,11 @@ public static class CmdObjects {
         return 1;
     }
     private static int ObjParamDetach(ComShInterpreter sh,Transform tr,string val){
+        if(tr==GameMain.Instance.MainCamera.camera.transform) return sh.io.Error("メインカメラにこの操作は行えません");
         var pftr=ObjUtil.GetPhotoPrefabTr(sh);
         if(pftr==null) return sh.io.Error("失敗しました");
         if(tr.parent!=pftr) tr.SetParent(pftr,true);
-        return 1;
+        return 0;
     }
     private static int ObjParamList(ComShInterpreter sh,Transform tr,string val){
         if(val==null) return sh.io.Error("list種別に child か descendant か tree を指定してください");
@@ -919,6 +923,7 @@ public static class CmdObjects {
         case "stretch":
             if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
             par.render.velocityScale=f;
+            par.render.cameraVelocityScale=0;
             if(f>0) par.render.renderMode=ParticleSystemRenderMode.Stretch;
             break;
         default:
@@ -932,9 +937,9 @@ public static class CmdObjects {
         return 0;
     }
     private static int ObjParamComponent(ComShInterpreter sh,Transform tr,string val){
-        Component[] ca=tr.GetComponentsInChildren<Component>(false);
+        Component[] ca=tr.GetComponentsInChildren<Component>(true);
         if(val==null){
-            for(int i=0; i<ca.Length; i++){
+            for(int i=0; i<ca.Length; i++) if(ca[i]!=null){
                 int iid=ca[i].GetInstanceID();
                 if(ReferenceEquals(ca[i].GetType(),typeof(Transform))) continue;
                 sh.io.PrintJoin(sh.ofs,iid.ToString(),ca[i].GetType().FullName,ca[i].transform.name);
@@ -945,17 +950,16 @@ public static class CmdObjects {
             return 0;
         }
         var sa=ParseUtil.LeftAndRight(val,'=');
-        if(sa[1]!="on"&&sa[1]!="off") return sh.io.Error("onまたはoffで指定してください");
+        if(sa[1]!="on"&&sa[1]!="off"&&sa[1]!="del") return sh.io.Error("onまたはoffまたはdelを指定してください");
         if(!int.TryParse(sa[0],out int tgt)) return sh.io.Error("idの指定が不正です");
         for(int i=0; i<ca.Length; i++){
             if(ReferenceEquals(ca[i].GetType(),typeof(Transform))) continue;
             if(ca[i].GetInstanceID()!=tgt) continue;
             if(sa[1]=="on"){
                 if(ca[i] is UnityEngine.MonoBehaviour) ((MonoBehaviour)ca[i]).enabled=true;
-            }else{
+            }else if(sa[1]=="off"){
                 if(ca[i] is UnityEngine.MonoBehaviour) ((MonoBehaviour)ca[i]).enabled=false;
-                else UnityEngine.Object.Destroy(ca[i]);
-            }
+            }else UnityEngine.Object.Destroy(ca[i]);
             break;
         }
         return 1;
@@ -1061,7 +1065,16 @@ public static class CmdObjects {
         }
         if(val!="1"&&val!="0") return sh.io.Error("1か0で指定してください");
         var ra=tr.GetComponentsInChildren<Renderer>();
-        for(int i=0; i<ra.Length; i++) ra[i].enabled=val=="1";
+        for(int i=0; i<ra.Length; i++) if(ra[i]!=null) ra[i].enabled=val=="1";
+        return 1;
+    }
+    private static int ObjParamActive(ComShInterpreter sh,Transform tr,string val){
+        if(val==null){
+            sh.io.Print(tr.gameObject.activeSelf?"1":"0");
+            return 0;
+        }
+        if(val!="1"&&val!="0") return sh.io.Error("1か0で指定してください");
+        tr.gameObject.SetActive(val=="1");
         return 1;
     }
     private static GameObject CreateBakeMeshObj(string name,SkinnedMeshRenderer smr,Transform parent,bool clonetexq=false){
@@ -1073,7 +1086,7 @@ public static class CmdObjects {
         go.transform.position=smr.transform.position;
         go.transform.rotation=smr.transform.rotation;
         MeshFilter mf=go.AddComponent<MeshFilter>();
-        mf.mesh=mesh;
+        mf.sharedMesh=mesh;
         MeshRenderer mr=go.AddComponent<MeshRenderer>();
         var ma=smr.sharedMaterials;
         if(clonetexq) for(int i=0; i<ma.Length; i++){
@@ -1081,7 +1094,7 @@ public static class CmdObjects {
             TextureUtil.CloneAllTexture(m);
             ma[i]=m;
         }
-        mr.materials=ma;
+        mr.sharedMaterials=ma;
         return go;
     }
     private static int ObjParamLookAt(ComShInterpreter sh,Transform tr,string val){
@@ -1312,6 +1325,269 @@ public static class CmdObjects {
         }
         return 1;
     }
+    private static PhysicMaterial defaultPM=null;
+    private static PhysicMaterial GetDefaultPM(){
+        if(defaultPM==null){
+            defaultPM=new PhysicMaterial();
+            defaultPM.bounceCombine=PhysicMaterialCombine.Average;
+            defaultPM.bounciness=0.3f;
+            defaultPM.frictionCombine=PhysicMaterialCombine.Average;
+            defaultPM.dynamicFriction=0.4f;
+            defaultPM.staticFriction=0.6f;
+        }
+        return defaultPM;
+    }
+    private static int ObjParamCollider(ComShInterpreter sh,Transform tr,string val){
+        if(val==null){
+            ObjUtil.ForeachComponents<Collider>(tr,(Component c)=>{
+                if(c.GetType()==typeof(SphereCollider)){
+                    var sp=(SphereCollider)c;
+                    sh.io.PrintJoinLn(",","sphere",sh.fmt.FVal(sp.radius),sp.isTrigger?"1":"0");
+                }else if(c.GetType()==typeof(CapsuleCollider)){
+                    var cap=(CapsuleCollider)c;
+                    sh.io.PrintJoin(",","capsule",sh.fmt.FVal(cap.radius),sh.fmt.FVal(cap.height))
+                      .Print(',').Print((char)(cap.direction+'x')).PrintLn(cap.isTrigger?",1":",0");
+                }else if(c.GetType()==typeof(BoxCollider)){
+                    var box=(BoxCollider)c;
+                    sh.io.PrintJoinLn(",","box",sh.fmt.FMul(box.size),box.isTrigger?"1":"0");
+                }else if(c.GetType()==typeof(DynamicBoneCollider)){
+                    var dbc=(DynamicBoneCollider)c;
+                    sh.io.PrintJoin(",","dbc",sh.fmt.FVal(dbc.m_Radius),sh.fmt.FVal(dbc.m_Height),dbc.m_Direction.ToString(),dbc.m_Bound.ToString());
+                }
+            });
+            return 0;
+        }
+        Maid maid;
+        DynamicBone[] db;
+        DynamicSkirtBone[] ds;
+        if(val==""){
+            ObjUtil.ClearComponent<Collider>(tr);
+            ObjUtil.ClearComponent<DynamicBoneCollider>(tr);
+            return 1;
+        }
+        var sa=val.Split(ParseUtil.comma);
+        var type=sa[0];
+        Collider co=null;
+        switch(type){
+        case "sphere":
+            var sp=tr.GetOrAddComponent<SphereCollider>();
+            co=sp;
+            if(sa.Length==2||sa.Length==3){
+                if(!float.TryParse(sa[1],out float r)||r<0) return sh.io.Error("半径が不正です");
+                sp.radius=r;
+                if(sa.Length==3) sp.isTrigger=(sa[2]=="1");
+            }else return sh.io.Error("半径を指定してください");
+            break;
+        case "capsule":
+            var cap=tr.GetOrAddComponent<CapsuleCollider>();
+            co=cap;
+            if(sa.Length==4||sa.Length==5){
+                if(!float.TryParse(sa[1],out float r)||r<0) return sh.io.Error("半径が不正です"); 
+                if(!float.TryParse(sa[2],out float h)||h<0) return sh.io.Error("高さが不正です");
+                if(sa[3]!="x"&&sa[3]!="y"&&sa[3]!="z") return sh.io.Error("向きはxかyかzで指定してください");
+                cap.radius=r;
+                cap.height=h;
+                cap.direction=sa[3][0]-'x';
+                if(sa.Length==5) cap.isTrigger=(sa[4]=="1");
+            }else return sh.io.Error("半径,高さ,向きを指定してください");
+            break;
+        case "box":
+            var box=tr.GetOrAddComponent<BoxCollider>();
+            co=box;
+            if(sa.Length==4||sa.Length==5){
+                if( (!float.TryParse(sa[1],out float x)||x<0) ||
+                    (!float.TryParse(sa[2],out float y)||y<0) ||
+                    (!float.TryParse(sa[3],out float z)||z<0) ) return sh.io.Error("サイズの指定が不正です");
+                box.size=new Vector3(x,y,z);
+                if(sa.Length==5) box.isTrigger=(sa[4]=="1");
+            }else return sh.io.Error("サイズ(x,y,z)を指定してください");
+            break;
+        case "dbc":
+            maid=tr.GetComponentInParent<Maid>();
+            if(maid==null || maid.boMAN) return sh.io.Error("Maidの子オブジェクトでのみ有効です");
+            ds=maid.body0.m_trBones.GetComponentsInChildren<DynamicSkirtBone>();
+            db=maid.body0.m_trBones.GetComponentsInChildren<DynamicBone>();
+            if((ds==null||ds.Length==0)&&(db==null||db.Length==0)) return sh.io.Error("MaidにDynamictBoneまたはDinamicSkirtBoneが必要です");
+            var dbc=tr.GetComponent<DynamicBoneCollider>();
+            if(dbc==null) dbc=tr.gameObject.AddComponent<DynamicBoneColliderCustom>();
+            if(sa.Length==4||sa.Length==5){
+                if(!float.TryParse(sa[1],out float r)||r<0) return sh.io.Error("半径が不正です"); 
+                if(!float.TryParse(sa[2],out float h)||h<0) return sh.io.Error("高さが不正です");
+                int dir=DynamicBoneColliderDirection(sa[3]);
+                if(dir<0) return sh.io.Error("向きはxかyかzで指定してください");
+                if(sa.Length==5){
+                    int bound=DynamicBoneColliderBound(sa[4]);
+                    if(bound<0) return sh.io.Error("内向き/外向きはiかoで指定してください");
+                    dbc.m_Bound=(DynamicBoneCollider.Bound)bound;
+                }
+                dbc.m_Radius=r;
+                dbc.m_Height=h;
+                dbc.m_Direction=(DynamicBoneCollider.Direction)dir;
+                if(ds!=null){
+                    if(dbc.GetType()==typeof(DynamicBoneColliderCustom)){
+                        ((DynamicBoneColliderCustom)dbc).ds=ds;
+                        for(int i=0; i<ds.Length; i++) if(ds[i]!=null){
+                            ds[i].m_listBodyBall.Remove(dbc);
+                            ds[i].m_listBodyBall.Add(dbc);
+                            ds[i].m_bReInit=true;
+                        }
+                    }
+                }
+                if(db!=null){
+                    if(dbc.GetType()==typeof(DynamicBoneColliderCustom)){
+                        ((DynamicBoneColliderCustom)dbc).db=db;
+                        for(int i=0; i<db.Length; i++) if(db[i]!=null){
+                            if(db[i].m_Colliders==null) db[i].m_Colliders=new List<DynamicBoneColliderBase>();
+                            db[i].m_Colliders.Add(dbc);
+                        }
+                    }
+                }
+            }else sh.io.Error("半径,高さ,向きを指定してください");
+            break;
+        default:
+            return sh.io.Error("コライダー形状が不正です");
+        }
+        if(co!=null){
+            co.enabled=true;
+            co.sharedMaterial=GetDefaultPM();
+        }
+        return 1;
+    }
+    private static int DynamicBoneColliderDirection(string s){
+        if(s.Length!=1) return -1;
+        if(s[0]=='x') return (int)DynamicBoneCollider.Direction.X;
+        else if(s[0]=='y') return (int)DynamicBoneCollider.Direction.Y;
+        else if(s[0]=='z') return (int)DynamicBoneCollider.Direction.Z;
+        return -1;
+    }
+    private static int DynamicBoneColliderBound(string s){
+        if(s.Length!=1) return -1;
+        if(s[0]=='i') return (int)DynamicBoneCollider.Bound.Inside;
+        else if(s[0]=='o') return (int)DynamicBoneCollider.Bound.Outside;
+        return -1;
+    }
+    public class DynamicBoneColliderCustom:DynamicBoneCollider {
+        public override bool Collide(ref Vector3 p,float r){
+            if(m_Bound==Bound.Outside) return base.Collide(ref p,r);
+
+            // Insideはそのままだと無限遠まで全てひっかかって重いので
+            // 一定範囲以上外側にあるものは無視させる
+            Vector3 t=p;
+            float scale=Mathf.Abs(this.transform.lossyScale.x);
+            float mr=m_Radius,mh=m_Height;
+            float dr=Mathf.Max(m_Radius,r/scale)*1.25f;
+            m_Height+=dr*2;
+            m_Radius+=dr;
+            bool ret=base.Collide(ref t,r); //一旦範囲を広げて判定
+            m_Radius=mr;
+            m_Height=mh;
+            if(ret) return false;  // 広げた範囲の外なら無視
+            else return base.Collide(ref p,r);
+        }
+        public DynamicBone[] db=null;
+        public DynamicSkirtBone[] ds=null;
+        private void OnDestroy(){
+            if(ds!=null){
+                for(int i=0; i<ds.Length; i++) if(ds[i]!=null) {
+                    ds[i].m_listBodyBall.Remove(this);
+                    ds[i].m_bReInit=true;
+                }
+            }
+            if(db!=null){
+                for(int i=0; i<db.Length; i++) if(db[i]!=null) {
+                    db[i].m_Colliders.Remove(this);
+                }
+            }
+        }
+    }
+    private static int ObjParamRigidbody(ComShInterpreter sh,Transform tr,string val){
+        var rb=tr.GetComponent<Rigidbody>();
+        if(val==null){
+            if(rb!=null){
+                sh.io.PrintLn2("mass:",sh.fmt.FVal(rb.mass));
+                sh.io.PrintLn2("drag:",sh.fmt.FVal(rb.drag));
+                sh.io.PrintLn2("angularDrag:",sh.fmt.FVal(rb.angularDrag));
+                sh.io.PrintLn2("gravity:",rb.useGravity?"on":"off");
+                sh.io.PrintLn2("isKinematic:",rb.isKinematic.ToString());
+            }
+            return 0;
+        }
+        if(val==""){
+            if(rb!=null) UnityEngine.Object.Destroy(rb);
+            return 1;
+        }
+        var fa=ParseUtil.FloatArr(val);
+        if(fa==null||(fa.Length!=4 && fa.Length!=5)) return sh.io.Error(ParseUtil.error);
+        if(rb==null) rb=tr.gameObject.AddComponent<Rigidbody>();
+        rb.mass=fa[0];
+        rb.drag=fa[1];
+        rb.angularDrag=fa[2];
+        rb.useGravity=(fa[3]==1);
+        if(fa.Length==5) rb.isKinematic=(fa[4]==1);
+        return 1;
+    }
+    private static int ObjParamAddForce(ComShInterpreter sh,Transform tr,string val){
+        return ObjParamAddForceOrTorque(sh,tr,val,0);
+    }
+    private static int ObjParamAddTorque(ComShInterpreter sh,Transform tr,string val){
+        return ObjParamAddForceOrTorque(sh,tr,val,1);
+    }
+    private static int ObjParamAddForceOrTorque(ComShInterpreter sh,Transform tr,string val,int ft){
+        if(val==null) return 0;
+        var rb=tr.GetComponent<Rigidbody>();
+        if(rb==null) return sh.io.Error("Rigidbodyがありません");
+        var fa=ParseUtil.FloatArr(val);
+        if(fa==null||fa.Length!=4) return sh.io.Error("数値が不正です");
+        ForceMode mode=(fa[fa.Length-1]==1)?ForceMode.Impulse:ForceMode.Force;
+        if(ft==0) rb.AddForce(fa[0],fa[1],fa[2],mode);
+        else rb.AddTorque(fa[3],fa[4],fa[5],mode);
+        return 1;
+    }
+    private static int ObjParamBounce(ComShInterpreter sh,Transform tr,string val){
+        var ca=tr.GetComponents<Collider>();
+        if(val==null){
+            for(int i=0; i<ca.Length; i++) if(ca[i]!=null){
+                var mate=ca[i].sharedMaterial;
+                if(mate!=null) sh.io.PrintJoinLn(sh.ofs,ca[i].name,ca[i].GetType().FullName,sh.fmt.FVal(mate.bounciness));
+                else  sh.io.PrintJoinLn(sh.ofs,ca[i].name,ca[i].GetType().FullName);
+            }
+            return 0;
+        }
+        if(ca==null||ca.Length==0) return sh.io.Error("コライダーがありません");
+        if(!float.TryParse(val,out float b)||b<0||b>1) return sh.io.Error("数値が不正です");
+        for(int i=0; i<ca.Length; i++) if(ca[i]!=null){
+            if(ca[i].sharedMaterial==null) ca[i].sharedMaterial=GetDefaultPM();
+            ca[i].material.bounciness=b;
+        }
+        return 1;
+    }
+    private static int ObjParamFriction(ComShInterpreter sh,Transform tr,string val){
+        var ca=tr.GetComponents<Collider>();
+        if(val==null){
+            for(int i=0; i<ca.Length; i++) if(ca[i]!=null){
+                var mate=ca[i].sharedMaterial;
+                if(mate!=null) sh.io.PrintJoinLn(sh.ofs,ca[i].name,ca[i].GetType().FullName,
+                    sh.fmt.FVal(mate.dynamicFriction),
+                    sh.fmt.FVal(mate.staticFriction));
+                else sh.io.PrintJoinLn(sh.ofs,ca[i].name,ca[i].GetType().FullName);
+            }
+            return 0;
+        }
+        if(ca==null||ca.Length==0) return sh.io.Error("コライダーがありません");
+        var sa=val.Split(ParseUtil.comma);
+        float df=-1,sf=-1;
+        if(sa.Length>0 && (!float.TryParse(sa[0],out df)||df<0||df>1))
+            return sh.io.Error("数値が不正です");
+        if(sa.Length==2 && (!float.TryParse(sa[1],out sf)||sf<0))
+            return sh.io.Error("数値が不正です");
+        if(sf<0) sf=df;
+        for(int i=0; i<ca.Length; i++) if(ca[i]!=null){
+            if(ca[i].sharedMaterial==null) ca[i].sharedMaterial=GetDefaultPM();
+            ca[i].material.dynamicFriction=df;
+            ca[i].material.staticFriction=sf;
+        }
+        return 1;
+    }
 }
 public static class ObjUtil {
     public static Dictionary<string,Transform> objDic=new Dictionary<string,Transform>();
@@ -1348,7 +1624,14 @@ public static class ObjUtil {
         if(sa.Length==0) return null;
         Transform tr=null;
         if(sa.Length==1) return FindObj(sh,sa[0]);
-        if(sa.Length==2&&sa[0]=="obj") return FindObj(sh,sa[1]);
+        if(sa.Length==2){
+            if(sa[0]=="obj") return FindObj(sh,sa[1]);
+            if(sa[0]=="light") return LightUtil.FindLight(sh,sa[1]);
+            if(sa[0]==""){
+                if(sa[1]=="camera") return GameMain.Instance.MainCamera.camera.transform;
+                if(sa[1]=="bg") return GameMain.Instance.BgMgr.BgObject.transform;
+            }
+        }
 
         string[] lr=ParseUtil.LeftAndRight(sa[sa.Length-1],'/');
         if(sa.Length==3){
@@ -1367,6 +1650,11 @@ public static class ObjUtil {
             tr=BoneUtil.FindBone(sh,cd.type,cd.id,(cd.bone=="")?"/":cd.bone);
         }else{
             if(cd.type=="obj") return FindObj(sh,cd.id);
+            if(cd.type=="light") return LightUtil.FindLight(sh,cd.id);
+            if(cd.type==""){
+                if(cd.id=="camera") return GameMain.Instance.MainCamera.camera.transform;
+                if(cd.id=="bg") return GameMain.Instance.BgMgr.BgObject.transform;
+            }
             tr=BoneUtil.FindBone(sh,cd.type,cd.id,"/");
         }
         if(tr==null) return null;
@@ -1376,6 +1664,11 @@ public static class ObjUtil {
     public static Transform FindObjRoot(ComShInterpreter sh,ParseUtil.ColonDesc cd){
         if(cd.num==0 && cd.id!="") return FindObj(sh,cd.id);
         if(cd.type=="obj") return FindObj(sh,cd.id);
+        if(cd.type=="light") return LightUtil.FindLight(sh,cd.id);
+        if(cd.type==""){
+            if(cd.id=="camera") return GameMain.Instance.MainCamera.camera.transform;
+            if(cd.id=="bg") return GameMain.Instance.BgMgr.BgObject.transform;
+        }
         return BoneUtil.FindBone(sh,cd.type,cd.id,"/");
     }
 
@@ -1397,7 +1690,7 @@ public static class ObjUtil {
     public static Transform GetPhotoPrefabTr(ComShInterpreter sh,bool create=false){
         if(sh.objBase==string.Empty){
             GameObject bg=GameMain.Instance.BgMgr.BgObject;
-            if(bg!=null && bg.activeSelf) return bg.transform;
+            if(bg!=null && bg.activeInHierarchy) return bg.transform;
             return UTIL.GetObjRoot("ComShPrefab",create);
         }else return UTIL.GetObjRoot(sh.objBase,create);
     }
@@ -1421,7 +1714,9 @@ public static class ObjUtil {
         List<UnityEngine.Object> trash=null;
         if(o==null){
             if(dummyMaid==null){ // LoadSkinMesh_Rを呼ぶためだけのニセMaid
-                dummyMaid=new GameObject().AddComponent<FakeMaid>();
+                var fo=new GameObject();
+                fo.SetActive(false);
+                dummyMaid=fo.AddComponent<FakeMaid>();
                 dummyMaid.enabled=false;
                 dummyMaid.m_goOffset=new GameObject("Offset");
                 dummyMaid.body0=dummyMaid.gameObject.AddComponent<TBody>();
@@ -1728,6 +2023,15 @@ public static class ObjUtil {
         var anm=tr.gameObject.GetComponent<Animation>();
         if(anm!=null) foreach(AnimationState ast in anm) if(anm.IsPlaying(ast.name)) return ast.name;
         return "";
+    }
+    public delegate void ComponentVisitor(Component c);
+    public static void ForeachComponents<T>(Transform tr,ComponentVisitor func,bool recursiveq=false) where T:Component{
+        var ca=(recursiveq)?tr.GetComponentsInChildren<T>():tr.GetComponents<T>();
+        for(int i=0; i<ca.Length; i++) if(ca[i]!=null) func.Invoke(ca[i]);
+    }
+    public static void ClearComponent<T>(Transform tr,bool recursiveq=false) where T:Component{
+        var ca=(recursiveq)?tr.GetComponentsInChildren<T>():tr.GetComponents<T>();
+        for(int i=0; i<ca.Length; i++) if(ca[i]!=null) UnityEngine.Object.Destroy(ca[i]);
     }
 }
 }

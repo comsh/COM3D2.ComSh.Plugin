@@ -18,6 +18,12 @@ public static class CmdGui {
         Command.AddCmd("vslider",new Cmd(CmdVSlider));
         Command.AddCmd("combo",new Cmd(CmdCombo));
         Command.AddCmd("combo2",new Cmd(CmdCombo2));
+        Command.AddCmd("listmenu",new Cmd(CmdListMenu));
+        Command.AddCmd("listmenu2",new Cmd(CmdListMenu2));
+        Command.AddCmd("listbox",new Cmd(CmdListBox));
+        Command.AddCmd("listbox2",new Cmd(CmdListBox2));
+        Command.AddCmd("swbutton",new Cmd(CmdSwitch));
+        Command.AddCmd("swbutton2",new Cmd(CmdSwitch2));
         Command.AddCmd("panel.onclose",new Cmd(CmdOnClose));
         Command.AddCmd("panel.close",new Cmd(CmdClose));
         Command.AddCmd("panel.update",new Cmd(CmdUpdate));
@@ -180,6 +186,97 @@ public static class CmdGui {
         }else return sh.io.Error("使い方: combo2 x y 幅 高さ コマンド 変数名 初期値 選択肢生成用コマンド [区切り文字]");
         return 0;
     }
+    private static int CmdListMenu(ComShInterpreter sh,List<string> args){ return CmdListBoxSub(sh,args,1); }
+    private static int CmdListMenu2(ComShInterpreter sh,List<string> args){ return CmdListBox2Sub(sh,args,1); }
+    private static int CmdListBox(ComShInterpreter sh,List<string> args){ return CmdListBoxSub(sh,args,0); }
+    private static int CmdListBox2(ComShInterpreter sh,List<string> args){ return CmdListBox2Sub(sh,args,0); }
+    private static int CmdListBoxSub(ComShInterpreter sh,List<string> args,int single){
+        if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
+        int[] xywh;
+        if(args.Count>=8 && (xywh=XYWH(sh.panel,args,1))!=null){
+            var psr=new ComShParser(sh.currentParser.lineno);
+            int r=psr.Parse(args[5]);
+            if(r<0) return sh.io.Error(psr.error);
+            if(r==0) psr=null;
+            if((args.Count==9 ||args.Count==10) && args[8].IndexOf('\n')>=0){ // １行１選択肢のタイプ
+                string[] items=ParseUtil.Chomp(args[8]).Split(ParseUtil.lf);
+                char c='\0';
+                if(args.Count==10){
+                    if(args[9]==""||args[9].Length!=1) return sh.io.Error("区切り文字の指定が不正です");
+                    c=args[9][0];
+                }
+                sh.panel.AddListBox(xywh[0],xywh[1],xywh[2],xywh[3],psr,args[6],args[7],items,single,c);
+            }else{
+                int i; for(i=8; i<args.Count; i++) if(args[i]==args[7]) break;
+                var items=(i==args.Count)?args.GetRange(7,args.Count-7):args.GetRange(8,args.Count-8);
+                sh.panel.AddListBox(xywh[0],xywh[1],xywh[2],xywh[3],psr,args[6],args[7],items.ToArray(),single,'\0');
+            }
+        }else return sh.io.Error($"使い方 : {args[0]} x y 幅 高さ コマンド 変数名 初期値 選択肢1 ...\n使い方2: {args[0]} x y 幅 高さ コマンド 変数名 初期値 選択肢(1行1項目) [区切り文字]");
+        return 0;
+    }
+    private static int CmdListBox2Sub(ComShInterpreter sh,List<string> args,int single){
+        if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
+        int[] xywh;
+        if((args.Count==9 ||args.Count==10)&& (xywh=XYWH(sh.panel,args,1))!=null){
+            var psr=new ComShParser(sh.currentParser.lineno);
+            int r=psr.Parse(args[5]);
+            if(r<0) return sh.io.Error(psr.error);
+            if(r==0) psr=null;
+            var lstvar=args[8];
+            if(!ParseUtil.IsVarName(lstvar)) return sh.io.Error("選択肢変数名が不正です");
+            char c='\0';
+            if(args.Count==10){
+                if(args[9]==""||args[9].Length!=1) return sh.io.Error("区切り文字の指定が不正です");
+                c=args[9][0];
+            }
+            sh.panel.AddListBox2(xywh[0],xywh[1],xywh[2],xywh[3],psr,args[6],args[7],lstvar,single,c);
+        }else return sh.io.Error($"使い方: {args[0]} x y 幅 高さ コマンド 変数名 初期値 選択肢変数 [区切り文字]");
+        return 0;
+    }
+    private static int CmdSwitch(ComShInterpreter sh,List<string> args){
+        if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
+        int[] xywh;
+        if(args.Count>=8 && (xywh=XYWH(sh.panel,args,1))!=null){
+            var psr=new ComShParser(sh.currentParser.lineno);
+            int r=psr.Parse(args[5]);
+            if(r<0) return sh.io.Error(psr.error);
+            if(r==0) psr=null;
+            if((args.Count==9 ||args.Count==10) && args[8].IndexOf('\n')>=0){ // １行１選択肢のタイプ
+                string[] items=ParseUtil.Chomp(args[8]).Split(ParseUtil.lf);
+                char c='\0';
+                if(args.Count==10){
+                    if(args[9]==""||args[9].Length!=1) return sh.io.Error("区切り文字の指定が不正です");
+                    c=args[9][0];
+                }
+                sh.panel.AddSwitch(xywh[0],xywh[1],xywh[2],xywh[3],psr,args[6],args[7],items,c);
+            }else{
+                int i; for(i=8; i<args.Count; i++) if(args[i]==args[7]) break;
+                var items=(i==args.Count)?args.GetRange(7,args.Count-7):args.GetRange(8,args.Count-8);
+                sh.panel.AddSwitch(xywh[0],xywh[1],xywh[2],xywh[3],psr,args[6],args[7],items.ToArray(),'\0');
+            }
+        }else return sh.io.Error("使い方 : swbutton x y 幅 高さ コマンド 変数名 初期値 選択肢1 ...\n使い方2: combo x y 幅 高さ コマンド 変数名 初期値 選択肢(1行1項目) [区切り文字]");
+        return 0;
+    }
+    private static int CmdSwitch2(ComShInterpreter sh,List<string> args){
+        if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
+        int[] xywh;
+        if((args.Count==9 ||args.Count==10)&& (xywh=XYWH(sh.panel,args,1))!=null){
+            var psr=new ComShParser(sh.currentParser.lineno);
+            int r=psr.Parse(args[5]);
+            if(r<0) return sh.io.Error(psr.error);
+            if(r==0) psr=null;
+            var lstvar=args[8];
+            if(!ParseUtil.IsVarName(lstvar)) return sh.io.Error("選択肢変数名が不正です");
+            char c='\0';
+            if(args.Count==10){
+                if(args[9]==""||args[9].Length!=1) return sh.io.Error("区切り文字の指定が不正です");
+                c=args[9][0];
+            }
+            sh.panel.AddSwitch2(xywh[0],xywh[1],xywh[2],xywh[3],psr,args[6],args[7],lstvar,c);
+        }else return sh.io.Error("使い方: swbutton2 x y 幅 高さ コマンド 変数名 初期値 選択肢生成用コマンド [区切り文字]");
+        return 0;
+    }
+
     private static int CmdSlider(ComShInterpreter sh,List<string> args){
         if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
         int[] xywh;

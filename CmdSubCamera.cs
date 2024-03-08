@@ -15,12 +15,37 @@ public static class CmdSubCamera {
         subcamParamDic.Add("screensize",new CmdParam<Camera>(SubCamParamScreenSize));
         subcamParamDic.Add("describe",new CmdParam<Camera>(SubCamParamDesc));
         subcamParamDic.Add("range",new CmdParam<Camera>(SubCamParamRange));
+        subcamParamDic.Add("mask",new CmdParam<Camera>(SubCamParamMask));
+        subcamParamDic.Add("depth",new CmdParam<Camera>(SubCamParamDepth));
+        subcamParamDic.Add("rect",new CmdParam<Camera>(SubCamParamRect));
 
         subcamParamDic.Add("ss",new CmdParam<Camera>(SubCamParamScreenShot));
         subcamParamDic.Add("png",new CmdParam<Camera>(SubCamParamPng));
 
     }
     private static Dictionary<string,CmdParam<Camera>> subcamParamDic=new Dictionary<string,CmdParam<Camera>>();
+
+    public class SubCamera:MonoBehaviour {
+        public static List<Camera> camlist=new List<Camera>();
+        public Camera camera;
+        private void Awake(){
+            camera=gameObject.AddComponent<Camera>();
+            camlist.Add(camera);
+        }
+        private void OnDesstroy(){
+            RemoveRt();
+            camlist.Remove(camera);
+        }
+        public void RemoveRt(){
+            var rt=camera.targetTexture;
+            foreach(var cam in camlist){
+                if(System.Object.ReferenceEquals(camera,cam)) continue;
+                if(!System.Object.ReferenceEquals(rt,cam)) continue;
+                return; // 自分以外が使っているならそのまま
+            }
+            rt.Release(); rt.DiscardContents(); GameObject.Destroy(rt);
+        }
+    }
 
     private static int CmdSubCam(ComShInterpreter sh,List<string> args){
         Transform pftr;
@@ -30,43 +55,53 @@ public static class CmdSubCamera {
             return 0;
         }
         if(args[1]=="add"){
-            if(args.Count!=3 && args.Count!=4) return sh.io.Error( "使い方: subcam add 識別名 幅,高さ,cubemap" );
+            if(args.Count!=3 && args.Count!=4) return sh.io.Error( "使い方: subcamera add 識別名 幅,高さ\n　　or　subcamera add 識別名 既存のsubcamera名" );
             pftr=ObjUtil.GetPhotoPrefabTr(sh,true);
             if(pftr==null) return sh.io.Error("オブジェクト作成に失敗しました"); 
-            CameraMain mc=GameMain.Instance.MainCamera;
+            Camera camera0=GameMain.Instance.MainCamera.camera;
             int w=1024,h=1024;
-            bool iscube=false;
-            if(args.Count>3){
-                float[] xyc=new float[3];
-                int n=ParseUtil.XyzSub(args[3],xyc);
-                if(n!=2&&n!=3) return sh.io.Error("数値の指定が不正です");
-                w=(int)xyc[0]; h=(int)xyc[1];
-                if(n==3 && xyc[2]==1) iscube=true;
-            }
+            Transform share=null;
+            if(args.Count==3){}
+            else if(args.Count==4){
+                share=ObjUtil.FindObj(sh,args[3].Split(ParseUtil.colon));
+                if(share!=null){
+                    camera0=share.GetComponent<Camera>();
+                    if(camera0==null) return sh.io.Error("Cameraがありません");
+                }else{
+                    float[] xy=ParseUtil.Xy(args[3]);
+                    if(xy==null) return sh.io.Error("数値が不正です");
+                    if((w=(int)xy[0])<=0 || (h=(int)xy[1])<=0) return sh.io.Error("数値が不正です");
+                }
+            }else return sh.io.Error("引数が多すぎます");
+
             string name=args[2];
            if(!UTIL.ValidName(name)) return sh.io.Error("その名前は使用できません");
             if(ObjUtil.FindObj(sh,name)!=null||LightUtil.FindLight(sh,name)!=null) return sh.io.Error("その名前は既に使われています");
             GameObject go=ObjUtil.AddObject(".",name,pftr, Vector3.zero,Vector3.zero,Vector3.one); 
             if(go==null) return sh.io.Error("オブジェクト作成に失敗しました");
-            Camera cam=go.AddComponent<Camera>();
-            cam.CopyFrom(mc.camera);
-            RenderTexture rt=new RenderTexture(w,h,32);
-            if(iscube){
-                var cc=go.AddComponent<CubeCam>(); 
-                cc.camera=cam; cc.rt=rt;
-                cam.enabled=false;
+            SubCamera subcam=go.AddComponent<SubCamera>();
+            Camera cam=subcam.camera;
+            cam.CopyFrom(camera0);
+            if(share==null){
+                var rt=new RenderTexture(w,h,32);
+                rt.name=name;
+                rt.filterMode=FilterMode.Bilinear;
+                rt.antiAliasing=QualitySettings.antiAliasing;
+                rt.wrapMode=TextureWrapMode.Repeat;
+                rt.dimension=UnityEngine.Rendering.TextureDimension.Tex2D;
+                cam.targetTexture=rt;
+            }else{
+                if(System.Object.ReferenceEquals(camera0,GameMain.Instance.MainCamera.camera)){
+                    cam.transform.position=camera0.transform.position;
+                    cam.transform.rotation=camera0.transform.rotation;
+                    cam.depth=camera0.depth-1;
+                }else{
+                    cam.targetTexture=camera0.targetTexture;
+                }
             }
-            rt.name=name;
-            rt.filterMode=FilterMode.Bilinear;
-            rt.antiAliasing=QualitySettings.antiAliasing;
-            rt.wrapMode=TextureWrapMode.Repeat;
-            rt.dimension=iscube?UnityEngine.Rendering.TextureDimension.Cube:UnityEngine.Rendering.TextureDimension.Tex2D;
             cam.name=name;
-            cam.backgroundColor=new Color(0,0,0,0);
-            cam.clearFlags=CameraClearFlags.Color;
-            cam.transform.position=Vector3.zero;
-            cam.transform.rotation=Quaternion.identity;
-            cam.targetTexture=rt;
+            cam.backgroundColor=Color.black;
+            cam.clearFlags=CameraClearFlags.Depth;
             ObjUtil.objDic[go.transform.name]=go.transform;
             return 0;
         }
@@ -75,9 +110,6 @@ public static class CmdSubCamera {
                 Transform tr=ObjUtil.FindObj(sh,args[i]);
                 if(tr!=null){
                     ObjUtil.objDic.Remove(tr.name);
-                    var cam=tr.GetComponent<Camera>();
-                    cam.targetTexture.Release();
-                    cam.targetTexture.DiscardContents();
                     UnityEngine.Object.Destroy(tr.gameObject);
                 }
             }
@@ -131,6 +163,26 @@ public static class CmdSubCamera {
         cam.aspect=f;
         return 1;
     }
+    private static int SubCamParamDepth(ComShInterpreter sh,Camera cam,string val){
+        if(val==null){
+            sh.io.Print(sh.fmt.FInt(cam.depth));
+            return 0;
+        }
+        if(!float.TryParse(val,out float f)) return sh.io.Error("数値が不正です");
+        cam.depth=f;
+        return 1;
+    }
+    private static int SubCamParamRect(ComShInterpreter sh,Camera cam,string val){
+        if(val==null){
+            sh.io.PrintJoin(",",sh.fmt.FVal(cam.rect.x),sh.fmt.FVal(cam.rect.y),
+                sh.fmt.FVal(cam.rect.width),sh.fmt.FVal(cam.rect.height));
+            return 0;
+        }
+        float[] fa=ParseUtil.FloatArr(val);
+        if(fa==null||fa.Length!=4) return sh.io.Error("数値が不正です");
+        cam.rect=new Rect(fa[0],fa[1],fa[2],fa[3]);
+        return 1;
+    }
     private static int SubCamParamW2S(ComShInterpreter sh,Camera cam,string val){
         if(val==null) return 0;
         float[] xyz=ParseUtil.Xyz(val);
@@ -145,23 +197,26 @@ public static class CmdSubCamera {
             sh.io.PrintLn($"{cam.pixelWidth},{cam.pixelHeight}");
             return 0;
         }
+        if(cam.targetTexture==null) return 1;
         float[] xy=ParseUtil.Xy(val);
         if(xy==null) return sh.io.Error(ParseUtil.error);
-        var cc=cam.gameObject.GetComponent<CubeCam>();
-        RenderTexture tex=(cc==null)?cam.targetTexture:cc.rt;
-        var dim=tex.dimension;
-        if(tex!=null){
-            tex.Release();
-            tex.DiscardContents();
-            Object.Destroy(tex);
+        SubCamera subcam=cam.transform.GetComponent<SubCamera>();
+        if(subcam!=null) subcam.RemoveRt();
+        else {
+            RenderTexture tex=cam.targetTexture;
+            if(tex!=null){
+                tex.Release();
+                tex.DiscardContents();
+                UnityEngine.Object.Destroy(tex);
+            }
         }
         var rt=new RenderTexture((int)xy[0],(int)xy[1],32);
         rt.name=cam.name;
         rt.filterMode=FilterMode.Bilinear;
         rt.antiAliasing=QualitySettings.antiAliasing;
         rt.wrapMode=TextureWrapMode.Repeat;
-        rt.dimension=dim;
-        if(cc!=null) cc.rt=rt; else cam.targetTexture=rt;
+        rt.dimension=UnityEngine.Rendering.TextureDimension.Tex2D;
+        cam.targetTexture=rt;
         return 1;
     }
     private static int SubCamParamRange(ComShInterpreter sh,Camera cam,string val){
@@ -184,7 +239,6 @@ public static class CmdSubCamera {
     }
     private static int SubCamParamScreenShot(ComShInterpreter sh,Camera cam,string val){
         if(val==null) return 0;
-        if(cam.gameObject.GetComponent<CubeCam>()!=null) return sh.io.Error("cubemapには対応していません");
         if(val=="" || val.IndexOf('\\')>=0 || UTIL.CheckFileName(val)<0) return sh.io.Error("ファイル名が不正です");
         string fname=ComShInterpreter.homeDir+@"ScreenShot\\"+UTIL.Suffix(val,".png");
         if(TextureUtil.Rt2Png(cam.targetTexture,fname)<0) return sh.io.Error("書き込みに失敗しました");
@@ -192,7 +246,6 @@ public static class CmdSubCamera {
     }
     private static int SubCamParamPng(ComShInterpreter sh,Camera cam,string val){
         if(val==null) return 0;
-        if(cam.gameObject.GetComponent<CubeCam>()!=null) return sh.io.Error("cubemapには対応していません");
 
         string file="";
         if(val!="" && val.IndexOf('\\')<0){
@@ -207,12 +260,15 @@ public static class CmdSubCamera {
         if(TextureUtil.Rt2Png(cam.targetTexture,file)<0) return sh.io.Error("書き込みに失敗しました");
         return 1;
     }
-    public class CubeCam:MonoBehaviour {
-        public Camera camera;
-        public RenderTexture rt;
-        public int mask=63;
-        private void LateUpdate(){ if(camera!=null&&rt!=null) camera.RenderToCubemap(rt,mask); }
-        private void OnDestroy(){UnityEngine.Object.Destroy(rt);}
+    private static int SubCamParamMask(ComShInterpreter sh,Camera cam,string val){
+        if(val==null){
+            sh.io.Print(cam.cullingMask.ToString("X8"));
+            return 0;
+        }
+        if(!int.TryParse(val,System.Globalization.NumberStyles.HexNumber,null,out int bits))
+            return sh.io.Error("数値が不正です");
+        cam.cullingMask=bits;
+        return 1;
     }
 }
 }

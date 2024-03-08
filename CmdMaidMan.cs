@@ -1025,9 +1025,9 @@ public static class CmdMaidMan {
                 Transform tr=te.Length>2?ObjUtil.FindObj(sh,te):ObjUtil.FindObj(sh,new string[]{te[0],te[1],"BHead"});
                 if(tr==null) return sh.io.Error("指定されたキャラ/ボーンが見つかりません");
                 MaidUtil.LookAtCron(m,tr);
-            }else if(te[0]=="obj"){  // オブジェクトを見る
+            }else if(te[0]=="obj"||te[0]==""){  // オブジェクトを見る
                 m.LockHeadAndEye(false);
-                Transform tr=ObjUtil.FindObj(sh,te[1]);
+                Transform tr=ObjUtil.FindObj(sh,te);
                 if(tr==null) return sh.io.Error("指定されたオブジェクトが見つかりません");
                 MaidUtil.LookAtCron(m,tr);
             }else if(te[0]=="light"){  // ライトを見る
@@ -1338,16 +1338,8 @@ public static class CmdMaidMan {
             val=val.Substring(0,opt);
         }
         string[] sa=val.Split(ParseUtil.colon);
-        if(sa.Length==3){
-            tr=ObjUtil.FindObj(sh,sa);
-            if(tr==null) return sh.io.Error("対象がみつかりません");
-        }else if(sa.Length==2 && sa[0]=="obj"){
-            tr=ObjUtil.FindObj(sh,sa[1]);
-            if(tr==null) return sh.io.Error("対象がみつかりません");
-        }else if(sa.Length==1){
-            tr=ObjUtil.FindObj(sh,sa[0]);
-            if(tr==null) return sh.io.Error("対象がみつかりません");
-        }else return sh.io.Error("アタッチ先の指定が不正です");
+        tr=ObjUtil.FindObj(sh,sa);
+        if(tr==null) return sh.io.Error("対象がみつかりません");
 
         // tarnsform.parentでつなぐと親メイド退場時に心中してしまうのでcronでやる
         var ms=MaidUtil.GetParentMaidList(tr,m.transform);
@@ -1615,13 +1607,32 @@ public static class CmdMaidMan {
     private static int MaidParamFloor(ComShInterpreter sh,Maid m,string val){
         if(m.body0==null) return 1;
         if(val==null){
-            sh.io.Print(sh.fmt.FVal(m.body0.m_trFloorPlane.position.y));
+            var co=m.body0.m_trFloorPlane.GetComponent<DynamicBonePlaneCollider>();
+            sh.io.PrintJoin(",",sh.fmt.FVal(m.body0.m_trFloorPlane.position.y),co.m_Direction.ToString());
             return 0;
         }
-        if(!float.TryParse(val,out float y)) return sh.io.Error("数値の指定が不正です");
-        var p=m.body0.m_trFloorPlane.position;
-        p.y=y;
-        m.body0.m_trFloorPlane.position=p;
+        var sa=val.Split(ParseUtil.comma);
+        if(sa.Length!=1&&sa.Length!=2) return sh.io.Error("書式が不正です");
+        if(!float.TryParse(sa[0],out float f)) return sh.io.Error("数値の指定が不正です");
+        if(sa.Length==2 && sa[1]!=""){
+            char c=char.ToLower(sa[1][0]);
+            DynamicBoneColliderBase.Direction dir=DynamicBoneColliderBase.Direction.Y;
+            if(c=='x') dir=DynamicBoneColliderBase.Direction.X;
+            else if(c=='y') dir=DynamicBoneColliderBase.Direction.Y;
+            else if(c=='z') dir=DynamicBoneColliderBase.Direction.Z;
+            else return sh.io.Error("方向指定が不正です");
+            var co=m.body0.m_trFloorPlane.GetComponent<DynamicBonePlaneCollider>();
+            co.m_Direction=dir;
+            var p=m.body0.m_trFloorPlane.position;
+            if(dir==DynamicBoneColliderBase.Direction.X) p.x=f;
+            else if(dir==DynamicBoneColliderBase.Direction.Y) p.y=f;
+            else if(dir==DynamicBoneColliderBase.Direction.Z) p.z=f;
+            m.body0.m_trFloorPlane.position=p;
+        }else{
+            var p=m.body0.m_trFloorPlane.position;
+            p.y=f;
+            m.body0.m_trFloorPlane.position=p;
+        }
         return 1;
     }
     private static int MaidParamSkirtYure(ComShInterpreter sh,Maid m,string val){

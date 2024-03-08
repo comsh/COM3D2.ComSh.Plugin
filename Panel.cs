@@ -1,6 +1,7 @@
 ﻿using System;
 using UnityEngine;
 using System.Collections.Generic;
+using System.Text;
 
 namespace COM3D2.ComSh.Plugin {
 // パネル
@@ -21,20 +22,21 @@ public class ComShPanel {
 
     public void OnVisibleChange(bool v){}
     private bool lastEnabled=false;
+    public void UpdateStyle(){
+        ws=PanelStyleCache.GetWindowStyles();
+        styleDate=PanelStyleCache.updDate;
+        style=PanelStyleCache.GetStyles(fontSize);
+        titleRect.width=windowrect.width;
+        termRect.width=closeRect.width=ws.cbSize.x;
+        termRect.height=closeRect.height=ws.cbSize.y;
+        closeRect.x=windowrect.width-closeRect.width-2;
+        termRect.x=closeRect.x-closeRect.width;
+        termRect.y=closeRect.y=TITLEHEIGHT-closeRect.height;
+    }
     public void Draw(){
-        if(PanelStyleCache.updDate>styleDate){
-            ws=PanelStyleCache.GetWindowStyles();
-            styleDate=PanelStyleCache.updDate;
-            style=PanelStyleCache.GetStyles(fontSize);
-            titleRect.width=windowrect.width;
-            termRect.width=closeRect.width=ws.cbSize.x;
-            termRect.height=closeRect.height=ws.cbSize.y;
-            closeRect.x=windowrect.width-closeRect.width-2;
-            termRect.x=closeRect.x-closeRect.width;
-            termRect.y=closeRect.y=TITLEHEIGHT-closeRect.height;
-        }
+        if(PanelStyleCache.updDate>styleDate) UpdateStyle();
 	    windowrect=GUI.Window(wid,windowrect,Panel,"",ws.window);
-        if(ComboWin.visible && ReferenceEquals(ComboWin.panel,this)){
+        if(ComboWin.visible && ReferenceEquals(ComboWin.listbox.panel,this)){
             ComboWin.Position(windowrect);
             ComboWin.Draw();
             GUI.BringWindowToFront(ComboWin.wid);
@@ -68,7 +70,7 @@ public class ComShPanel {
     }
 
     public void OnClose(){
-        if(ComboWin.panel==this) ComboWin.visible=false;
+        if(ComboWin.listbox.panel==this) ComboWin.visible=false;
         if(psrOnClose!=null){ shell.InterpretParser(psrOnClose); shell.exitq=false; }
         shell.panel=null;
     }
@@ -225,102 +227,184 @@ public class ComShPanel {
         var r=new Rect(x,ty,w,h);
         var rb=new Rect(x+w,ty,h,h);
         const int maxh=200;
-        var ci=new ComboItems(items,dlmt);
+        var ci=new ListBoxItems(items,dlmt,false);
         string prev=shell.env[name]=v0;
-        if(p==null){
-            ComboWin.OnSelect onselect=(string val)=>{ shell.env[name]=val; };
-            draw+=()=>{
-                string txt=ci.GetLabel(shell.env[name]);
-                string t=GUI.TextField(r,txt,style.text);
-                if(t!=txt) shell.env[name]=ci.GetValue(t);
-                if(GUI.Button(rb,"▼",style.comboBtn)){
-                    ComboWin.SetItems(this,ci,onselect,x,ty+h,w,maxh);
-                    ComboWin.Position(windowrect);
-                    ComboWin.Toggle();
-                }
-            };
-        }else{
-            ComboWin.OnSelect onselect=(string val)=>{
-                shell.env[name]=val;
+        float scry=0;
+        ListBox.OnSelectionChange onselect=(string val)=>{
+            shell.env[name]=val;
+            scry=ComboWin.listbox.scr.y;
+            if(p!=null){
                 p.Reset();
                 shell.InterpretParser(p);
                 shell.exitq=false;
-            };
-            draw+=()=>{
-                string txt=ci.GetLabel(shell.env[name]);
-                string t=GUI.TextField(r,txt,style.text);
-                if(t!=txt){
-                    shell.env[name]=ci.GetValue(t);
+            }
+        };
+        draw+=()=>{
+            string txt=ci.GetLabel(shell.env[name]);
+            string t=GUI.TextField(r,txt,style.text);
+            if(t!=txt){
+                shell.env[name]=ci.GetValue(t);
+                if(p!=null){
                     p.Reset();
                     shell.InterpretParser(p);
                     shell.exitq=false;
                 }
-                if(GUI.Button(rb,"▼",style.comboBtn)){
-                    ComboWin.SetItems(this,ci,onselect,x,ty+h,w,maxh);
-                    ComboWin.Position(windowrect);
-                    ComboWin.Toggle();
-                }
-            };
-        }
+            }
+            if(GUI.Button(rb,"▼",style.comboBtn)){
+                ComboWin.SetItems(this,ci,onselect,x,ty+h,w,maxh);
+                ComboWin.Position(windowrect);
+                ComboWin.Toggle(scry);
+            }
+        };
     }
     public void AddCombo2(int x,int y,int w,int h,ComShParser p,string name,string v0,ComShParser lst,char dlmt){
         int ty=y+TITLEHEIGHT;
         var r=new Rect(x,ty,w,h);
         var rb=new Rect(x+w,ty,h,h);
         const int maxh=200;
+        float scry=0;
         string prev=shell.env[name]=v0;
-        var ci=MakeItems(shell,lst,dlmt);
-        if(p==null){
-            ComboWin.OnSelect onselect=(string val)=>{ shell.env[name]=val; };
-            draw+=()=>{
-                if(prev!=shell.env[name]){        // 変数が他所で書き換えられていたら
-                    ci=MakeItems(shell,lst,dlmt); // 選択肢最新化
-                    prev=shell.env[name];
-                }
-                string txt=ci.GetLabel(shell.env[name]);
-                string t=GUI.TextField(r,txt,style.text);
-                if(t!=txt) shell.env[name]=ci.GetValue(t);
-                if(GUI.Button(rb,"▼",style.comboBtn)){
-                    ci=MakeItems(shell,lst,dlmt);
-                    ComboWin.SetItems(this,ci,onselect,x,ty+h,w,maxh);
-                    ComboWin.Position(windowrect);
-                    ComboWin.Toggle();
-                }
-            };
-        }else{
-            ComboWin.OnSelect onselect=(string val)=>{
-                shell.env[name]=val;
+        var ci=MakeItems(shell,lst,dlmt,false);
+        ListBox.OnSelectionChange onselect=(string val)=>{
+            shell.env[name]=val;
+            scry=ComboWin.listbox.scr.y;
+            if(p!=null){
                 p.Reset();
                 shell.InterpretParser(p);
                 shell.exitq=false;
-            };
-            draw+=()=>{
-                if(prev!=shell.env[name]){ ci=MakeItems(shell,lst,dlmt); prev=shell.env[name]; }
-                string txt=ci.GetLabel(shell.env[name]);
-                string t=GUI.TextField(r,txt,style.text);
-                if(t!=txt){
-                    shell.env[name]=ci.GetValue(t);
+            }
+        };
+        draw+=()=>{
+            string val=shell.env[name];
+            if(prev!=val){ ci=MakeItems(shell,lst,dlmt,false,val); prev=val; }
+            string txt=ci.GetLabel(shell.env[name]);
+            string t=GUI.TextField(r,txt,style.text);
+            if(t!=txt){
+                val=shell.env[name]=ci.GetValue(t);
+                if(p!=null){
                     p.Reset();
                     shell.InterpretParser(p);
                     shell.exitq=false;
                 }
-                if(GUI.Button(rb,"▼",style.comboBtn)){
-                    ci=MakeItems(shell,lst,dlmt);
-                    ComboWin.SetItems(this,ci,onselect,x,ty+h,w,maxh);
-                    ComboWin.Position(windowrect);
-                    ComboWin.Toggle();
-                }
-            };
-        }
+            }
+            if(GUI.Button(rb,"▼",style.comboBtn)){
+                ci=MakeItems(shell,lst,dlmt,false,val);
+                ComboWin.SetItems(this,ci,onselect,x,ty+h,w,maxh);
+                ComboWin.Position(windowrect);
+                ComboWin.Toggle(scry);
+            }
+        };
     }
+    public void AddSwitch(int x,int y,int w,int h,ComShParser p,string name,string v0,string[] items,char dlmt){
+        var r=new Rect(x,y+TITLEHEIGHT,w,h);
+        var li=new ListBoxItems(items,dlmt,false);
+        int idx=li.GetIdx(v0);
+        li.Select(idx,false,false);
+        string l=li.labels[idx];
+        string prev=shell.env[name]=v0;
+        draw+=()=>{
+            if(GUI.Button(r,l,style.button)){
+                var selection=li.GetSelectedIndex();
+                if(selection.Count==1) idx=(selection[0]+1)%li.values.Length; else idx=0;
+                shell.env[name]=li.values[idx];
+                li.Select(idx,false,false);
+                l=li.labels[idx];
+                if(p!=null){
+                    p.Reset();
+                    shell.InterpretParser(p);
+                    shell.exitq=false;
+                }
+            }
+        };
+    }
+    public void AddSwitch2(int x,int y,int w,int h,ComShParser p,string name,string v0,string lstvar,char dlmt){
+        var r=new Rect(x,y+TITLEHEIGHT,w,h);
+        string lstprev=shell.env[lstvar];
+        var li=MakeItems(lstprev,dlmt,false);
+        int idx=li.GetIdx(v0);
+        li.Select(idx,false,false);
+        string l=li.labels[idx];
+        string prev=shell.env[name]=v0;
+        draw+=()=>{
+            string val=shell.env[name],lst=shell.env[lstvar];
+            if(prev!=val || lstprev!=lst){
+                li=MakeItems(lst,dlmt,false,val);
+                prev=val; lstprev=lst;
+            }
+            if(GUI.Button(r,l,style.button)){
+                var selection=li.GetSelectedIndex();
+                if(selection.Count==1) idx=(selection[0]+1)%li.values.Length; else idx=0;
+                shell.env[name]=li.values[idx];
+                li.Select(idx,false,false);
+                l=li.labels[idx];
+                if(p!=null){
+                    p.Reset();
+                    shell.InterpretParser(p);
+                    shell.exitq=false;
+                }
+            }
+        };
+    }
+    public void AddListBox(int x,int y,int w,int h,ComShParser p,string name,string v0,string[] items,int max,char dlmt){
+        int ty=y+TITLEHEIGHT;
+        var li=new ListBoxItems(items,dlmt,max==0);
+        var lb=new ListBox();
+        string prev=shell.env[name]=v0;
+        li.SetSelectedValue(v0);
+        lb.SetItems(this,li,null,x,ty,w,h);
+        draw+=()=>{
+            int si=lb.Select();
+            if(si!=-1){
+                shell.env[name]=li.GetSelectedValue();
+                if(p!=null){
+                    p.Reset();
+                    shell.InterpretParser(p);
+                    shell.exitq=false;
+                }
+            }
+        };
+    }
+    public void AddListBox2(int x,int y,int w,int h,ComShParser p,string name,string v0,string lstvar,int max,char dlmt){
+        int ty=y+TITLEHEIGHT;
+        string prev=shell.env[name]=v0;
+        string lstprev=shell.env[lstvar];
+        var li=MakeItems(lstprev,dlmt,max==0);
+        var lb=new ListBox();
+        li.SetSelectedValue(v0);
+        lb.SetItems(this,li,null,x,ty,w,h);
+        draw+=()=>{
+            string val=shell.env[name],lst=shell.env[lstvar];
+            if(prev!=val || lstprev!=lst){
+                li=MakeItems(lst,dlmt,max==0,val); // 選択肢最新化
+                prev=val; lstprev=lst;
+                lb.SetItems(this,li,null,x,ty,w,h);
+            }
+            int si=lb.Select();
+            if(si!=-1){
+                shell.env[name]=li.GetSelectedValue();
+                if(p!=null){
+                    p.Reset();
+                    shell.InterpretParser(p);
+                    shell.exitq=false;
+                }
+            }
+        };
+    }
+
     private static string[] items0={""};
-    private static ComboItems MakeItems(ComShInterpreter sh,ComShParser plst,char dlmt){
+    private static ListBoxItems MakeItems(ComShInterpreter sh,ComShParser plst,char dlmt,bool multi,string value=null){
         var sbo=new ComShInterpreter.SubShOutput();
         ComShInterpreter child = new ComShInterpreter(new ComShInterpreter.Output(sbo.Output),sh.env,sh.func,sh.ns);
         plst.Reset();
         int ret=child.InterpretParser(plst);
-        if(ret<0) return new ComboItems(items0,items0);
-        return new ComboItems(ParseUtil.Chomp(sbo.GetSubShResult()).Split(ParseUtil.lf),dlmt);
+        if(ret<0) return new ListBoxItems(items0,items0,multi);
+        return MakeItems(sbo.GetSubShResult(),dlmt,multi,value);
+    }
+    private static ListBoxItems MakeItems(string lststr,char dlmt,bool multi,string value=null){
+        string[] items=ParseUtil.Chomp(lststr).Split(ParseUtil.lf);
+        var lb=new ListBoxItems(items,dlmt,multi);
+        if(value!=null) lb.SetSelectedValue(value);
+        return lb;
     }
     public void AddSlider(int x,int y,int w,int h,ComShParser p,string name,float v0,float min,float max,float delay){
         var r=new Rect(x,y+TITLEHEIGHT,w,h);
@@ -425,11 +509,54 @@ public class ComShPanel {
         draw+=()=>{ GUI.Label(r,shell.env[name],style.label); };
     }
 }
-public class ComboItems {
+// コンボボックスのポップアップ
+public static class ComboWin {
+    public static int wid=ComShProperties.windowID+2;
+    public static Rect windowrect=new Rect(0,0,100,100);
+    public static Vector2 offset=new Vector2(0,0);
+    public static ListBox listbox=new ListBox(true);
+    public static bool visible=false;
+
+    public static void SetItems(ComShPanel p,ListBoxItems it,ListBox.OnSelectionChange cb,int x,int y,int w,int h){
+        offset.x=x; offset.y=y;
+        listbox.SetItems(p,it,cb,0,0,w,h);
+        windowrect.width=listbox.viewRect.width;
+        windowrect.height=listbox.viewRect.height;
+    }
+    public static void Position(Rect r){
+        windowrect.x=r.x+offset.x; windowrect.y=r.y+offset.y;
+    }
+
+    public static void Toggle(float y){
+        visible=!visible;
+        if(visible) listbox.scr.y=y;
+    }
+    public static void Draw(){
+        listbox.viewRect.x=1;
+        listbox.viewRect.y=1;
+        windowrect.width=listbox.viewRect.width+2;
+        windowrect.height=listbox.viewRect.height+2;
+        windowrect=GUI.Window(wid,windowrect,Select,"",listbox.panel.style.comboWin);
+        if(windowrect.Contains(Event.current.mousePosition)) Input.ResetInputAxes();
+    }
+    public static void Select(int wid){
+        int si=listbox.Select();
+        if(si!=-1) visible=false;
+    }
+}
+
+public class ListBoxItems {
     public string[] labels;
     public string[] values;
-    public ComboItems(string[] la,string[] va){ labels=la; values=va; }
-    public ComboItems(string[] items,char dlmt){
+    public List<int> selected=new List<int>();
+    public int lastIdx=-1;
+    public bool multiSelect=true;
+    public ListBoxItems(string[] la,string[] va,bool multi,List<int> sel=null){
+        labels=la; values=va;
+        multiSelect=multi;
+        if(sel!=null) selected=sel; else selected.Clear();
+    }
+    public ListBoxItems(string[] items,char dlmt,bool multi,List<int> sel=null){
         if(dlmt==0) labels=values=items; else {
             labels=new string[items.Length];
             values=new string[items.Length];
@@ -438,6 +565,12 @@ public class ComboItems {
                 labels[i]=sa[0]; values[i]=sa[1];
             }
         }
+        multiSelect=multi;
+        if(sel!=null) selected=sel; else selected.Clear();
+    }
+    public int GetIdx(string value){
+        for(int i=0; i<values.Length; i++) if(values[i]==value) return i;
+        return -1;
     }
     public string GetLabel(string value){
         for(int i=0; i<values.Length; i++) if(values[i]==value) return labels[i];
@@ -447,55 +580,125 @@ public class ComboItems {
         for(int i=0; i<labels.Length; i++) if(labels[i]==label) return values[i];
         return "";
     }
+    public string GetSelectedValue(){
+        if(selected.Count==0) return "";
+        if(!multiSelect) return values[selected[0]];
+        selected.Sort();
+        var sb=new StringBuilder();
+        sb.Append(values[selected[0]]);
+        for(int i=1; i<selected.Count; i++) sb.Append('\n').Append(values[selected[i]]);
+        return sb.ToString();
+    }
+    public void SetSelectedValue(string val){
+        selected.Clear();
+        if(!multiSelect) Select(GetIdx(val),false,false);
+        else{
+            var va=val.Split('\n');
+            for(int i=0; i<va.Length; i++) Select(GetIdx(va[i]),true,false);
+        }
+    }
+    public void Select(int idx,bool append,bool range){
+        if(idx<0 || idx>=values.Length) return;
+        if(multiSelect){
+            if(append){
+                if(IsSelected(idx)){ selected.Remove(idx); lastIdx=-1; }
+                else {selected.Add(idx); lastIdx=idx; }
+                return;
+            }else if(lastIdx>=0 && range){
+                if(lastIdx>=idx){
+                    for(int i=idx; i<lastIdx; i++) if(!IsSelected(i)) selected.Add(i);
+                }else{
+                    for(int i=idx; i>lastIdx; i--) if(!IsSelected(i)) selected.Add(i);
+                }
+                lastIdx=idx;
+                return;
+            }
+        }
+        selected.Clear();
+        selected.Add(idx);
+        lastIdx=idx;
+    }
+    public List<int> GetSelectedIndex(){ selected.Sort(); return selected; }
+    public List<string> GetSelectedValues(){
+        selected.Sort();
+        var ret=new List<string>(selected.Count);
+        foreach(var i in selected) ret.Add(values[i]);
+        return ret;
+    }
+    public List<string> GetSelectedLabels(){
+        selected.Sort();
+        var ret=new List<string>(selected.Count);
+        foreach(var i in selected) ret.Add(labels[i]);
+        return ret;
+    }
+    public bool IsSelected(int idx){ return selected.Contains(idx); }
 }
-// コンボボックスのポップアップ
-public static class ComboWin {
-    public static int wid=ComShProperties.windowID+2;
-    public static Rect windowrect=new Rect(0,0,100,100);
-    public static Vector2 offset=new Vector2(0,0);
-    public static Rect viewRect=new Rect(0,0,100,100);
-    public static Rect contentRect=new Rect(0,0,100,100);
-    public static bool visible=false;
 
-    private static ComboItems items;
-    public delegate void OnSelect(string val);
-    public static OnSelect callback;
-    public static ComShPanel panel;
+public class ListBox {
 
-    public static void SetItems(ComShPanel p,ComboItems it,OnSelect cb,int x,int y,int w,int h){
+    private ListBoxItems items;
+    public delegate void OnSelectionChange(string val);
+    public OnSelectionChange callback;
+    public ComShPanel panel;
+    public bool isCombo=false;
+
+    private static GUIContent ichimoji=new GUIContent("漢");
+
+    public ListBox(){}
+    public ListBox(bool comboq){isCombo=comboq;}
+    public ListBox(ComShPanel p,ListBoxItems it,OnSelectionChange cb,int x,int y,int w,int h){ SetItems(p,it,cb,x,y,w,h);}
+    public void SetItems(ComShPanel p,ListBoxItems it,OnSelectionChange cb,int x,int y,int w,int h){
         panel=p;
         items=it;
-        callback=cb; selIdx=-1; 
-        int wb=(int)panel.style.button.CalcSize(new GUIContent("▼")).x;
-        offset.x=x; offset.y=y;
-        viewRect.width=windowrect.width=w+wb;
-        contentRect.width=w;
-        int lh=(int)panel.style.comboItem.CalcSize(new GUIContent("漢")).y;
-        contentRect.height=items.labels.Length*lh;
-        viewRect.height=windowrect.height=Math.Min(contentRect.height,h);
+        callback=cb;
+        groupRect.x=x;
+        groupRect.y=y;
+        viewRect.width=contentRect.width=w;
+        viewRect.height=contentRect.height=h;
+        groupRect.width=w+2;
+        groupRect.height=h+2;
+        styleok=false;
     }
-    public static void Position(Rect r){
-        windowrect.x=r.x+offset.x; windowrect.y=r.y+offset.y;
-    }
-
-    public static void Toggle(){ visible=!visible; }
-    public static void Draw(){
-        windowrect=GUI.Window(wid,windowrect,Select,"",panel.style.comboWin);
-        if(windowrect.Contains(Event.current.mousePosition)) Input.ResetInputAxes();
-    }
-    private static int selIdx=-1;
-    private static Vector2 scr=new Vector2(0,0);
-    public static void Select(int wid){
-        scr=GUI.BeginScrollView(viewRect,scr,contentRect);
-        int si=GUI.SelectionGrid(contentRect,selIdx,items.labels,1,panel.style.comboItem);
-        if(si!=selIdx){
-            if(callback!=null) callback.Invoke(items.values[si]);
-            visible=false;
+    public Rect groupRect=new Rect(0,0,100,100);
+    public Rect viewRect=new Rect(1,1,100,100);
+    public Rect contentRect=new Rect(0,0,100,100);
+    private bool styleok=false;
+    public Vector2 scr=new Vector2(0,0);
+    public int Select(){
+        if(!styleok){
+            float h=panel.style.comboItem.CalcSize(ichimoji).y;
+            float w=GUI.skin.verticalScrollbar.fixedWidth;
+            viewRect.width+=w+2;
+            groupRect.width=viewRect.width+2;
+            contentRect.height=items.labels.Length*h;
+            if(isCombo) viewRect.height=Math.Min(contentRect.height,viewRect.height);
+            groupRect.height=viewRect.height+2;
+            styleok=true;
+        }
+        if(isCombo) scr=GUI.BeginScrollView(viewRect,scr,contentRect,false,true);
+        else{
+            GUI.BeginGroup(groupRect,panel.style.listBox);
+            scr=GUI.BeginScrollView(viewRect,scr,contentRect,false,true);
+        }
+        int si=GUI.SelectionGrid(contentRect,-1,items.labels,1,panel.style.comboItem);
+        if(si!=-1){
+            var ev=Event.current;
+            items.Select(si,ev.control||ev.button==1,ev.shift||ev.button==2);
+            if(callback!=null) callback.Invoke(items.GetSelectedValue());
+        }
+        if(Event.current.type==EventType.Repaint){
+            var mpos=Event.current.mousePosition;
+            float h=contentRect.height/items.labels.Length;
+            foreach(int i in items.selected){
+                Rect r=new Rect(contentRect.x,contentRect.y+h*i,contentRect.width,h);
+                panel.style.comboItem.Draw(r,items.labels[i],r.Contains(mpos),true,true,false);
+            }
         }
         GUI.EndScrollView();
+        if(!isCombo) GUI.EndGroup();
+        return si;
     }
 }
-
 public static class PanelStyleCache {
     public static long updDate=DateTime.UtcNow.Ticks;
     public static void Dirty(){ updDate=DateTime.UtcNow.Ticks; }
@@ -520,7 +723,7 @@ public static class PanelStyleCache {
         return winStyle;
     }
     private static Texture2D bgTex;
-    private static Color bgColor=Color.clear;
+    public static Color bgColor=Color.clear;
     public static void SetBgColor(float[] col){
         bgColor=new Color(col[0],col[1],col[2],col[3]);
         if(winStyle!=null) winStyle.UpdateBgColor(bgColor);
@@ -540,7 +743,7 @@ public static class PanelStyleCache {
         bgTex.SetPixel(0,2,b); bgTex.SetPixel(1,2,b); bgTex.SetPixel(2,2,b);
         bgTex.Apply();
     }
-    private static Color textColor=Color.white;
+    public static Color textColor=Color.white;
     public static void SetTextColor(float[] col){
         textColor=new Color(col[0],col[1],col[2],col[3]);
         if(winStyle!=null) winStyle.UpdateTextColor();
@@ -637,6 +840,7 @@ public class PanelStyles {
 	public GUIStyle comboBtn;
 	public GUIStyle comboWin;
 	public GUIStyle comboItem;
+	public GUIStyle listBox;
 
     public PanelStyles(int fsize){
         var p=new RectOffset(2,2,2,2);
@@ -648,6 +852,7 @@ public class PanelStyles {
         comboBtn=new GUIStyle(GUI.skin.button);
         comboWin=new GUIStyle(GUI.skin.box);
         comboItem=new GUIStyle(GUI.skin.label);
+        listBox=new GUIStyle(GUI.skin.textArea);
         label.fontSize=button.fontSize=text.fontSize=toggle.fontSize=
             comboBtn.fontSize=comboItem.fontSize=fsize;
         label.padding=button.padding=text.padding=
@@ -658,10 +863,27 @@ public class PanelStyles {
             comboBtn.wordWrap=comboItem.wordWrap=comboWin.wordWrap=false;
         label.alignment=text.alignment=toggle.alignment=comboItem.alignment=TextAnchor.MiddleLeft;
         button.alignment=comboBtn.alignment=TextAnchor.MiddleCenter;
+        listBox.hover.background=listBox.normal.background;
     }
     public void UpdateBgTex(Texture2D tx){
         comboWin.border=new RectOffset(1,1,1,1);
         comboWin.normal.background=tx;
+
+        var bg0=new Texture2D(1,1);
+        bg0.SetPixel(0,0,new Color(1,1,1,0.15f));
+        bg0.Apply();
+        comboItem.hover.background=bg0;
+
+        var sc=GUI.skin.settings.selectionColor;
+        var bg1=new Texture2D(1,1);
+        bg1.SetPixel(0,0,sc);
+        bg1.Apply();
+        comboItem.onNormal.background=bg1;
+
+        var bg2=new Texture2D(1,1);
+        bg2.SetPixel(0,0,new Color(sc.r+0.1f,sc.g+0.1f,sc.b+0.1f,1));
+        bg2.Apply();
+        comboItem.onHover.background=bg2;
     }
     public void UpdateTextColor(){
         PanelStyleCache.ChgTextColor(label);

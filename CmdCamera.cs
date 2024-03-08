@@ -30,20 +30,15 @@ public static class CmdCamera {
         cameraParamDic.Add("distance",new CmdParam<CameraMain>(CameraParamDistance));
         cameraParamDic.Add("range",new CmdParam<CameraMain>(CameraParamRange));
         cameraParamDic.Add("shadowrange",new CmdParam<CameraMain>(CameraParamShadowRange));
+        cameraParamDic.Add("mask",new CmdParam<CameraMain>(CameraParamMask));
+        cameraParamDic.Add("depth",new CmdParam<CameraMain>(CameraParamDepth));
+        cameraParamDic.Add("clrflg",new CmdParam<CameraMain>(CameraParamClrFlg));
 
         CmdParamPosRotCp(cameraParamDic,"pos","position");
         CmdParamPosRotCp(cameraParamDic,"rot","rotation");
         CmdParamPosRotCp(cameraParamDic,"pos","wpos");
         CmdParamPosRotCp(cameraParamDic,"rot","wrot");
 
-        CameraMain mc=GameMain.Instance.MainCamera;
-        if(mc==null) return;
-        mc.m_bCalcNearClip=false;
-        mc.camera.nearClipPlane=0.01f;
-        UltimateOrbitCamera oc=mc.GetComponent<UltimateOrbitCamera>();
-        if(oc==null) return;
-        oc.maxDistance=500f;
-        oc.minDistance=minDist;
     }
 
     private static Dictionary<string,CmdParam<CameraMain>> cameraParamDic=new Dictionary<string,CmdParam<CameraMain>>();
@@ -132,6 +127,34 @@ public static class CmdCamera {
         }
         if(!float.TryParse(val,out float fov)||fov<=0||fov>=180) return sh.io.Error("視野角は1～179度で指定してください");
         mc.camera.fieldOfView=fov;
+        return 1;
+    }
+    private static int CameraParamDepth(ComShInterpreter sh,CameraMain mc,string val){
+        if(val==null){
+            sh.io.Print(sh.fmt.FInt(mc.camera.depth));
+            return 0;
+        }
+        if(!float.TryParse(val,out float f)) return sh.io.Error("数値が不正です");
+        mc.camera.depth=f;
+        return 1;
+    }
+    private static int CameraParamClrFlg(ComShInterpreter sh,CameraMain mc,string val){
+        var clrflg=mc.camera.clearFlags;
+        int n;
+        if(val==null){
+            n=0;
+            if(clrflg==CameraClearFlags.Color) n=0;
+            else if(clrflg==CameraClearFlags.Depth) n=1;
+            else if(clrflg==CameraClearFlags.Skybox) n=2;
+            else if(clrflg==CameraClearFlags.Nothing) n=3;
+            sh.io.Print(n.ToString());
+            return 0;
+        }
+        if(!int.TryParse(val,out n)||n<0||n>2) return sh.io.Error("数値が不正です");
+        if(n==0) mc.camera.clearFlags=CameraClearFlags.Color; // 公式
+        else if(n==1) mc.camera.clearFlags=CameraClearFlags.Depth; // subcameraより後に描きたいとき
+        else if(n==2) mc.camera.clearFlags=CameraClearFlags.Skybox; // 現状では使わない
+        else if(n==3) mc.camera.clearFlags=CameraClearFlags.Nothing; // 現状では使わない
         return 1;
     }
     private static int CameraParamRot(ComShInterpreter sh,CameraMain mc,string val){
@@ -337,6 +360,16 @@ public static class CmdCamera {
         if(!float.TryParse(val,out float f)) return sh.io.Error(ParseUtil.error);
         if(f<0) return sh.io.Error("値の範囲が不正です");
         QualitySettings.shadowDistance=f;
+        return 1;
+    }
+    private static int CameraParamMask(ComShInterpreter sh,CameraMain mc,string val){
+        if(val==null){
+            sh.io.Print(mc.camera.cullingMask.ToString("X8"));
+            return 0;
+        }
+        if(!int.TryParse(val,System.Globalization.NumberStyles.HexNumber,null,out int bits))
+            return sh.io.Error("数値が不正です");
+        mc.camera.cullingMask=bits;
         return 1;
     }
 

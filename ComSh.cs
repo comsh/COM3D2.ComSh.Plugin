@@ -3,7 +3,6 @@ using UnityEngine;
 using UnityInjector.Attributes;
 using System.Text.RegularExpressions;
 using UnityEngine.SceneManagement;
-using System.Text;
 
 namespace COM3D2.ComSh.Plugin {
 	[   PluginFilter("COM3D2x64"), PluginFilter("COM3D2VRx64"),
@@ -158,7 +157,9 @@ namespace COM3D2.ComSh.Plugin {
             if(ComShWM.updateTime>nextTick){
                 nextTick=ComShWM.updateTime+100*TimeSpan.TicksPerMillisecond;
                 int k=GUIUtility.keyboardControl;
-                if((k==0||k==logId||k==cmdId) && mp.x>0 && mp.y>0){
+                var ev=Event.current;
+                bool b=ev.button==0 && ev.isMouse;
+                if(!b && (k==0||k==logId||k==cmdId) && mp.x>0 && mp.y>0){
                     UpdStyle();
                     int ph=hover;
                     hover=windowrect.Contains(mp)?1:2;
@@ -242,11 +243,16 @@ namespace COM3D2.ComSh.Plugin {
                     if(cmdId!=0) CmdFocus();
                     enter=0;
                 }
+                if(tabdown){
+                    Focus(cmdTe);
+                    tabdown=false;
+                }
             }
         }
 
         private long mouseDownTick=-1;
         private static readonly long NEVER=DateTime.MaxValue.Ticks+1;
+        private bool tabdown;
         private void TerminalEvent() {
             if(logId==0) return;
 
@@ -286,12 +292,15 @@ namespace COM3D2.ComSh.Plugin {
                     if(!e.shift) cmdTe.MoveTextStart(); else cmdTe.SelectTextStart();
                     e.Use();
                     break;
+                case KeyCode.Tab:
+                    tabdown=true;   // どうやってもフォーカスが動くので、後で無理やりフォーカスを戻す
+                    break;
                 default:
                     wrote=false; break;
                 }
                 if(e.character!='\0') wrote=true;
                 if(wrote){ CmdFocus(); scroll_position.y=float.MaxValue; }
-            }else if(e.button==0){
+            }else if(e.button==0 && e.isMouse){
                 if(e.type==EventType.MouseDown){
                     HideCursor();                   // カーソル消して
                     logTe.SelectNone();
