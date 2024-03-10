@@ -1362,7 +1362,7 @@ public static class CmdMaidMan {
         if(attbase.name==MaidUtil.NODE_ATTACH_PFX+m.GetInstanceID()){
             m.transform.SetParent(attbase.parent,true);
             UnityEngine.Object.Destroy(attbase.gameObject);
-            ComShBg.cron.KillJob(MaidUtil.CRON_ATTACH+m.GetInstanceID().ToString());
+            ComShBg.cron2.KillJob(MaidUtil.CRON_ATTACH+m.GetInstanceID().ToString());
         }else return sh.io.Error("アタッチされていません");
         return 1;
     }
@@ -1607,32 +1607,13 @@ public static class CmdMaidMan {
     private static int MaidParamFloor(ComShInterpreter sh,Maid m,string val){
         if(m.body0==null) return 1;
         if(val==null){
-            var co=m.body0.m_trFloorPlane.GetComponent<DynamicBonePlaneCollider>();
-            sh.io.PrintJoin(",",sh.fmt.FVal(m.body0.m_trFloorPlane.position.y),co.m_Direction.ToString());
+            sh.io.Print(sh.fmt.FVal(m.body0.m_trFloorPlane.position.y));
             return 0;
         }
-        var sa=val.Split(ParseUtil.comma);
-        if(sa.Length!=1&&sa.Length!=2) return sh.io.Error("書式が不正です");
-        if(!float.TryParse(sa[0],out float f)) return sh.io.Error("数値の指定が不正です");
-        if(sa.Length==2 && sa[1]!=""){
-            char c=char.ToLower(sa[1][0]);
-            DynamicBoneColliderBase.Direction dir=DynamicBoneColliderBase.Direction.Y;
-            if(c=='x') dir=DynamicBoneColliderBase.Direction.X;
-            else if(c=='y') dir=DynamicBoneColliderBase.Direction.Y;
-            else if(c=='z') dir=DynamicBoneColliderBase.Direction.Z;
-            else return sh.io.Error("方向指定が不正です");
-            var co=m.body0.m_trFloorPlane.GetComponent<DynamicBonePlaneCollider>();
-            co.m_Direction=dir;
-            var p=m.body0.m_trFloorPlane.position;
-            if(dir==DynamicBoneColliderBase.Direction.X) p.x=f;
-            else if(dir==DynamicBoneColliderBase.Direction.Y) p.y=f;
-            else if(dir==DynamicBoneColliderBase.Direction.Z) p.z=f;
-            m.body0.m_trFloorPlane.position=p;
-        }else{
-            var p=m.body0.m_trFloorPlane.position;
-            p.y=f;
-            m.body0.m_trFloorPlane.position=p;
-        }
+        if(!float.TryParse(val,out float f)) return sh.io.Error("数値の指定が不正です");
+        var p=m.body0.m_trFloorPlane.position;
+        p.y=f;
+        m.body0.m_trFloorPlane.position=p;
         return 1;
     }
     private static int MaidParamSkirtYure(ComShInterpreter sh,Maid m,string val){
@@ -1663,7 +1644,6 @@ public static class CmdMaidMan {
         }
         return 1;
     }
-
     private static int MaidParamAttachPoint(ComShInterpreter sh,Maid m,string val){
         if(val==null){
             foreach(TBodySkin skin in m.body0.goSlot){
@@ -2023,7 +2003,7 @@ public static class MaidUtil {
         Transform tr=MaidLookTarget(m);
         return (ComShBg.cron.AddJob(name,0,0,(long t)=>{
             if (m==null||m.body0==null||m.body0.m_trBones==null||tgt==null) return -1;
-            tr.position=tgt.position;     // Vector3の値渡し。クラスの参照渡しと見分け難いのがC#の構造体
+            tr.position=tgt.position;
             return 0;
         })!=null);
     }
@@ -2122,9 +2102,9 @@ public static class MaidUtil {
     public static Maid GetParentMaid(Transform atr){
         Transform tr=atr;
         while(tr!=null&&tr.name!="AllOffset"){
-            if(tr.name=="Offset") return tr.parent.gameObject.GetComponent<Maid>();
+            if(tr.name=="Offset") return tr.parent.GetComponent<Maid>();
             if(tr.name.StartsWith(NODE_ATTACH_PFX))
-                tr=tr.gameObject.GetComponent<AttachBase>().target;
+                tr=tr.GetComponent<AttachBase>().target;
             tr=tr.parent;
         }
         return null;
@@ -2155,12 +2135,12 @@ public static class MaidUtil {
     }
     public static bool AttachCron(Maid m,Transform tgt,int prio,bool jmpq){
         Transform tr=MaidAttachBase(m,tgt,jmpq);
-        var ab=tr.gameObject.GetComponent<AttachBase>();
+        var ab=tr.GetComponent<AttachBase>();
         ab.target=tgt;
         ab.maid=GetParentMaid(tgt);
         string name=CRON_ATTACH+m.GetInstanceID().ToString();
-        ComShBg.cron.KillJob(name);
-        return (ComShBg.cron.AddJob(name,0,0,(long t)=>{
+        ComShBg.cron2.KillJob(name);
+        return (ComShBg.cron2.AddJob(name,0,0,(long t)=>{
             if(m.ActiveSlotNo<0||tgt==null){
                 m.transform.SetParent(tr.parent,true);
                 UnityEngine.Object.Destroy(tr.gameObject);
@@ -2177,11 +2157,11 @@ public static class MaidUtil {
         Maid tm; Transform tr=tgt;
         while(tr!=null&&tr.name!="AllOffset"){
             if(tr.name=="Offset"){
-                tm=tr.parent.gameObject.GetComponent<Maid>();
+                tm=tr.parent.GetComponent<Maid>();
                 ret.Add(tm);
                 tr=tm.transform;
             }else if(tr.name.StartsWith(NODE_ATTACH_PFX,Ordinal)){
-                var ab=tr.gameObject.GetComponent<AttachBase>();
+                var ab=tr.GetComponent<AttachBase>();
                 if(ab.maid!=null){ ret.Add(ab.maid); tr=ab.maid.transform; }
                 else tr=ab.target;
             }else tr=tr.parent;
@@ -2197,7 +2177,7 @@ public static class MaidUtil {
             tr=allOffset.GetChild(i);
             name=tr.name;
             if(name.StartsWith(NODE_ATTACH_PFX,Ordinal) && int.TryParse(name.Substring(16),out int iid)){
-                var ab=tr.gameObject.GetComponent<AttachBase>();
+                var ab=tr.GetComponent<AttachBase>();
                 if(ab.maid!=null) foreach(Maid m in ml) if(ab.maid==m){ ret.Add(MaidByInstanceID(iid)); break;}
             }
         }
@@ -2211,7 +2191,7 @@ public static class MaidUtil {
         Transform gtr;
         if(gbase!=null){
             gtr=gbase.GetChild(0);
-            return gtr.gameObject.GetComponent<GravityTransformControl>();
+            return gtr.GetComponent<GravityTransformControl>();
         }
 
         gbase=(new GameObject(name)).transform;

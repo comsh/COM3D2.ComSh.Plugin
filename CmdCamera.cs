@@ -32,6 +32,7 @@ public static class CmdCamera {
         cameraParamDic.Add("shadowrange",new CmdParam<CameraMain>(CameraParamShadowRange));
         cameraParamDic.Add("mask",new CmdParam<CameraMain>(CameraParamMask));
         cameraParamDic.Add("depth",new CmdParam<CameraMain>(CameraParamDepth));
+        cameraParamDic.Add("rect",new CmdParam<CameraMain>(CameraParamRect));
         cameraParamDic.Add("clrflg",new CmdParam<CameraMain>(CameraParamClrFlg));
 
         CmdParamPosRotCp(cameraParamDic,"pos","position");
@@ -136,6 +137,18 @@ public static class CmdCamera {
         }
         if(!float.TryParse(val,out float f)) return sh.io.Error("数値が不正です");
         mc.camera.depth=f;
+        return 1;
+    }
+    private static int CameraParamRect(ComShInterpreter sh,CameraMain mc,string val){
+        var cam=mc.camera;
+        if(val==null){
+            sh.io.PrintJoin(",",sh.fmt.FVal(cam.rect.x),sh.fmt.FVal(cam.rect.y),
+            sh.fmt.FVal(cam.rect.width),sh.fmt.FVal(cam.rect.height));
+            return 0;
+        }
+        float[] fa=ParseUtil.FloatArr(val);
+        if(fa==null||fa.Length!=4) return sh.io.Error("数値が不正です");
+        cam.rect=new Rect(fa[0],fa[1],fa[2],fa[3]);
         return 1;
     }
     private static int CameraParamClrFlg(ComShInterpreter sh,CameraMain mc,string val){
@@ -305,8 +318,14 @@ public static class CmdCamera {
         return 0;
     }
     private static int CameraParamScreenSize(ComShInterpreter sh,CameraMain mc,string val){
-        sh.io.PrintLn($"{mc.camera.pixelWidth},{mc.camera.pixelHeight}");
-        return 0;
+        if(val==null){
+            sh.io.PrintLn($"{mc.camera.pixelWidth},{mc.camera.pixelHeight}");
+            return 0;
+        }
+        float[] xy=ParseUtil.Xy(val);
+        if(xy==null) return sh.io.Error(ParseUtil.error);
+        Screen.SetResolution((int)xy[0],(int)xy[1],Screen.fullScreen);
+        return 1;
     }
     private static int CameraParamSpeed(ComShInterpreter sh,CameraMain mc,string val){
         var uc=mc.GetComponent<UltimateOrbitCamera>();

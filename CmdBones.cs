@@ -167,11 +167,11 @@ public static class BoneUtil{
                 if(!m.body0.IsSlotNo(slot)) return null;
                 var root=m.body0.goSlot[m.body0.GetSlotNo(slot)].obj_tr;
                 if(root==null) return null;
-                var oi=root.gameObject.GetComponent<ObjInfo>();
+                var oi=root.GetComponent<ObjInfo>();
                 if(oi==null) oi=ObjInfo.AddObjInfo(root,"");
                 tr=oi.data.FindBone(fullname);
             }else{
-                var oi=m.body0.m_trBones.gameObject.GetComponent<ObjInfo>();
+                var oi=m.body0.m_trBones.GetComponent<ObjInfo>();
                 if(oi==null) oi=ObjInfo.AddObjInfo(m.body0.m_trBones,"");
                 tr=oi.data.FindBone(fullname);
             }

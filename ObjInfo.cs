@@ -171,7 +171,7 @@ public class ObjInfoData {
                 int j;
                 for(j=0; j<mate.Length; j++) originalMate.Add(mate[j]);
                 for(; j<n; j++) originalMate.Add(new Material(Shader.Find("Standard"))); // 一応
-            }else{
+            }else if(ReferenceEquals(r.GetType(),typeof(MeshRenderer))) {
                 MeshFilter mf=r.transform.GetComponent<MeshFilter>();
                 if(mf==null) continue;
                 if(mf.sharedMesh==null) continue;
@@ -207,7 +207,7 @@ public class ObjInfoData {
                 workMesh.Add(new MeshList.Entry { no=meshno,submeshcount=smr.sharedMesh.subMeshCount,mesh=newmesh,rend=r,own=true });
                 meshno +=smr.sharedMesh.subMeshCount;
                 UpdateMorph(r.transform,oldmesh,newmesh);
-            }else{
+            }else if(ReferenceEquals(r.GetType(), typeof(MeshRenderer))){
                 MeshFilter mf=r.transform.GetComponent<MeshFilter>();
                 if(mf==null) continue;
                 Mesh oldmesh=mf.sharedMesh;
@@ -285,7 +285,7 @@ public class ObjInfoData {
                     workMate.Add(mi);
                 }
                 smr.sharedMaterials=mate2;
-            }else{
+            }else if(ReferenceEquals(r.GetType(), typeof(MeshRenderer))) {
                 MeshFilter mf=r.transform.GetComponent<MeshFilter>();
                 if(mf==null) continue;
                 int n=mf.sharedMesh.subMeshCount;

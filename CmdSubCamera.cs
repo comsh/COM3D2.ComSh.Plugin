@@ -18,6 +18,7 @@ public static class CmdSubCamera {
         subcamParamDic.Add("mask",new CmdParam<Camera>(SubCamParamMask));
         subcamParamDic.Add("depth",new CmdParam<Camera>(SubCamParamDepth));
         subcamParamDic.Add("rect",new CmdParam<Camera>(SubCamParamRect));
+        subcamParamDic.Add("clrflg",new CmdParam<Camera>(SubCamParamClrFlg));
 
         subcamParamDic.Add("ss",new CmdParam<Camera>(SubCamParamScreenShot));
         subcamParamDic.Add("png",new CmdParam<Camera>(SubCamParamPng));
@@ -95,13 +96,13 @@ public static class CmdSubCamera {
                     cam.transform.position=camera0.transform.position;
                     cam.transform.rotation=camera0.transform.rotation;
                     cam.depth=camera0.depth-1;
+                    cam.clearFlags=CameraClearFlags.Depth;
                 }else{
                     cam.targetTexture=camera0.targetTexture;
                 }
             }
             cam.name=name;
             cam.backgroundColor=Color.black;
-            cam.clearFlags=CameraClearFlags.Depth;
             ObjUtil.objDic[go.transform.name]=go.transform;
             return 0;
         }
@@ -183,6 +184,26 @@ public static class CmdSubCamera {
         cam.rect=new Rect(fa[0],fa[1],fa[2],fa[3]);
         return 1;
     }
+    private static int SubCamParamClrFlg(ComShInterpreter sh,Camera cam,string val){
+        var clrflg=cam.clearFlags;
+        int n;
+        if(val==null){
+            n=0;
+            if(clrflg==CameraClearFlags.Color) n=0;
+            else if(clrflg==CameraClearFlags.Depth) n=1;
+            else if(clrflg==CameraClearFlags.Skybox) n=2;
+            else if(clrflg==CameraClearFlags.Nothing) n=3;
+            sh.io.Print(n.ToString());
+            return 0;
+        }
+        if(!int.TryParse(val,out n)||n<0||n>2) return sh.io.Error("数値が不正です");
+        if(n==0) cam.clearFlags=CameraClearFlags.Color;
+        else if(n==1) cam.clearFlags=CameraClearFlags.Depth;
+        else if(n==2) cam.clearFlags=CameraClearFlags.Skybox;
+        else if(n==3) cam.clearFlags=CameraClearFlags.Nothing;
+        return 1;
+    }
+    
     private static int SubCamParamW2S(ComShInterpreter sh,Camera cam,string val){
         if(val==null) return 0;
         float[] xyz=ParseUtil.Xyz(val);
