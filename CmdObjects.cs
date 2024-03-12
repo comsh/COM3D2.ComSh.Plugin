@@ -1376,7 +1376,7 @@ public static class CmdObjects {
         Maid maid;
         DynamicBone[] db;
         DynamicSkirtBone[] ds;
-        if(val==""){
+        if(val=="del"){
             ObjUtil.ClearComponent<Collider>(tr);
             ObjUtil.ClearComponent<DynamicBoneCollider>(tr);
             return 1;
@@ -1429,7 +1429,7 @@ public static class CmdObjects {
                 if(!float.TryParse(sa[1],out float r)||r<0) return sh.io.Error("半径が不正です"); 
                 if(!float.TryParse(sa[2],out float h)||h<0) return sh.io.Error("高さが不正です");
                 if(sa.Length==4){
-                    int bound=DynamicBoneColliderBound(sa[4]);
+                    int bound=DynamicBoneColliderBound(sa[3]);
                     if(bound<0) return sh.io.Error("内向き/外向きはiかoで指定してください");
                     dbc.m_Bound=(DynamicBoneCollider.Bound)bound;
                 }
@@ -1508,15 +1508,12 @@ public static class CmdObjects {
         var rb=tr.GetComponent<Rigidbody>();
         if(val==null){
             if(rb!=null){
-                sh.io.PrintLn2("mass:",sh.fmt.FVal(rb.mass));
-                sh.io.PrintLn2("drag:",sh.fmt.FVal(rb.drag));
-                sh.io.PrintLn2("angularDrag:",sh.fmt.FVal(rb.angularDrag));
-                sh.io.PrintLn2("gravity:",rb.useGravity?"on":"off");
-                sh.io.PrintLn2("isKinematic:",rb.isKinematic.ToString());
+                sh.io.PrintJoinLn(",",sh.fmt.FVal(rb.mass),sh.fmt.FVal(rb.drag),
+                    sh.fmt.FVal(rb.angularDrag),rb.useGravity?"1":"0",rb.isKinematic?"1":"0");
             }
             return 0;
         }
-        if(val==""){
+        if(val=="del"){
             if(rb!=null) UnityEngine.Object.Destroy(rb);
             return 1;
         }

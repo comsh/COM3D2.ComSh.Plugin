@@ -1173,12 +1173,16 @@ public static class CmdMeshes {
         var sa=ParseUtil.LeftAndRight(val,',');
         
         float[] mm;
-        if(sa[1]=="") mm=new float[]{0,float.MaxValue}; else{
+        if(sa[1]=="") mm=new float[]{0,1}; else{
             mm=ParseUtil.MinMax(val);
             if(mm==null|mm[0]<0||mm[1]>1) return sh.io.Error(ParseUtil.error);
         }
         var tr=sm.mi.oid.FindBone(sa[0]);
-        if(tr==null) return sh.io.Error("ボーンが見つかりません");
+        if(tr==null){
+            var maid=sm.mi.transform.GetComponentInParent<Maid>();
+            if(maid!=null) tr=sm.mi.oid.FindBone(ParseUtil.CompleteBoneName(sa[0],maid.boMAN));
+            if(tr==null) return sh.io.Error("ボーンが見つかりません");
+        }
 
         int midx=sm.mi.mesh.FindMeshIdx(sm.submeshno);
         if(midx<0 || sm.mi.mesh[midx].rend.GetType()!=typeof(SkinnedMeshRenderer))
@@ -1300,34 +1304,22 @@ public static class CmdMeshes {
         public int RestoreMesh(int submeshno){
             if(oid==null || oid.originalMesh==null || oid.workMesh==null) return -1;
             int midx=oid.originalMesh.FindMeshIdx(submeshno);
-
-            Mesh newMesh=null;
-            int current=-1;
-            foreach(var b in oid.bones){
-                if(!b.gameObject.activeInHierarchy) continue;
-                Renderer r=b.GetComponent<Renderer>();
-                if(r==null) continue;
-                bool q1=ReferenceEquals(r.GetType(),typeof(SkinnedMeshRenderer));
-                bool q2=ReferenceEquals(r.GetType(),typeof(MeshRenderer));
-                if(!q1&&!q2) continue;
-                current++;
-                if(current==midx){
-                    if(q1){
-                        var smr=(SkinnedMeshRenderer)r;
-                        newMesh=UnityEngine.Object.Instantiate(oid.originalMesh[midx].mesh);
-                        var oldMesh=smr.sharedMesh;
-                        smr.sharedMesh=newMesh;
-                        oid.UpdateMorph(smr.transform,oldMesh,newMesh);
-                    }else if(q2){
-                        MeshFilter mf=r.GetComponent<MeshFilter>();
-                        if(mf==null) return -1;
-                        newMesh=UnityEngine.Object.Instantiate(oid.originalMesh[midx].mesh);
-                        mf.sharedMesh=newMesh;
-                    }
-                    break;
-                }
+            if(midx<0) return -1;
+            var me=oid.originalMesh[midx];
+            var r=me.rend;
+            Mesh newMesh;
+            if(r.GetType()==typeof(SkinnedMeshRenderer)){
+                var smr=(SkinnedMeshRenderer)r;
+                newMesh=UnityEngine.Object.Instantiate(me.mesh);
+                var oldMesh=smr.sharedMesh;
+                smr.sharedMesh=newMesh;
+                oid.UpdateMorph(smr.transform,oldMesh,newMesh);
+            }else{
+                MeshFilter mf=r.GetComponent<MeshFilter>();
+                if(mf==null) return -1;
+                newMesh=UnityEngine.Object.Instantiate(me.mesh);
+                mf.sharedMesh=newMesh;
             }
-            if(newMesh==null) return -1;
             var e=oid.workMesh[midx];
             UnityEngine.Object.Destroy(e.mesh);
             e.mesh=newMesh;
@@ -1344,30 +1336,19 @@ public static class CmdMeshes {
             material=oid.workMate;
         }
         public int RestoreMaterial(int submeshno){
-            if(oid==null || oid.originalMate==null || oid.workMate==null) return -1;
+            if(oid==null || oid.originalMesh==null || oid.originalMate==null || oid.workMate==null) return -1;
             int midx=oid.originalMesh.FindMeshIdx(submeshno);
-
-            Renderer ri=null;
-            int current=-1;
-            foreach(var b in oid.bones){
-                if(!b.gameObject.activeInHierarchy) continue;
-                Renderer r=b.GetComponent<Renderer>();
-                if(r==null) continue;
-                bool q1=ReferenceEquals(r.GetType(),typeof(SkinnedMeshRenderer));
-                bool q2=ReferenceEquals(r.GetType(),typeof(MeshRenderer));
-                if(!q1&&!q2) continue;
-                current++;
-                if(current==midx){ ri=r; break;}
-            }
-            if(ri==null) return -1;
+            if(midx<0) return -1;
+            var me=oid.originalMesh[midx];
+            var r=me.rend;
 
             Material newMaterial=UnityEngine.Object.Instantiate(oid.originalMate[submeshno]);
             UnityEngine.Object.Destroy(oid.workMate[submeshno]);
             oid.workMate[submeshno]=newMaterial;
 
-            var ma=ri.sharedMaterials;
-            ma[submeshno-oid.originalMesh[midx].no]=newMaterial;
-            ri.sharedMaterials=ma;
+            var ma=r.sharedMaterials;
+            ma[submeshno-me.no]=newMaterial;
+            r.sharedMaterials=ma;
 
             return 0;
         }
