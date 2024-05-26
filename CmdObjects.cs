@@ -1261,7 +1261,7 @@ public static class CmdObjects {
         if(Mathf.Approximately(c,0)) return -1;
         float bc2=2*Mathf.Sqrt(b*c);
         float bpc=b+c;
-        if(a>=bpc){
+        if(a>=bpc+bc2){
             p1.localRotation=Quaternion.identity;
         }else if(a<=bpc-bc2){
             p1.localRotation=new Quaternion(zaxis.x,zaxis.y,zaxis.z,0);
