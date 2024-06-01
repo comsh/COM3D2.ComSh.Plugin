@@ -1177,45 +1177,51 @@ public static class CmdObjects {
         return 1;
     }
     private static int ObjParamLocIK(ComShInterpreter sh,Transform tr,string val){
-        return ObjParamLocIKSub(sh,tr,val,1,Vector3.forward);
+        return ObjParamLocIKSub(sh,tr,val,Vector3.forward);
     }
     private static int ObjParamLocIKX(ComShInterpreter sh,Transform tr,string val){
-        return ObjParamLocIKSub(sh,tr,val,1,Vector3.right);
+        return ObjParamLocIKSub(sh,tr,val,Vector3.right);
     }
     private static int ObjParamLocIKY(ComShInterpreter sh,Transform tr,string val){
-        return ObjParamLocIKSub(sh,tr,val,1,Vector3.up);
+        return ObjParamLocIKSub(sh,tr,val,Vector3.up);
     }
     private static int ObjParamLocIKMinus(ComShInterpreter sh,Transform tr,string val){
-        return ObjParamLocIKSub(sh,tr,val,-1,Vector3.forward);
+        return ObjParamLocIKSub(sh,tr,val,-Vector3.forward);
     }
     private static int ObjParamLocIKMinusX(ComShInterpreter sh,Transform tr,string val){
-        return ObjParamLocIKSub(sh,tr,val,-1,Vector3.right);
+        return ObjParamLocIKSub(sh,tr,val,-Vector3.right);
     }
     private static int ObjParamLocIKMinusY(ComShInterpreter sh,Transform tr,string val){
-        return ObjParamLocIKSub(sh,tr,val,-1,Vector3.up);
+        return ObjParamLocIKSub(sh,tr,val,-Vector3.up);
     }
     private static int ObjParamLocIK3(ComShInterpreter sh,Transform tr,string val){
-        return ObjParamLocIK3Sub(sh,tr,val,1,Vector3.forward);
+        return ObjParamLocIK3Sub(sh,tr,val,Vector3.forward);
     }
     private static int ObjParamLocIK3X(ComShInterpreter sh,Transform tr,string val){
-        return ObjParamLocIK3Sub(sh,tr,val,1,Vector3.right);
+        return ObjParamLocIK3Sub(sh,tr,val,Vector3.right);
     }
     private static int ObjParamLocIK3Y(ComShInterpreter sh,Transform tr,string val){
-        return ObjParamLocIK3Sub(sh,tr,val,1,Vector3.up);
+        return ObjParamLocIK3Sub(sh,tr,val,Vector3.up);
     }
     private static int ObjParamLocIK3Minus(ComShInterpreter sh,Transform tr,string val){
-        return ObjParamLocIK3Sub(sh,tr,val,-1,Vector3.forward);
+        return ObjParamLocIK3Sub(sh,tr,val,-Vector3.forward);
     }
     private static int ObjParamLocIK3MinusX(ComShInterpreter sh,Transform tr,string val){
-        return ObjParamLocIK3Sub(sh,tr,val,-1,Vector3.right);
+        return ObjParamLocIK3Sub(sh,tr,val,-Vector3.right);
     }
     private static int ObjParamLocIK3MinusY(ComShInterpreter sh,Transform tr,string val){
-        return ObjParamLocIK3Sub(sh,tr,val,-1,Vector3.up);
+        return ObjParamLocIK3Sub(sh,tr,val,-Vector3.up);
     }
-    private static int ObjParamLocIKSub(ComShInterpreter sh,Transform tr,string val,int dir,Vector3 zaxis){
+    private static int ObjParamLocIKSub(ComShInterpreter sh,Transform tr,string val,Vector3 zaxis){
         if(val==null) return 0;
         float[] xyz=ParseUtil.Xyz(val);
-        if(xyz==null) return sh.io.Error("座標の指定が不正です");
+        if(xyz==null){
+            var objtr=ObjUtil.FindObj(sh,val.Split(ParseUtil.colon));
+            if(objtr!=null){
+                Vector3 v=objtr.position;
+                xyz=new float[]{v.x,v.y,v.z};
+            } else return sh.io.Error("座標の指定が不正です");
+        }
 
         Transform p=tr;
         if(p.name=="Bip01" || p.name=="ManBip") return sh.io.Error("親ボーンが足りません");
@@ -1224,18 +1230,29 @@ public static class CmdObjects {
         p=p.parent;
         if(p==null) return sh.io.Error("親ボーンが足りません");
 
-        int ret=LocIK(new Vector3(xyz[0],xyz[1],xyz[2]),tr.parent.parent,tr.parent,tr,dir,zaxis);
+        int ret=LocIK(new Vector3(xyz[0],xyz[1],xyz[2]),tr.parent.parent,tr.parent,tr,zaxis);
         if(ret<0) return sh.io.Error("ボーンの長さが0です");
         return 1;
     }
-    private static int ObjParamLocIK3Sub(ComShInterpreter sh,Transform tr,string val,float dir,Vector3 zaxis){
+    private static int ObjParamLocIK3Sub(ComShInterpreter sh,Transform tr,string val,Vector3 zaxis){
         if(val==null) return 0;
         float[] xyzs=new float[4];
         int n=ParseUtil.XyzSub(val,xyzs);
         if(n==3) xyzs[3]=0; 
         else if(n==4){
             if(xyzs[3]<-1 || xyzs[3]>1) return sh.io.Error("値の指定が不正です");
-        }else return sh.io.Error("座標の指定が不正です");
+        }else{
+            var sa=ParseUtil.LeftAndRight(val,',');
+            if(sa[1]!=""){
+                if(!float.TryParse(sa[1],out float f)) return sh.io.Error("座標の指定が不正です");
+                xyzs[3]=f;
+            }else xyzs[3]=0;
+            var objtr=ObjUtil.FindObj(sh,sa[0].Split(ParseUtil.colon));
+            if(objtr!=null){
+                Vector3 v=objtr.position;
+                xyzs[0]=v.x; xyzs[1]=v.y; xyzs[2]=v.z;
+            } else return sh.io.Error("座標の指定が不正です");
+        }
 
         Transform p=tr;
         if(p.name=="Bip01" || p.name=="ManBip") return sh.io.Error("親ボーンが足りません");
@@ -1247,55 +1264,48 @@ public static class CmdObjects {
         if(p==null) return sh.io.Error("親ボーンが足りません");
 
         int ret=LocIK3(new Vector3(xyzs[0],xyzs[1],xyzs[2]),
-            tr.parent.parent.parent,tr.parent.parent,tr.parent,tr,
-            dir,Mathf.Abs(xyzs[3]),Mathf.Sign(xyzs[3])*dir,zaxis);
+            tr.parent.parent.parent,tr.parent.parent,tr.parent,tr,xyzs[3],zaxis);
         if(ret<0) return sh.io.Error("ボーンの長さが0です");
         return 1;
     }
-    private static int LocIK(Vector3 t,Transform p0,Transform p1,Transform p2,float dir,Vector3 zaxis){
-        float a=(t - p0.position).sqrMagnitude;
-        if(Mathf.Approximately(a,0)) return -1;
-        float b=(p1.position-p0.position).sqrMagnitude;
-        if(Mathf.Approximately(b,0)) return -1;
-        float c=(p2.position-p1.position).sqrMagnitude;
-        if(Mathf.Approximately(c,0)) return -1;
-        float bc2=2*Mathf.Sqrt(b*c);
-        float bpc=b+c;
-        if(a>=bpc+bc2){
-            p1.localRotation=Quaternion.identity;
-        }else if(a<=bpc-bc2){
-            p1.localRotation=new Quaternion(zaxis.x,zaxis.y,zaxis.z,0);
-        }else{
-            float co=(a-bpc)/(-bc2); // the law of cosine
-            p1.localRotation=Quaternion.AngleAxis(Mathf.Acos(-co*dir)*Mathf.Rad2Deg,zaxis);
-        }
+    private static int LocIK(Vector3 t,Transform p0,Transform p1,Transform p2,Vector3 zaxis){
+        float co=LowOfCosine(t,p0.position,p1.position,p2.position);
+        if(float.IsNaN(co)) return -1;
+        p1.localRotation=Quaternion.AngleAxis(Mathf.Acos(co)*Mathf.Rad2Deg,zaxis);
         var w2l=p0.worldToLocalMatrix;
         var lpt=w2l.MultiplyPoint3x4(t);
         var lpw=w2l.MultiplyPoint3x4(p2.position);
         p0.localRotation=p0.localRotation*Quaternion.FromToRotation(lpw.normalized,lpt.normalized);
         return 1;
     }
-    private static int LocIK3(Vector3 t,Transform p0,Transform p1,Transform p2,Transform p3,float dir,float s,float dir2,Vector3 zaxis){
+    private static float LowOfCosine(Vector3 t,Vector3 p0,Vector3 p1,Vector3 p2){
+        float a=(t -p0).sqrMagnitude;
+        if(Mathf.Approximately(a,0)) return float.NaN;
+        float b=(p1-p0).sqrMagnitude;
+        if(Mathf.Approximately(b,0)) return float.NaN;
+        float c=(p2-p1).sqrMagnitude;
+        if(Mathf.Approximately(c,0)) return float.NaN;
+        float co=(a-b-c)/(-2*Mathf.Sqrt(b*c));
+        return -co;
+    }
+    private static int LocIK3(Vector3 t,Transform p0,Transform p1,Transform p2,Transform p3,float s,Vector3 axis){
+        float sp=Mathf.Abs(s);
+        var axis2=(s<0)?-axis:axis;
         // まず p0,p1,p3*s+p2*(1-s) で２ボーンIK
         float l23=(p3.position-p2.position).magnitude;
         float l12=(p2.position-p1.position).magnitude;
-        float l=l23*(1-s)+l12;
-        float a=(t - p0.position).sqrMagnitude;
-        if(Mathf.Approximately(a,0)) return -1;
-        float b=(p1.position-p0.position).sqrMagnitude;
-        if(Mathf.Approximately(b,0)) return -1;
-        float c=l*l;
-        if(Mathf.Approximately(c,0)) return -1;
-        float co=(a-b-c)/-2/Mathf.Sqrt(b*c);
+        float l=l23*(1-sp)+l12,m=l/l12;
+        var v=p2.position*m+p1.position*(1-m);
+        float co=LowOfCosine(t,p0.position,p1.position,v);
+        if(float.IsNaN(co)) return -1;
         p2.localRotation=Quaternion.identity;
-        p1.localRotation=Quaternion.Euler(zaxis*(180-dir*Mathf.Acos(co)*Mathf.Rad2Deg));
+        p1.localRotation=Quaternion.AngleAxis(Mathf.Acos(co)*Mathf.Rad2Deg,axis);
         var w2l=p0.worldToLocalMatrix;
-        var lpt=w2l.MultiplyPoint3x4(t).normalized;
-        var lpw=w2l.MultiplyPoint3x4(Vector3.Lerp(p3.position,p2.position,s)).normalized;
-        p0.localRotation=p0.localRotation*Quaternion.FromToRotation(lpw,lpt);
-
+        var lpt=w2l.MultiplyPoint3x4(t);
+        var lpw=w2l.MultiplyPoint3x4(p2.position);
+        p0.localRotation=p0.localRotation*Quaternion.FromToRotation(lpw.normalized,lpt.normalized);
         // 次いで p1,p2,p3 で２ボーンIK
-        return LocIK(t,p1,p2,p3,dir2,zaxis);
+        return LocIK(t,p1,p2,p3,axis2);
     }
     private static int ObjParamIK(ComShInterpreter sh,Transform tr,string val){
         if(val==null) return 0;
