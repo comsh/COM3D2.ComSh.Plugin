@@ -119,7 +119,7 @@ public static class CmdObjects {
             if(args.Count>7) return sh.io.Error("引数が多すぎます");
             string[] pa=ParseUtil.NormalizeParams(args,new string[]{"","","0,0,0","0,0,0","1,1,1"},2);
             if(pa[1]=="") pa[1]=AutoObjName(pa[0]);
-            if(!UTIL.ValidName(pa[1])) return sh.io.Error("その名前は使用できません");
+            if(!UTIL.ValidObjName(pa[1])) return sh.io.Error("その名前は使用できません");
             if((pftr=ObjUtil.GetPhotoPrefabTr(sh))==null) return sh.io.Error("オブジェクト作成に失敗しました");
             if(ObjUtil.FindObj(sh,pa[1])!=null||LightUtil.FindLight(sh,pa[1])!=null) return sh.io.Error("その名前は既に使われています");
             float[] pos,rot,scl;
@@ -138,7 +138,7 @@ public static class CmdObjects {
                 if(files==null) return sh.io.Error("アセットバンドルが読みこめません");
                 foreach(var f in files) sh.io.PrintLn(f);
             }else if(args.Count==5){
-                if(!UTIL.ValidName(args[4])) return sh.io.Error("その名前は使用できません");
+                if(!UTIL.ValidObjName(args[4])) return sh.io.Error("その名前は使用できません");
                 if((pftr=ObjUtil.GetPhotoPrefabTr(sh))==null) return sh.io.Error("オブジェクト作成に失敗しました");
                 if(ObjUtil.FindObj(sh,args[4])!=null||LightUtil.FindLight(sh,args[4])!=null) return sh.io.Error("その名前は既に使われています");
                 GameObject go=ObjUtil.LoadAssetBundle<GameObject>(args[2],args[3]);
@@ -153,7 +153,7 @@ public static class CmdObjects {
         }
         if(args[1]=="addchild"){
             if(args.Count!=5) return sh.io.Error("使い方: obj addchild 種類 識別名 親オブジェクト名");
-            if(!UTIL.ValidName(args[3])) return sh.io.Error("その名前は使用できません");
+            if(!UTIL.ValidObjName(args[3])) return sh.io.Error("その名前は使用できません");
             Transform pa;
             if((pa=ObjUtil.FindObj(sh,args[4].Split(ParseUtil.colon)))==null) return sh.io.Error("親オブジェクトが見つかりません");
             if(pa.Find(args[3])!=null) return sh.io.Error("その名前は既に使われています");
@@ -167,7 +167,7 @@ public static class CmdObjects {
             if(args.Count==2) return sh.io.Error("使い方: obj create 種類 [識別名]");
             if(args.Count>4) return sh.io.Error("引数が多すぎます");
             string type=args[2]; string name=(args.Count==3)?AutoObjName(type):args[3];
-            if(!UTIL.ValidName(name)) return sh.io.Error("その名前は使用できません");
+            if(!UTIL.ValidObjName(name)) return sh.io.Error("その名前は使用できません");
             if((pftr=ObjUtil.GetPhotoPrefabTr(sh))==null) return sh.io.Error("オブジェクト作成に失敗しました");
             if(ObjUtil.FindObj(sh,name)!=null||LightUtil.FindLight(sh,name)!=null) return sh.io.Error("その名前は既に使われています");
             GameObject go;
@@ -196,7 +196,7 @@ public static class CmdObjects {
             Transform tr=ObjUtil.FindObj(sh,args[2].Split(ParseUtil.colon));
             if(tr==GameMain.Instance.MainCamera.camera.transform) return sh.io.Error("メインカメラにこの操作は行えません");
             if(tr==null) return sh.io.Error("対象が見つかりません");
-            if(!UTIL.ValidName(args[3])) return sh.io.Error("その名前は使用できません");
+            if(!UTIL.ValidObjName(args[3])) return sh.io.Error("その名前は使用できません");
             if((pftr=ObjUtil.GetPhotoPrefabTr(sh))==null) return sh.io.Error("オブジェクト作成に失敗しました");
             if(ObjUtil.FindObj(sh,args[3])!=null||LightUtil.FindLight(sh,args[3])!=null) return sh.io.Error("その名前は既に使われています");
             GameObject go=ObjUtil.CloneObject(args[3],tr,pftr);
@@ -252,7 +252,7 @@ public static class CmdObjects {
     private static string AutoObjName(string name){
         string seq=UTIL.GetSeqId();
         string ret=string.Concat(System.IO.Path.GetFileNameWithoutExtension(name).Replace(' ','_'),"_",seq);
-        if(!UTIL.ValidName(ret)) ret="object_"+seq;
+        if(!UTIL.ValidObjName(ret)) ret="object_"+seq;
         return ret;
     }
     private static ParseUtil.ColonDesc colonDesc;
@@ -1090,7 +1090,7 @@ public static class CmdObjects {
             clonetexq=lr[1]=="1";
         }
 
-        if(!UTIL.ValidName(lr[0])) return sh.io.Error("その名前は使用できません");
+        if(!UTIL.ValidObjName(lr[0])) return sh.io.Error("その名前は使用できません");
         Transform pftr=ObjUtil.GetPhotoPrefabTr(sh);
         if(pftr==null) return sh.io.Error("オブジェクト作成に失敗しました");
         if(ObjUtil.FindObj(sh,lr[0])!=null||LightUtil.FindLight(sh,lr[0])!=null) return sh.io.Error("その名前は既に使われています");

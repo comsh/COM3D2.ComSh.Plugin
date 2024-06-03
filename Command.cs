@@ -2746,10 +2746,19 @@ public static class UTIL {
         if(tr.parent==null) return false;
         return IsAncestor(tr.parent,anc);
     }
+    private static Regex numberonly=new Regex(@"^\d+$",RegexOptions.Compiled);
+    private static Regex word=new Regex(@"^\w[-\w]*$",RegexOptions.Compiled);
+    private static Regex word2=new Regex(@"^\w[-\.\w]*$",RegexOptions.Compiled);
     public static bool ValidName(string name){
-        if(!Regex.Match(name,@"^\w[-\w]*$").Success) return false;  // 文字は\wと'-'
-        if(Regex.Match(name,@"^\d+$").Success) return false;        // 全て数字は不可
-        if(ngNameSet.Contains(name)) return false;                  // コマンドや特定のオブジェクトと被る名は不可
+        if(!word.Match(name).Success) return false;         // 文字は\wと'-'
+        if(numberonly.Match(name).Success) return false;    // 全て数字は不可
+        if(ngNameSet.Contains(name)) return false;          // コマンドや特定のオブジェクトと被る名は不可
+        return true;
+    }
+    public static bool ValidObjName(string name){
+        if(!word2.Match(name).Success) return false;        // 文字は\wと'-'と'.'
+        if(numberonly.Match(name).Success) return false;    // 全て数字は不可
+        if(ngNameSet.Contains(name)) return false;          // コマンドや特定のオブジェクトと被る名は不可
         return true;
     }
     private static HashSet<string> ngNameSet=new HashSet<string>() {
