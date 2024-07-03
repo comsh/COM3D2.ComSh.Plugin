@@ -1362,21 +1362,16 @@ public static class CmdObjects {
         if(normal==Vector3.zero) return Quaternion.identity;
         Vector3 p;
         Quaternion q;
-        if(Mathf.Abs(Vector3.Dot(normal,Vector3.up))>=0.2){ 
-            p=new Vector3(tn.x,fn.y,tn.z).normalized;
-            q=Quaternion.FromToRotation(fn,p);
+        var lp=tr.localPosition;
+        int fwno=UTIL.MaxIdx(lp.z,lp.x,lp.y);
+        if(fwno==0){
+            p=RotWaypoint(new Vector3[]{tr.right,tr.up,tr.forward},normal,fn,tn);
+        }else if(fwno==1){
+            p=RotWaypoint(new Vector3[]{tr.forward,tr.up,tr.right},normal,fn,tn);
         }else{
-            var lp=tr.localPosition;
-            int fwno=UTIL.MaxIdx(lp.z,lp.x,lp.y);
-            if(fwno==0){
-                p=RotWaypoint(new Vector3[]{tr.right,tr.up,tr.forward},normal,fn,tn);
-            }else if(fwno==1){
-                p=RotWaypoint(new Vector3[]{tr.forward,tr.up,tr.right},normal,fn,tn);
-            }else{
-                p=RotWaypoint(new Vector3[]{tr.forward,tr.right,tr.up},normal,fn,tn);
-            }
-            q=Quaternion.FromToRotation(fn,p);
+            p=RotWaypoint(new Vector3[]{tr.forward,tr.right,tr.up},normal,fn,tn);
         }
+        q=Quaternion.FromToRotation(fn,p);
         return q*Quaternion.FromToRotation(p,tn);
     }
     private static Vector3 RotWaypoint(Vector3[] ax,Vector3 normal,Vector3 from,Vector3 to){

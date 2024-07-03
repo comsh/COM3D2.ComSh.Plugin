@@ -36,6 +36,7 @@ public static class CmdMeshes {
         meshParamDic.Add("uvwh",new CmdParam<SingleMesh>(MeshParamUVWH));
         meshParamDic.Add("graft",new CmdParam<SingleMesh>(MeshParamGraft));
         meshParamDic.Add("reverse",new CmdParam<SingleMesh>(MeshParamReverse));
+        meshParamDic.Add("texcolmat",new CmdParam<SingleMesh>(MeshParamTexColorMatrix));
     }
     private static Dictionary<string,CmdParam<SingleMesh>> meshParamDic=new Dictionary<string,CmdParam<SingleMesh>>();
 
@@ -921,6 +922,66 @@ public static class CmdMeshes {
         t=c1.a-c2.a;
         if(t<-0.003||0.003<t) return false;
         return true;
+    }
+    private static int MeshParamTexColorMatrix(ComShInterpreter sh,SingleMesh sm,string val){
+        if(val==null || val=="") return 0;
+
+        string prop,mat;
+        if(shaderpropptn.IsMatch(val)){
+            string[] lr=ParseUtil.LeftAndRight(val,':');
+            prop=lr[0]; mat=lr[1];
+        }else{
+            prop="_MainTex"; mat=val;
+        }
+        float[] fa=ParseUtil.FloatArr(mat);
+        if(fa.Length!=20) return sh.io.Error("カラーマトリクスが不正です");
+
+        sm.mi.EditMaterial();
+        Material mate=sm.mi.material[sm.submeshno];
+        Material mate0=sm.mi.oid.originalMate[sm.submeshno];
+        if(!mate.HasProperty(prop)) return sh.io.Error("プロパティが無効です");
+        Texture tx=mate.GetTexture(prop);
+        if(tx==null) return sh.io.Error("テクスチャがありません");
+
+        return ApplyColorMatrix(sh,sm,fa,mate,prop,tx,mate0);
+    }
+    private static int ApplyColorMatrix(ComShInterpreter sh,SingleMesh sm,float[] fa,Material mate,string prop,Texture tx,Material orig){
+        int ret=0;
+        var origtex=orig.GetTexture(prop);
+        Texture2D t2;
+        bool t2cloneq=false;
+        if(origtex==tx || !ReferenceEquals(tx.GetType(),typeof(Texture2D))){
+            t2=TextureUtil.CloneTexture(tx);
+            t2cloneq=true;
+        }else t2=(Texture2D)tx;
+        int width=t2.width,height=t2.height;
+        var rec=sm.GetTexXYRange(width,height);
+        Color[] ca=t2.GetPixels(rec.x,rec.y,rec.w,rec.h);
+        bool changed=false;
+        for(int dy=0; dy<rec.h; dy++) for(int dx=0; dx<rec.w; dx++){
+            int x=rec.x+dx,y=rec.y+dy;
+            int i=dy*rec.w+dx;
+            if(sm.ApplyTexFilter(x,y)==0) continue;
+            var c2=new Color();
+            float r=ca[i].r,g=ca[i].g,b=ca[i].b,a=ca[i].a;
+            c2.r=r*fa[ 0]+g*fa[ 1]+b*fa[ 2]+a*fa[ 3]+fa[4];
+            c2.g=r*fa[ 5]+g*fa[ 6]+b*fa[ 7]+a*fa[ 8]+fa[9];
+            c2.b=r*fa[10]+g*fa[11]+b*fa[12]+a*fa[13]+fa[14];
+            c2.a=r*fa[15]+g*fa[16]+b*fa[17]+a*fa[18]+fa[19];
+            ca[i]=c2;
+            changed=true;
+        }
+        if(changed){
+            t2.SetPixels(rec.x,rec.y,rec.w,rec.h,ca);
+            t2.Apply();
+            if(t2cloneq){
+                texiid.Add(t2);
+                var old=mate.GetTexture(prop);
+                if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old);
+                mate.SetTexture(prop,t2);
+            }
+        }
+        return ret;
     }
     private static int MeshParamMipmap(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null || val==""){return 0;}
