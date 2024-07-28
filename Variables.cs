@@ -89,14 +89,30 @@ public class VarDic : Dictionary<string,ReferredVal> {
         }
         return true;
     }
+    public bool SetBind(string key,ReferredVal.GetValue g,ReferredVal.GetValue s){
+        string rkey=" "+key;
+        if(!this.TryGetValue(key,out ReferredVal rv)) this.Add(key,new ReferredVal(rkey,g,s)); 
+        else rv.SetBind(rkey,g,s);
+        return true;
+    }
 }
 public class ReferredVal {
     public string val;
     public object dic;
-    public ReferredVal(string v){  val=v; dic=null; }
-    public ReferredVal(string k,object d){  val=k; dic=d; }
+    public delegate int GetValue(string v0,out string v1);
+    private GetValue getter;
+    private GetValue setter;
+    public ReferredVal(string v){ val=v; dic=null; getter=null; setter=null; }
+    public ReferredVal(string v,GetValue g,GetValue s){
+        val=v; dic=null; getter=g; setter=s;
+    }
+    public ReferredVal(string k,object d){ val=k; dic=d; getter=null; setter=null; }
     public string Get(){
-        if(dic==null) return val;
+        if(dic==null){
+            if(getter==null) return val;
+            if(getter.Invoke(val,out string v1)<0) getter=null;
+            return (val=v1);
+        }
         if(val[0]=='/'){
             var d=(Dictionary<string,string>)dic;
             if(!d.TryGetValue(val,out string v)) return "";
@@ -108,6 +124,11 @@ public class ReferredVal {
         }
     }
     public void Set(string v){
+        if(dic==null){
+            if(setter==null){val=v; return;}
+            if(setter.Invoke(v,out val)<0){ setter=null; return; }
+            return;
+        }
         if(dic==null){ val=v; return; }
         if(val[0]=='/'){
             var d=(Dictionary<string,string>)dic;
@@ -118,7 +139,8 @@ public class ReferredVal {
             else rv.val=v;
         }
     }
-    public void SetRef(string key,object d){ val=key; dic=d; }
+    public void SetRef(string key,object d){ val=key; dic=d; getter=null; setter=null; }
+    public void SetBind(string key,GetValue g,GetValue s){ val=key; dic=null; getter=g; setter=s; }
     public override string ToString(){ return Get(); }
 }
 

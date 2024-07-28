@@ -2381,6 +2381,7 @@ public static class CmdObjects {
             case "limit":
                 f=0;
                 fa=ParseUtil.FloatArr(lr[1]);
+                if(fa==null) return sh.io.Error(ParseUtil.error);
                 if(fa.Length==2) f=fa[1];
                 if((fa.Length!=1 && fa.Length!=2)||fa[0]<=0.001||((int)f!=0&&(int)f!=1)) return sh.io.Error("数値が不正です");
                 SetCoeff(cl,null,fa[0],(int)f);

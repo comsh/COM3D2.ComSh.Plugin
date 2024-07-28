@@ -37,6 +37,7 @@ public static class CmdMeshes {
         meshParamDic.Add("graft",new CmdParam<SingleMesh>(MeshParamGraft));
         meshParamDic.Add("reverse",new CmdParam<SingleMesh>(MeshParamReverse));
         meshParamDic.Add("texcolmat",new CmdParam<SingleMesh>(MeshParamTexColorMatrix));
+        meshParamDic.Add("texcolmat.hsv",new CmdParam<SingleMesh>(MeshParamTexColorMatrixHsv));
     }
     private static Dictionary<string,CmdParam<SingleMesh>> meshParamDic=new Dictionary<string,CmdParam<SingleMesh>>();
 
@@ -924,6 +925,12 @@ public static class CmdMeshes {
         return true;
     }
     private static int MeshParamTexColorMatrix(ComShInterpreter sh,SingleMesh sm,string val){
+        return MeshParamTexColorMatrixSub(sh,sm,val,false);
+    }
+    private static int MeshParamTexColorMatrixHsv(ComShInterpreter sh,SingleMesh sm,string val){
+        return MeshParamTexColorMatrixSub(sh,sm,val,true);
+    }
+    private static int MeshParamTexColorMatrixSub(ComShInterpreter sh,SingleMesh sm,string val,bool hsvq){
         if(val==null || val=="") return 0;
 
         string prop,mat;
@@ -934,7 +941,7 @@ public static class CmdMeshes {
             prop="_MainTex"; mat=val;
         }
         float[] fa=ParseUtil.FloatArr(mat);
-        if(fa.Length!=20) return sh.io.Error("カラーマトリクスが不正です");
+        if(fa==null||fa.Length!=20) return sh.io.Error("カラーマトリクスが不正です");
 
         sm.mi.EditMaterial();
         Material mate=sm.mi.material[sm.submeshno];
@@ -943,9 +950,9 @@ public static class CmdMeshes {
         Texture tx=mate.GetTexture(prop);
         if(tx==null) return sh.io.Error("テクスチャがありません");
 
-        return ApplyColorMatrix(sh,sm,fa,mate,prop,tx,mate0);
+        return ApplyColorMatrix(sh,sm,fa,mate,prop,tx,mate0,hsvq);
     }
-    private static int ApplyColorMatrix(ComShInterpreter sh,SingleMesh sm,float[] fa,Material mate,string prop,Texture tx,Material orig){
+    private static int ApplyColorMatrix(ComShInterpreter sh,SingleMesh sm,float[] fa,Material mate,string prop,Texture tx,Material orig,bool hsvq){
         int ret=0;
         var origtex=orig.GetTexture(prop);
         Texture2D t2;
@@ -958,18 +965,36 @@ public static class CmdMeshes {
         var rec=sm.GetTexXYRange(width,height);
         Color[] ca=t2.GetPixels(rec.x,rec.y,rec.w,rec.h);
         bool changed=false;
-        for(int dy=0; dy<rec.h; dy++) for(int dx=0; dx<rec.w; dx++){
-            int x=rec.x+dx,y=rec.y+dy;
-            int i=dy*rec.w+dx;
-            if(sm.ApplyTexFilter(x,y)==0) continue;
-            var c2=new Color();
-            float r=ca[i].r,g=ca[i].g,b=ca[i].b,a=ca[i].a;
-            c2.r=r*fa[ 0]+g*fa[ 1]+b*fa[ 2]+a*fa[ 3]+fa[4];
-            c2.g=r*fa[ 5]+g*fa[ 6]+b*fa[ 7]+a*fa[ 8]+fa[9];
-            c2.b=r*fa[10]+g*fa[11]+b*fa[12]+a*fa[13]+fa[14];
-            c2.a=r*fa[15]+g*fa[16]+b*fa[17]+a*fa[18]+fa[19];
-            ca[i]=c2;
-            changed=true;
+        if(hsvq){
+            for(int dy=0; dy<rec.h; dy++) for(int dx=0; dx<rec.w; dx++){
+                int x=rec.x+dx,y=rec.y+dy;
+                int i=dy*rec.w+dx;
+                if(sm.ApplyTexFilter(x,y)==0) continue;
+                Color.RGBToHSV(ca[i],out float h,out float s,out float v);
+                float a=ca[i].a;
+                float h2,s2,v2,a2;
+                h2=h*fa[ 0]+s*fa[ 1]+v*fa[ 2]+a*fa[ 3]+fa[4];
+                s2=h*fa[ 5]+s*fa[ 6]+v*fa[ 7]+a*fa[ 8]+fa[9];
+                v2=h*fa[10]+s*fa[11]+v*fa[12]+a*fa[13]+fa[14];
+                a2=h*fa[15]+s*fa[16]+v*fa[17]+a*fa[18]+fa[19];
+                ca[i]=Color.HSVToRGB(h2,s2,v2);
+                ca[i].a=a2;
+                changed=true;
+            }
+        }else{
+            for(int dy=0; dy<rec.h; dy++) for(int dx=0; dx<rec.w; dx++){
+                int x=rec.x+dx,y=rec.y+dy;
+                int i=dy*rec.w+dx;
+                if(sm.ApplyTexFilter(x,y)==0) continue;
+                var c2=new Color();
+                float r=ca[i].r,g=ca[i].g,b=ca[i].b,a=ca[i].a;
+                c2.r=r*fa[ 0]+g*fa[ 1]+b*fa[ 2]+a*fa[ 3]+fa[4];
+                c2.g=r*fa[ 5]+g*fa[ 6]+b*fa[ 7]+a*fa[ 8]+fa[9];
+                c2.b=r*fa[10]+g*fa[11]+b*fa[12]+a*fa[13]+fa[14];
+                c2.a=r*fa[15]+g*fa[16]+b*fa[17]+a*fa[18]+fa[19];
+                ca[i]=c2;
+                changed=true;
+            }
         }
         if(changed){
             t2.SetPixels(rec.x,rec.y,rec.w,rec.h,ca);

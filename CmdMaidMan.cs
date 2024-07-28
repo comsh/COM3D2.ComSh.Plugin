@@ -949,8 +949,16 @@ public static class CmdMaidMan {
             if(skin.morph==null || !skin.morph.hash.ContainsKey(val)) continue;
             int idx=(int)skin.morph.hash[val];
             var bd=skin.morph.BlendDatas[idx];
-            if(bd.v_index.Length>0) sh.io.Print($"{((TBody.SlotID)i).ToString()}:{bd.v_index[0].ToString()}");
-            for(int j=1; j<bd.v_index.Length; j++) sh.io.Print(","+bd.v_index[j].ToString());
+            int j;
+            for(j=0; j<bd.v_index.Length; j++){
+                if(bd.vert[j].magnitude<0.0005) continue;
+                sh.io.Print($"{((TBody.SlotID)i).ToString()}:{bd.v_index[j].ToString()}");
+                break;
+            }
+            for(j++; j<bd.v_index.Length; j++){
+                if(bd.vert[j].magnitude<0.0005) continue;
+                sh.io.Print(","+bd.v_index[j].ToString());
+            }
             sh.io.PrintLn("");
         }
         return 0;
