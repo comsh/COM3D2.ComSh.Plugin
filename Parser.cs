@@ -976,6 +976,7 @@ public static class ParseUtil {
                     if(sharp>=0 && int.TryParse(s.Substring(sharp+1),out int n) && n>=0){
                         this.id=s.Substring(fi+1,sharp-fi-1);
                         this.meshno=n;
+                        this.bone="/";
                     }else{
                         this.id=s.Substring(fi+1);
                     }

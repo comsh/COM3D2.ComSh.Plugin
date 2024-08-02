@@ -68,10 +68,7 @@ public class VarDic : Dictionary<string,ReferredVal> {
     public VarDic():base(32) {}
     public VarDic(int cap):base(cap) {}
     public VarDic(VarDic vd):base(vd.Count>32?vd.Count:32) {
-        foreach(var kv in vd){
-            if(kv.Value.dic==null) this.Add(kv.Key,new ReferredVal(kv.Value.val));
-            else this.Add(kv.Key,kv.Value);
-        }
+        foreach(var kv in vd) this.Add(kv.Key,new ReferredVal(kv.Value));
     }
 
     public bool IsRef(string key){
@@ -107,6 +104,7 @@ public class ReferredVal {
         val=v; dic=null; getter=g; setter=s;
     }
     public ReferredVal(string k,object d){ val=k; dic=d; getter=null; setter=null; }
+    public ReferredVal(ReferredVal rv){ val=rv.val; dic=rv.dic; getter=rv.getter; setter=rv.setter; }
     public string Get(){
         if(dic==null){
             if(getter==null) return val;

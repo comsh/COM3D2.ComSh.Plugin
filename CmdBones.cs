@@ -121,7 +121,6 @@ public static class BoneUtil{
     public static Transform FindBone(ComShInterpreter sh,string name){
         string nsid=sh.ns+name;
         if(boneCache.TryGetValue(nsid,out Transform tr)){
-            // 配置解除等で消えていたらUnity的なnullになる。ちゃんと参照を消しておく
             if(tr==null){ boneCache.Remove(nsid); return null; }
             return tr;
         }
@@ -129,11 +128,11 @@ public static class BoneUtil{
     }
 
     public static Transform FindBone(ComShInterpreter sh,string s1,string s2,string s3){
-        if(s1==""||s2==""||s3=="") return null;
+        if(s1==""||s2=="") return null;
         if(s1=="obj"){
             Transform tr=ObjUtil.FindObj(sh,s2);
             if(tr==null) return null;
-            if(s3=="/") return tr;
+            if(s3==""||s3=="/") return tr;
             string fullname=ParseUtil.CompleteBoneName(s3,false);
             var oi=tr.GetComponent<ObjInfo>();
             if(oi==null) oi=ObjInfo.AddObjInfo(tr,"");
@@ -142,6 +141,7 @@ public static class BoneUtil{
             string[] s2lr=ParseUtil.LeftAndRight(s2,'.');
             Maid m=MaidUtil.FindMaidMan(s1,s2lr[0]);
             if(m==null||m.body0==null) return null;
+            if(s3=="" && s2lr[1]=="") return m.transform;
             if(s3=="/"){
                 if(s2lr[1]!=""){
                     if(!m.body0.IsSlotNo(s2lr[1])) return null;

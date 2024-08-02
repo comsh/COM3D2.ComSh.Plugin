@@ -2517,7 +2517,7 @@ public static class ObjUtil {
         if(sa.Length==3){
             tr=BoneUtil.FindBone(sh,sa[0],sa[1],(lr[0]=="")?"/":lr[0]);
         }else if(sa.Length==2){
-            tr=BoneUtil.FindBone(sh,sa[0],lr[0],"/");
+            tr=BoneUtil.FindBone(sh,sa[0],lr[0],"");
         }
         if(tr==null) return null;
         if(lr[1]!="") return tr.Find(lr[1]);
@@ -2535,7 +2535,7 @@ public static class ObjUtil {
                 if(cd.id=="camera") return GameMain.Instance.MainCamera.camera.transform;
                 if(cd.id=="bg") return GameMain.Instance.BgMgr.BgObject.transform;
             }
-            tr=BoneUtil.FindBone(sh,cd.type,cd.id,"/");
+            tr=BoneUtil.FindBone(sh,cd.type,cd.id,cd.bone);
         }
         if(tr==null) return null;
         if(cd.path!="") return tr.Find(cd.path);
@@ -2549,7 +2549,7 @@ public static class ObjUtil {
             if(cd.id=="camera") return GameMain.Instance.MainCamera.camera.transform;
             if(cd.id=="bg") return GameMain.Instance.BgMgr.BgObject.transform;
         }
-        return BoneUtil.FindBone(sh,cd.type,cd.id,"/");
+        return BoneUtil.FindBone(sh,cd.type,cd.id,cd.bone);
     }
 
     public static void RenameTr(Transform tr, string name){

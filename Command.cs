@@ -2127,58 +2127,112 @@ public static class Command {
             });
             break;
         case "shape":
-            if(cd.type=="maid"){
+            if(cd.type=="maid"||cd.type=="man"){
                 var maid=tr.GetComponentInParent<Maid>();
                 if(maid==null) return sh.io.Error("失敗しました");
+                var ma=new List<TMorph>();
+                var mia=new List<int>();
+                foreach (TBodySkin skin in maid.body0.goSlot){
+                    TMorph m=skin.morph;
+                    if(m==null || !m.hash.ContainsKey(sub)) continue;
+                    ma.Add(m);
+                    mia.Add((int)m.hash[sub]);
+                }
+                if(ma.Count==0) return sh.io.Error("シェイプキーがありません");
                 g=new ReferredVal.GetValue((string v0,out string v1)=>{
-                    v1=v0; if(tr==null) return -1;
-                    foreach (TBodySkin skin in maid.body0.goSlot){
-                        TMorph m=skin.morph;
-                        if(m==null || !m.hash.ContainsKey(sub)) continue;
-                        float f=m.GetBlendValues((int)m.hash[sub]);
-                        v1=sh.fmt.FVal(f);
-                        break;
-                    }
+                    if(tr==null) {v1=v0; return -1;}
+                    v1=sh.fmt.FVal(ma[0].GetBlendValues(mia[0]));
                     return 0;
                 });
                 s=new ReferredVal.GetValue((string v0,out string v1)=>{
                     v1=v0; if(tr==null) return -1;
                     if(!float.TryParse(v0,out float f)) return 1;
-                    foreach (TBodySkin skin in maid.body0.goSlot){
-                        TMorph m=skin.morph;
-                        if(m==null || !m.hash.ContainsKey(sub)) continue;
-                        if(m.hash.ContainsKey(sub)){
-                            m.SetBlendValues((int)m.hash[sub],f);
-                            m.FixBlendValues();
-                        }
+                    for(int i=0; i<ma.Count; i++){
+                        ma[i].SetBlendValues(mia[i],f);
+                        ma[i].FixBlendValues();
                     }
                     return 0;
                 });
             }else if(cd.type=="obj"){
                 var oi=tr.GetComponent<ObjInfo>();
                 if(oi==null||oi.data.morph==null) return sh.io.Error("シェイプキーがありません");
+                var ma=new List<TMorph>();
+                var mia=new List<int>();
+                foreach(TMorph m in oi.data.morph){
+                    if(!m.hash.ContainsKey(sub)) continue;
+                    ma.Add(m);
+                    mia.Add((int)m.hash[sub]);
+                }
+                if(ma.Count==0) return sh.io.Error("シェイプキーがありません");
+                g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    if(tr==null){v1=v0; return -1;}
+                    v1=sh.fmt.FVal(ma[0].GetBlendValues(mia[0]));
+                    return 0;
+                });
+                s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    if(!float.TryParse(v0,out float f)) return 1;
+                    for(int i=0; i<ma.Count; i++){
+                        ma[i].SetBlendValues(mia[i],f);
+                        ma[i].FixBlendValues();
+                    }
+                    return 0;
+                });
+            }else return sh.io.Error("シェイプキーがありません");
+            break;
+        case "face":
+            if(cd.type=="maid"){
+                var maid=tr.GetComponentInParent<Maid>();
+                if(maid==null) return sh.io.Error("失敗しました");
+                TMorph m=maid.body0.Face.morph;
+                int mi=-1;
+                string name=sub;
+                if(m.Contains(sub)) mi=(int)m.hash[sub];
+                else if(m.bodyskin.PartsVersion>=120 && sub.StartsWith("eyeclose",Ordinal)){
+                    name=sub+(sub=="eyeclose"?"1":"")+TMorph.crcFaceTypesStr[(int)m.GetFaceTypeGP01FB()];
+                    if(m.Contains(name)) mi=(int)m.hash[name];
+                }
+                if(mi<0) return sh.io.Error("シェイプキーがありません");
+                g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    if(tr==null) {v1=v0; return -1;}
+                    v1=sh.fmt.FVal(m.GetBlendValues(mi));
+                    return 0;
+                });
+                s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    if(!float.TryParse(v0,out float f)) return 1;
+                    if(MaidUtil.origBSKeySet.Contains(name)) m.dicBlendSet["オリジナル"][mi]=f;
+                    else m.SetValueBlendSet(maid.ActiveFace,name,f*100);
+                    return 0;
+                });
+            }else return sh.io.Error("シェイプキーがありません");
+            break;
+        case "style":
+            if(cd.type=="maid"||cd.type=="man"){
+                var maid=tr.GetComponentInParent<Maid>();
+                if(maid==null) return sh.io.Error("失敗しました");
+                string lk=sub.ToLower();
+                int idx; for(idx=0; idx<MaidUtil.mpnBody.Length; idx++)
+                    if(lk==MaidUtil.mpnBody[idx].ToString().ToLower()) break;
+                if(idx==MaidUtil.mpnBody.Length) return sh.io.Error("MPNが不正です");
+                MPN mpn=MaidUtil.mpnBody[idx];
                 g=new ReferredVal.GetValue((string v0,out string v1)=>{
                     v1=v0; if(tr==null) return -1;
-                    foreach(TMorph m in oi.data.morph){
-                        if(!m.hash.ContainsKey(sub)) continue;
-                        float f=m.GetBlendValues((int)m.hash[sub]);
-                        v1=sh.fmt.FVal(f);
-                        break;
+                    MaidProp mp=maid.GetProp(mpn);
+                    if(mp!=null){
+                        int v=(mp.boTempDut||mp.boTempExecuted)?mp.temp_value:mp.value;
+                        v1=sh.fmt.F0to1(v);
                     }
                     return 0;
                 });
                 s=new ReferredVal.GetValue((string v0,out string v1)=>{
                     v1=v0; if(tr==null) return -1;
                     if(!float.TryParse(v0,out float f)) return 1;
-                    foreach(TMorph m in oi.data.morph){
-                        if(m.hash.ContainsKey(sub)){
-                            m.SetBlendValues((int)m.hash[sub],f);
-                            m.FixBlendValues();
-                        }
-                    }
+                    MaidUtil.SetPropTemp(maid,mpn,(int)f);
+                    maid.AllProcProp();
                     return 0;
                 });
-            }else return sh.io.Error("シェイプキーがありません");
+            }
             break;
         default:
             return sh.io.Error("属性が不正です");
