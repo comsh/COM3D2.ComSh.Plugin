@@ -944,6 +944,7 @@ public static class ParseUtil {
         public int num;
         public string type;
         public string id;
+        public string slot;
         public string bone;
         public string path;
         public int meshno;
@@ -951,16 +952,17 @@ public static class ParseUtil {
             this.num=0;
             this.type="";
             this.id=s;
+            this.slot="";
             this.bone="";
             this.path="";
             this.meshno=-1;
             if(string.IsNullOrEmpty(s)) return;
             int li=s.LastIndexOf(':');
             if(li<0){       // objectname#0の形のみ
+                this.type="obj";
                 int sharp=s.IndexOf('#');
                 if(sharp>=0 && int.TryParse(s.Substring(sharp+1),out int n) && n>=0){
                     this.num=2;
-                    this.type="obj";
                     this.id=s.Substring(0,sharp);
                     this.meshno=n;
                 }
@@ -980,16 +982,17 @@ public static class ParseUtil {
                     }else{
                         this.id=s.Substring(fi+1);
                     }
-                    return;
                 }else{      // maid:0:BHead等
                     this.num=3;
                     this.type=s.Substring(0,fi);
                     this.id=s.Substring(fi+1,li-fi-1);
                     this.bone=s.Substring(li+1);
                     int p=this.bone.IndexOf('/');
-                    if(p>=0){
+                    if(p>0){
                         this.path=this.bone.Substring(p+1);
                         this.bone=this.bone.Substring(0,p);
+                    }
+                    if(this.path!=""){
                         int sharp=this.path.IndexOf('#');
                         if(sharp>=0 && int.TryParse(this.path.Substring(sharp+1),out int n) && n>=0){
                             this.meshno=n;
@@ -1002,6 +1005,11 @@ public static class ParseUtil {
                             this.bone=this.bone.Substring(0,sharp);
                         }
                     }
+                }
+                int si=this.id.LastIndexOf('.');
+                if(si>0){
+                    this.slot=this.id.Substring(si+1);
+                    this.id=this.id.Substring(0,si);
                 }
             }
         }

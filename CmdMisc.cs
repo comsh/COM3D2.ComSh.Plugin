@@ -15,6 +15,7 @@ public static class CmdMisc {
         Command.AddCmd("tmpfile",new Cmd(CmdTmpFile));
         Command.AddCmd("queue",new Cmd(CmdQueue));
         Command.AddCmd("projector",new Cmd(CmdProjector));
+        Command.AddCmd("reflectionprobe",new Cmd(CmdReflectionProbe));
     }
 
     private static int CmdBG(ComShInterpreter sh,List<string> args){
@@ -602,6 +603,114 @@ public static class CmdMisc {
         case "oneminusdstalpha": return (int)UnityEngine.Rendering.BlendMode.OneMinusDstAlpha;
         }
         return -1;
+    }
+    private static int CmdReflectionProbe(ComShInterpreter sh,List<string> args){
+        ReflectionProbe rp;
+        if(args.Count==1){
+            var lst=CmdObjects.GetObjList(sh);
+            foreach(var tr in lst) if(tr.GetComponent<ReflectionProbe>()) sh.io.PrintLn($"{tr.name} {sh.fmt.FPos(tr.position)}");
+            return 0;
+        }
+        if(args[1]=="add"){
+            if(args.Count!=3 && args.Count!=4) return sh.io.Error("使い方: reflectionprobe add 識別名 [解像度]");
+            Transform pftr=ObjUtil.GetPhotoPrefabTr(sh);
+            if(pftr==null) return sh.io.Error("オブジェクト作成に失敗しました"); 
+            string name=args[2];
+            if(!UTIL.ValidName(args[2])) return sh.io.Error("その名前は使用できません");
+            if(ObjUtil.FindObj(sh,name)!=null||LightUtil.FindLight(sh,name)!=null) return sh.io.Error("その名前は既に使われています");
+            int res=1024;
+            if(args.Count==4 && !int.TryParse(args[3],out res)) sh.io.Error("数値が不正です");
+            var go=new GameObject();
+            if(go==null) return sh.io.Error("失敗しました");
+            go.name=name;
+            go.transform.localPosition=Vector3.zero;
+            go.transform.localRotation=Quaternion.identity;
+            ObjUtil.objDic[name]=go.transform;
+            rp=go.AddComponent<ReflectionProbe>();
+            rp.resolution=res;
+            rp.mode=UnityEngine.Rendering.ReflectionProbeMode.Realtime;
+            rp.refreshMode=UnityEngine.Rendering.ReflectionProbeRefreshMode.EveryFrame;
+            rp.timeSlicingMode=UnityEngine.Rendering.ReflectionProbeTimeSlicingMode.AllFacesAtOnce;
+            rp.center=Vector3.zero;
+            rp.size=new Vector3(10,10,10);
+            rp.shadowDistance=10f;
+            rp.intensity=1;
+            rp.boxProjection=true;
+            rp.clearFlags=UnityEngine.Rendering.ReflectionProbeClearFlags.SolidColor;
+            rp.backgroundColor=Color.black;
+            rp.cullingMask=-1;
+            RenderSettings.defaultReflectionMode=UnityEngine.Rendering.DefaultReflectionMode.Custom;
+            return 0;
+        }else if(args[1]=="del"){
+            for(int i=2; i<args.Count; i++) if(ObjUtil.DeleteObj<ReflectionProbe>(sh,args[i])<0) return -1;
+            return 0;
+        }
+        Transform objtr;
+        if(!ObjUtil.objDic.TryGetValue(args[1],out objtr)) return sh.io.Error("指定されたリフレクションプルーブは見つかりません");
+        rp=objtr.GetComponent<ReflectionProbe>();
+        if(rp==null) return sh.io.Error("指定されたリフレクションプルーブは見つかりません");
+        if(args.Count==2){
+            sh.io.Print($"position:{sh.fmt.FPos(rp.transform.position)}\nrotation:{sh.fmt.FEuler(rp.transform.rotation.eulerAngles)}");
+            return 0;
+        }
+        int ret=0;
+        for(int i=0; i<(args.Count-2)/2; i++) if((ret=CmdParamReflectionProbe(sh,rp,args[2+i*2],args[2+i*2+1]))<=0) return ret;
+        if((args.Count&1)>0) return CmdParamReflectionProbe(sh,rp,args[args.Count-1],"");
+        return 0;
+    }
+    private static int CmdParamReflectionProbe(ComShInterpreter sh,ReflectionProbe rp,string cmd,string val){
+        if(val=="") return 0;
+        if(cmd=="update"){
+            if(!float.TryParse(val,out float f)||f<0) return sh.io.Error("数値が不正です");
+            if(f==0){
+                rp.refreshMode=UnityEngine.Rendering.ReflectionProbeRefreshMode.OnAwake;
+            }else if(f==1){
+                rp.refreshMode=UnityEngine.Rendering.ReflectionProbeRefreshMode.EveryFrame;
+                rp.timeSlicingMode=UnityEngine.Rendering.ReflectionProbeTimeSlicingMode.AllFacesAtOnce;
+            }else if(f==2){
+                rp.refreshMode=UnityEngine.Rendering.ReflectionProbeRefreshMode.EveryFrame;
+                rp.timeSlicingMode=UnityEngine.Rendering.ReflectionProbeTimeSlicingMode.NoTimeSlicing;
+            }else if(f==3){
+                rp.refreshMode=UnityEngine.Rendering.ReflectionProbeRefreshMode.ViaScripting;
+                rp.RenderProbe();
+            }
+        }else if(cmd=="range"){
+            float[] fa=ParseUtil.Xy(val);
+            if(fa==null) return sh.io.Error(ParseUtil.error);
+            rp.nearClipPlane=fa[0];
+            rp.farClipPlane=fa[1];
+        }else if(cmd=="power"){
+            if(!float.TryParse(val,out float f)||f<0) return sh.io.Error("数値が不正です");
+            rp.intensity=f;
+        }else if(cmd=="shadowrange"){
+            if(!float.TryParse(val,out float f)||f<0) return sh.io.Error("数値が不正です");
+            rp.shadowDistance=f;
+        }else if(cmd=="position"){
+            float[] fa=ParseUtil.Xyz(val);
+            if(fa==null) return sh.io.Error(ParseUtil.error);
+            rp.center=new Vector3(fa[0],fa[1],fa[2]);
+        }else if(cmd=="size"){
+            float[] fa=ParseUtil.Xyz(val);
+            if(fa==null) return sh.io.Error(ParseUtil.error);
+            rp.size=new Vector3(fa[0],fa[1],fa[2]);
+        }else if(cmd=="clrflg"){
+            if(!int.TryParse(val,out int n)||n<0||n>3) return sh.io.Error("数値が不正です");
+            if(n==0) rp.clearFlags=UnityEngine.Rendering.ReflectionProbeClearFlags.SolidColor;
+            else if(n==1) rp.clearFlags=UnityEngine.Rendering.ReflectionProbeClearFlags.Skybox;
+        }else if(cmd=="bgcolor"){
+            float[] fa=ParseUtil.RgbaLenient(val);
+            if(fa==null) return sh.io.Error(ParseUtil.error);
+            rp.backgroundColor=new Color(fa[0],fa[1],fa[2],fa[3]);
+        }else if(cmd=="mask"){
+            if(!int.TryParse(val,System.Globalization.NumberStyles.HexNumber,null,out int bits))
+                return sh.io.Error("数値が不正です");
+            rp.cullingMask=bits;
+        }else if(cmd=="box"){
+            int onoff=ParseUtil.OnOff(val);
+            if(onoff<0) return sh.io.Error(ParseUtil.error);
+            rp.boxProjection=(onoff==1);
+        }else return sh.io.Error("パラメータが不正です");
+        return 1;
     }
 }
 }

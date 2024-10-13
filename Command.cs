@@ -2057,60 +2057,212 @@ public static class Command {
         ReferredVal.GetValue g=null,s=null;
         switch(type){
         case "wpos":
-            g=new ReferredVal.GetValue((string v0,out string v1)=>{
-                v1=v0; if(tr==null) return -1;
-                v1=sh.fmt.FPos(tr.position);
-                return 0;
-            });
-            s=new ReferredVal.GetValue((string v0,out string v1)=>{
-                v1=v0; if(tr==null) return -1;
-                float[] xyz=ParseUtil.Xyz(v0);
-                if(xyz==null) return 1;
-                tr.position=new Vector3(xyz[0],xyz[1],xyz[2]);
-                return 0;
-            });
+            if(sub==""){
+                g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    v1=sh.fmt.FPos(tr.position);
+                    return 0;
+                });
+                s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    float[] xyz=ParseUtil.Xyz(v0);
+                    if(xyz==null) return 1;
+                    tr.position=new Vector3(xyz[0],xyz[1],xyz[2]);
+                    return 0;
+                });
+            }else if(sub=="x"){
+                g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    v1=sh.fmt.FVal(tr.position.x);
+                    return 0;
+                });
+                s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    if(!float.TryParse(v0,out float f)) return 1;
+                    var pos=tr.position; pos.x=f; tr.position=pos;
+                    return 0;
+                });
+            }else if(sub=="y"){
+                g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    v1=sh.fmt.FVal(tr.position.y);
+                    return 0;
+                });
+                s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    if(!float.TryParse(v0,out float f)) return 1;
+                    var pos=tr.position; pos.y=f; tr.position=pos;
+                    return 0;
+                });
+            }else if(sub=="z"){
+                g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    v1=sh.fmt.FVal(tr.position.z);
+                    return 0;
+                });
+                s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    if(!float.TryParse(v0,out float f)) return 1;
+                    var pos=tr.position; pos.z=f; tr.position=pos;
+                    return 0;
+                });
+            }
             break;
         case "wrot":
-            g=new ReferredVal.GetValue((string v0,out string v1)=>{
-                v1=v0; if(tr==null) return -1;
-                v1=sh.fmt.FPos(tr.rotation.eulerAngles);
-                return 0;
-            });
-            s=new ReferredVal.GetValue((string v0,out string v1)=>{
-                v1=v0; if(tr==null) return -1;
-                float[] xyz=ParseUtil.Xyz(v0);
-                if(xyz==null) return 1;
-                tr.rotation=Quaternion.Euler(xyz[0],xyz[1],xyz[2]);
-                return 0;
-            });
+            if(sub==""){
+                g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    v1=sh.fmt.FPos(tr.rotation.eulerAngles);
+                    return 0;
+                });
+                s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    float[] xyz=ParseUtil.Xyz(v0);
+                    if(xyz==null) return 1;
+                    tr.rotation=Quaternion.Euler(xyz[0],xyz[1],xyz[2]);
+                    return 0;
+                });
+            }else if(sub=="x"){
+                g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    v1=sh.fmt.FVal(tr.rotation.eulerAngles.x);
+                    return 0;
+                });
+                s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    if(!float.TryParse(v0,out float f)) return 1;
+                    var rot=tr.rotation.eulerAngles; rot.x=f; tr.rotation=Quaternion.Euler(rot);
+                    return 0;
+                });
+            }else if(sub=="y"){
+                g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    v1=sh.fmt.FVal(tr.rotation.eulerAngles.y);
+                    return 0;
+                });
+                s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    if(!float.TryParse(v0,out float f)) return 1;
+                    var rot=tr.rotation.eulerAngles; rot.y=f; tr.rotation=Quaternion.Euler(rot);
+                    return 0;
+                });
+            }else if(sub=="z"){
+                g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    v1=sh.fmt.FVal(tr.rotation.eulerAngles.z);
+                    return 0;
+                });
+                s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    if(!float.TryParse(v0,out float f)) return 1;
+                    var rot=tr.rotation.eulerAngles; rot.z=f; tr.rotation=Quaternion.Euler(rot);
+                    return 0;
+                });
+            }
             break;
         case "lpos":
-            g=new ReferredVal.GetValue((string v0,out string v1)=>{
-                v1=v0; if(tr==null) return -1;
-                v1=sh.fmt.FPos(tr.localPosition);
-                return 0;
-            });
-            s=new ReferredVal.GetValue((string v0,out string v1)=>{
-                v1=v0; if(tr==null) return -1;
-                float[] xyz=ParseUtil.Xyz(v0);
-                if(xyz==null) return 1;
-                tr.localPosition=new Vector3(xyz[0],xyz[1],xyz[2]);
-                return 0;
-            });
+            if(sub==""){
+                g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    v1=sh.fmt.FPos(tr.localPosition);
+                    return 0;
+                });
+                s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    float[] xyz=ParseUtil.Xyz(v0);
+                    if(xyz==null) return 1;
+                    tr.localPosition=new Vector3(xyz[0],xyz[1],xyz[2]);
+                    return 0;
+                });
+            }else if(sub=="x"){
+                g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    v1=sh.fmt.FVal(tr.localPosition.x);
+                    return 0;
+                });
+                s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    if(!float.TryParse(v0,out float f)) return 1;
+                    var pos=tr.localPosition; pos.x=f; tr.localPosition=pos;
+                    return 0;
+                });
+            }else if(sub=="y"){
+                g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    v1=sh.fmt.FVal(tr.localPosition.y);
+                    return 0;
+                });
+                s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    if(!float.TryParse(v0,out float f)) return 1;
+                    var pos=tr.localPosition; pos.y=f; tr.localPosition=pos;
+                    return 0;
+                });
+            }else if(sub=="z"){
+                g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    v1=sh.fmt.FVal(tr.localPosition.z);
+                    return 0;
+                });
+                s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    if(!float.TryParse(v0,out float f)) return 1;
+                    var pos=tr.localPosition; pos.z=f; tr.localPosition=pos;
+                    return 0;
+                });
+            }
             break;
         case "lrot":
-            g=new ReferredVal.GetValue((string v0,out string v1)=>{
-                v1=v0; if(tr==null) return -1;
-                v1=sh.fmt.FPos(tr.localRotation.eulerAngles);
-                return 0;
-            });
-            s=new ReferredVal.GetValue((string v0,out string v1)=>{
-                v1=v0; if(tr==null) return -1;
-                float[] xyz=ParseUtil.Xyz(v0);
-                if(xyz==null) return 1;
-                tr.localRotation=Quaternion.Euler(xyz[0],xyz[1],xyz[2]);
-                return 0;
-            });
+            if(sub==""){
+                g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    v1=sh.fmt.FPos(tr.localRotation.eulerAngles);
+                    return 0;
+                });
+                s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    float[] xyz=ParseUtil.Xyz(v0);
+                    if(xyz==null) return 1;
+                    tr.localRotation=Quaternion.Euler(xyz[0],xyz[1],xyz[2]);
+                    return 0;
+                });
+            }else if(sub=="x"){
+                g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    v1=sh.fmt.FVal(tr.localRotation.eulerAngles.x);
+                    return 0;
+                });
+                s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    if(!float.TryParse(v0,out float f)) return 1;
+                    var rot=tr.localRotation.eulerAngles; rot.x=f; tr.localRotation=Quaternion.Euler(rot);
+                    return 0;
+                });
+            }else if(sub=="y"){
+                g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    v1=sh.fmt.FVal(tr.localRotation.eulerAngles.y);
+                    return 0;
+                });
+                s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    if(!float.TryParse(v0,out float f)) return 1;
+                    var rot=tr.localRotation.eulerAngles; rot.y=f; tr.localRotation=Quaternion.Euler(rot);
+                    return 0;
+                });
+            }else if(sub=="z"){
+                g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    v1=sh.fmt.FVal(tr.localRotation.eulerAngles.z);
+                    return 0;
+                });
+                s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                    v1=v0; if(tr==null) return -1;
+                    if(!float.TryParse(v0,out float f)) return 1;
+                    var rot=tr.localRotation.eulerAngles; rot.z=f; tr.localRotation=Quaternion.Euler(rot);
+                    return 0;
+                });
+            }
             break;
         case "scale":
             g=new ReferredVal.GetValue((string v0,out string v1)=>{
@@ -2125,114 +2277,6 @@ public static class Command {
                 tr.localScale=new Vector3(xyz[0],xyz[1],xyz[2]);
                 return 0;
             });
-            break;
-        case "shape":
-            if(cd.type=="maid"||cd.type=="man"){
-                var maid=tr.GetComponentInParent<Maid>();
-                if(maid==null) return sh.io.Error("失敗しました");
-                var ma=new List<TMorph>();
-                var mia=new List<int>();
-                foreach (TBodySkin skin in maid.body0.goSlot){
-                    TMorph m=skin.morph;
-                    if(m==null || !m.hash.ContainsKey(sub)) continue;
-                    ma.Add(m);
-                    mia.Add((int)m.hash[sub]);
-                }
-                if(ma.Count==0) return sh.io.Error("シェイプキーがありません");
-                g=new ReferredVal.GetValue((string v0,out string v1)=>{
-                    if(tr==null) {v1=v0; return -1;}
-                    v1=sh.fmt.FVal(ma[0].GetBlendValues(mia[0]));
-                    return 0;
-                });
-                s=new ReferredVal.GetValue((string v0,out string v1)=>{
-                    v1=v0; if(tr==null) return -1;
-                    if(!float.TryParse(v0,out float f)) return 1;
-                    for(int i=0; i<ma.Count; i++){
-                        ma[i].SetBlendValues(mia[i],f);
-                        ma[i].FixBlendValues();
-                    }
-                    return 0;
-                });
-            }else if(cd.type=="obj"){
-                var oi=tr.GetComponent<ObjInfo>();
-                if(oi==null||oi.data.morph==null) return sh.io.Error("シェイプキーがありません");
-                var ma=new List<TMorph>();
-                var mia=new List<int>();
-                foreach(TMorph m in oi.data.morph){
-                    if(!m.hash.ContainsKey(sub)) continue;
-                    ma.Add(m);
-                    mia.Add((int)m.hash[sub]);
-                }
-                if(ma.Count==0) return sh.io.Error("シェイプキーがありません");
-                g=new ReferredVal.GetValue((string v0,out string v1)=>{
-                    if(tr==null){v1=v0; return -1;}
-                    v1=sh.fmt.FVal(ma[0].GetBlendValues(mia[0]));
-                    return 0;
-                });
-                s=new ReferredVal.GetValue((string v0,out string v1)=>{
-                    v1=v0; if(tr==null) return -1;
-                    if(!float.TryParse(v0,out float f)) return 1;
-                    for(int i=0; i<ma.Count; i++){
-                        ma[i].SetBlendValues(mia[i],f);
-                        ma[i].FixBlendValues();
-                    }
-                    return 0;
-                });
-            }else return sh.io.Error("シェイプキーがありません");
-            break;
-        case "face":
-            if(cd.type=="maid"){
-                var maid=tr.GetComponentInParent<Maid>();
-                if(maid==null) return sh.io.Error("失敗しました");
-                TMorph m=maid.body0.Face.morph;
-                int mi=-1;
-                string name=sub;
-                if(m.Contains(sub)) mi=(int)m.hash[sub];
-                else if(m.bodyskin.PartsVersion>=120 && sub.StartsWith("eyeclose",Ordinal)){
-                    name=sub+(sub=="eyeclose"?"1":"")+TMorph.crcFaceTypesStr[(int)m.GetFaceTypeGP01FB()];
-                    if(m.Contains(name)) mi=(int)m.hash[name];
-                }
-                if(mi<0) return sh.io.Error("シェイプキーがありません");
-                g=new ReferredVal.GetValue((string v0,out string v1)=>{
-                    if(tr==null) {v1=v0; return -1;}
-                    v1=sh.fmt.FVal(m.GetBlendValues(mi));
-                    return 0;
-                });
-                s=new ReferredVal.GetValue((string v0,out string v1)=>{
-                    v1=v0; if(tr==null) return -1;
-                    if(!float.TryParse(v0,out float f)) return 1;
-                    if(MaidUtil.origBSKeySet.Contains(name)) m.dicBlendSet["オリジナル"][mi]=f;
-                    else m.SetValueBlendSet(maid.ActiveFace,name,f*100);
-                    return 0;
-                });
-            }else return sh.io.Error("シェイプキーがありません");
-            break;
-        case "style":
-            if(cd.type=="maid"||cd.type=="man"){
-                var maid=tr.GetComponentInParent<Maid>();
-                if(maid==null) return sh.io.Error("失敗しました");
-                string lk=sub.ToLower();
-                int idx; for(idx=0; idx<MaidUtil.mpnBody.Length; idx++)
-                    if(lk==MaidUtil.mpnBody[idx].ToString().ToLower()) break;
-                if(idx==MaidUtil.mpnBody.Length) return sh.io.Error("MPNが不正です");
-                MPN mpn=MaidUtil.mpnBody[idx];
-                g=new ReferredVal.GetValue((string v0,out string v1)=>{
-                    v1=v0; if(tr==null) return -1;
-                    MaidProp mp=maid.GetProp(mpn);
-                    if(mp!=null){
-                        int v=(mp.boTempDut||mp.boTempExecuted)?mp.temp_value:mp.value;
-                        v1=sh.fmt.F0to1(v);
-                    }
-                    return 0;
-                });
-                s=new ReferredVal.GetValue((string v0,out string v1)=>{
-                    v1=v0; if(tr==null) return -1;
-                    if(!float.TryParse(v0,out float f)) return 1;
-                    MaidUtil.SetPropTemp(maid,mpn,(int)f);
-                    maid.AllProcProp();
-                    return 0;
-                });
-            }
             break;
         default:
             return sh.io.Error("属性が不正です");

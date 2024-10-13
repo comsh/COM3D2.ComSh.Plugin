@@ -35,7 +35,16 @@ public static class CmdCamera {
         cameraParamDic.Add("mask",new CmdParam<CameraMain>(CameraParamMask));
         cameraParamDic.Add("depth",new CmdParam<CameraMain>(CameraParamDepth));
         cameraParamDic.Add("clrflg",new CmdParam<CameraMain>(CameraParamClrFlg));
+        cameraParamDic.Add("bgcolor",new CmdParam<CameraMain>(CameraParamBgColor));
         cameraParamDic.Add("flare",new CmdParam<CameraMain>(CameraParamFlare));
+        cameraParamDic.Add("video",new CmdParam<CameraMain>(CameraParamVideo));
+        cameraParamDic.Add("video.far",new CmdParam<CameraMain>(CameraParamVideoFar));
+        cameraParamDic.Add("video.near",new CmdParam<CameraMain>(CameraParamVideoNear));
+        cameraParamDic.Add("video.fit",new CmdParam<CameraMain>(CameraParamVideoFit));
+        cameraParamDic.Add("video.alpha",new CmdParam<CameraMain>(CameraParamVideoAlpha));
+        cameraParamDic.Add("video.time",new CmdParam<CameraMain>(CameraParamVideoTime));
+        cameraParamDic.Add("video.speed",new CmdParam<CameraMain>(CameraParamVideoSpeed));
+        //cameraParamDic.Add("skybox",new CmdParam<CameraMain>(CameraParamSkyBox));
 
         CmdParamPosRotCp(cameraParamDic,"pos","position");
         CmdParamPosRotCp(cameraParamDic,"rot","rotation");
@@ -159,6 +168,9 @@ public static class CmdCamera {
         else if(n==3) mc.camera.clearFlags=CameraClearFlags.Nothing; // 現状では使わない
         return 1;
     }
+    private static int CameraParamBgColor(ComShInterpreter sh,CameraMain mc,string val){
+        return CmdSubCamera.SubCamParamBgColor(sh,mc.camera,val);
+    }
     private static int CameraParamFlare(ComShInterpreter sh,CameraMain mc,string val){
         if(val==null){
             sh.io.Print(mc.camera.transform.GetComponent<FlareLayer>()==null?"off":"on");
@@ -168,6 +180,33 @@ public static class CmdCamera {
         else if(val=="off") UnityEngine.Object.Destroy(mc.camera.gameObject.GetComponent<FlareLayer>());
         else return sh.io.Error("onかoffを指定してください");
         return 1;
+    }
+    private static int CameraParamVideo(ComShInterpreter sh,CameraMain mc,string val){
+        return CmdSubCamera.SubCamParamVideoFar(sh,mc.camera,val);
+    }
+    private static int CameraParamVideoCommon(ComShInterpreter sh,CameraMain mc,string val,bool nearq){
+        return CmdSubCamera.SubCamParamVideoCommon(sh,mc.camera,val,nearq);
+    }
+    private static int CameraParamVideoFar(ComShInterpreter sh,CameraMain mc,string val){
+        return CmdSubCamera.SubCamParamVideoFar(sh,mc.camera,val);
+    }
+    private static int CameraParamVideoNear(ComShInterpreter sh,CameraMain mc,string val){
+        return CmdSubCamera.SubCamParamVideoNear(sh,mc.camera,val);
+    }
+    private static int CameraParamVideoFit(ComShInterpreter sh,CameraMain mc,string val){
+        return CmdSubCamera.SubCamParamVideoFit(sh,mc.camera,val);
+    }
+    private static int CameraParamVideoAlpha(ComShInterpreter sh,CameraMain mc,string val){
+        return CmdSubCamera.SubCamParamVideoAlpha(sh,mc.camera,val);
+    }
+    private static int CameraParamVideoTime(ComShInterpreter sh,CameraMain mc,string val){
+        return CmdSubCamera.SubCamParamVideoTime(sh,mc.camera,val);
+    }
+    private static int CameraParamVideoSpeed(ComShInterpreter sh,CameraMain mc,string val){
+        return CmdSubCamera.SubCamParamVideoSpeed(sh,mc.camera,val);
+    }
+    private static int CameraParamSkyBox(ComShInterpreter sh,CameraMain mc,string val){
+        return CmdSubCamera.SubCamParamSkyBox(sh,mc.camera,val);
     }
     private static int CameraParamRot(ComShInterpreter sh,CameraMain mc,string val){
         Transform tr=mc.transform;

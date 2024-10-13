@@ -434,8 +434,7 @@ public static class CmdLights {
             if(!int.TryParse(val.Substring(opt+1),out jmpq)) return sh.io.Error("数値の形式が不正です");
             val=val.Substring(0,opt);
         }
-        string[] sa=val.Split(ParseUtil.colon);
-        to=ObjUtil.FindObj(sh,sa);
+        to=ObjUtil.FindObj(sh,new ParseUtil.ColonDesc(val));
         if(tr==null) return sh.io.Error("対象が見つかりません");
         if(jmpq==2) UTIL.ResetTr(tr);
         tr.SetParent(to,jmpq==0);

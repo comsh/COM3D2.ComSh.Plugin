@@ -95,6 +95,7 @@ public static class CmdObjects {
         objParamDic.Add("active",new CmdParam<Transform>(ObjParamActive));
         objParamDic.Add("wheel",new CmdParam<Transform>(ObjParamWheel));
         objParamDic.Add("cloth",new CmdParam<Transform>(ObjParamCloth));
+        objParamDic.Add("reflection",new CmdParam<Transform>(ObjParamReflection));
         
         objParamDic.Add("l2w",new CmdParam<Transform>(_CmdParamL2W));
         objParamDic.Add("w2l",new CmdParam<Transform>(_CmdParamW2L));
@@ -757,17 +758,17 @@ public static class CmdObjects {
                 bool found=false;
                 for(int i=0; i<par.Length; i++) if(n==par[i].sys.name){
                     found=true;
-                    if((ret=ParticleSub(sh,par[i],p,v))<0) return ret;
+                    if((ret=ParticleSub(sh,par[i],p,v,tr))<0) return ret;
                 }
                 if(!found) return sh.io.Error("指定されたパーティクルは存在しません");
             }else{      // 名前指定がなければ全部
                 for(int i=0; i<par.Length; i++)
-                    if((ret=ParticleSub(sh,par[i],p,v))<0) return ret;
+                    if((ret=ParticleSub(sh,par[i],p,v,tr))<0) return ret;
             }
         }
         return 1;
     }
-    private static int ParticleSub(ComShInterpreter sh,NewParticle par,string p,string v){
+    private static int ParticleSub(ComShInterpreter sh,NewParticle par,string p,string v,Transform tr){
         var main=par.sys.main;
         var emit=par.sys.emission;
         var vot=par.sys.limitVelocityOverLifetime;
@@ -927,7 +928,19 @@ public static class CmdObjects {
             if(sa.Length==1){
                 if(sa[0]=="box") shape.shapeType=ParticleSystemShapeType.Box;
                 else if(sa[0]=="boxshell") shape.shapeType=ParticleSystemShapeType.BoxShell;
-                else return sh.io.Error("shapeの指定が不正です");
+                else if(sa[0]=="mesh"){
+                    var smr=tr.GetComponentInChildren<SkinnedMeshRenderer>();
+                    if(smr!=null){
+                        shape.shapeType=ParticleSystemShapeType.SkinnedMeshRenderer;
+                        shape.skinnedMeshRenderer=smr; 
+                    }else{
+                       var mf=tr.GetComponentInChildren<MeshRenderer>();
+                        if(mf!=null){
+                            shape.shapeType=ParticleSystemShapeType.MeshRenderer;
+                            shape.meshRenderer=mf;
+                        }else return sh.io.Error("メッシュがありません");
+                    }
+                } else return sh.io.Error("shapeの指定が不正です");
                 shape.randomDirectionAmount=0;
             }else if(sa.Length==2){
                 if(sa[0]=="hemisphere") shape.shapeType=ParticleSystemShapeType.Hemisphere;
@@ -2453,6 +2466,32 @@ public static class CmdObjects {
         cl.coefficients=ca;
         return 0;
     }
+    private static int ObjParamReflection(ComShInterpreter sh,Transform tr,string val){
+        Renderer r;
+        var oi=ObjInfo.GetObjInfo(tr);
+        if(oi==null) r=tr.GetComponentInChildren<Renderer>();
+        else r=oi.data.FindComponent<Renderer>();
+        if(r==null) return sh.io.Error("レンダラが見つかりません");
+        if(val==null){
+            var rpu=r.reflectionProbeUsage;
+            switch(rpu){
+            case UnityEngine.Rendering.ReflectionProbeUsage.Off: sh.io.Print("0"); break;
+            case UnityEngine.Rendering.ReflectionProbeUsage.Simple: sh.io.Print("1"); break;
+            case UnityEngine.Rendering.ReflectionProbeUsage.BlendProbes: sh.io.Print("2"); break;
+            case UnityEngine.Rendering.ReflectionProbeUsage.BlendProbesAndSkybox: sh.io.Print("3"); break;
+            }
+            return 0;
+        }
+        switch(val){
+        case "0":r.reflectionProbeUsage=UnityEngine.Rendering.ReflectionProbeUsage.Off; break;
+        case "1":r.reflectionProbeUsage=UnityEngine.Rendering.ReflectionProbeUsage.Simple; break;
+        case "2":r.reflectionProbeUsage=UnityEngine.Rendering.ReflectionProbeUsage.BlendProbes; break;
+        case "3":r.reflectionProbeUsage=UnityEngine.Rendering.ReflectionProbeUsage.BlendProbesAndSkybox; break;
+        default: return sh.io.Error("値が不正です");
+        }
+        return 1;
+
+    }
 }
 public static class ObjUtil {
     public static Dictionary<string,Transform> objDic=new Dictionary<string,Transform>();
@@ -2514,7 +2553,9 @@ public static class ObjUtil {
         }
 
         string[] lr=ParseUtil.LeftAndRight(sa[sa.Length-1],'/');
-        if(sa.Length==3){
+        if(sa.Length==4){
+            tr=BoneUtil.FindBone(sh,sa[0],sa[1],sa[2],(lr[0]=="")?"/":lr[0]);
+        }else if(sa.Length==3){
             tr=BoneUtil.FindBone(sh,sa[0],sa[1],(lr[0]=="")?"/":lr[0]);
         }else if(sa.Length==2){
             tr=BoneUtil.FindBone(sh,sa[0],lr[0],"");
@@ -2524,32 +2565,20 @@ public static class ObjUtil {
         return tr;
     }
     public static Transform FindObj(ComShInterpreter sh,ParseUtil.ColonDesc cd){
+        if(cd.id=="") return null;
         Transform tr=null;
-        if(cd.num==0 && cd.id!="") return FindObj(sh,cd.id);
-        if(cd.num==3){
-            tr=BoneUtil.FindBone(sh,cd.type,cd.id,(cd.bone=="")?"/":cd.bone);
-        }else{
-            if(cd.type=="obj") return FindObj(sh,cd.id);
-            if(cd.type=="light") return LightUtil.FindLight(sh,cd.id);
-            if(cd.type==""){
-                if(cd.id=="camera") return GameMain.Instance.MainCamera.camera.transform;
-                if(cd.id=="bg") return GameMain.Instance.BgMgr.BgObject.transform;
-            }
-            tr=BoneUtil.FindBone(sh,cd.type,cd.id,cd.bone);
-        }
+        if(cd.num==0 && cd.id!="") tr=FindObj(sh,cd.id);
+        else tr=BoneUtil.FindBone(sh,cd);
         if(tr==null) return null;
         if(cd.path!="") return tr.Find(cd.path);
         return tr;
     }
     public static Transform FindObjRoot(ComShInterpreter sh,ParseUtil.ColonDesc cd){
-        if(cd.num==0 && cd.id!="") return FindObj(sh,cd.id);
-        if(cd.type=="obj") return FindObj(sh,cd.id);
-        if(cd.type=="light") return LightUtil.FindLight(sh,cd.id);
-        if(cd.type==""){
-            if(cd.id=="camera") return GameMain.Instance.MainCamera.camera.transform;
-            if(cd.id=="bg") return GameMain.Instance.BgMgr.BgObject.transform;
-        }
-        return BoneUtil.FindBone(sh,cd.type,cd.id,cd.bone);
+        if(cd.id=="") return null;
+        Transform tr=null;
+        if(cd.num==0 && cd.id!="") tr=FindObj(sh,cd.id);
+        else tr=BoneUtil.FindBone(sh,cd.type,cd.id,cd.slot,"/");
+        return tr;
     }
 
     public static void RenameTr(Transform tr, string name){
@@ -2853,9 +2882,16 @@ public static class ObjUtil {
         return ret;
     }
     private static string myobjDir=ComShInterpreter.homeDir+@"PhotoModeData\MyObject\";
+    public static bool ChkAssetBundle(string fname) {
+        var name=Path.GetFullPath(myobjDir+UTIL.Suffix(fname,".asset_bg"));
+        if(!name.StartsWith(myobjDir)) return false;
+        return File.Exists(name);
+    
+    }
     public static List<string> ListAssetBundle<T>(string bundle) where T : UnityEngine.Object {
         var fname=Path.GetFullPath(myobjDir+UTIL.Suffix(bundle,".asset_bg"));
         if(!fname.StartsWith(myobjDir)) return null;
+        if(!File.Exists(fname)) return null;
         List<string> lst=new List<string>();
         T[] arr;
         AssetBundle ab=null;

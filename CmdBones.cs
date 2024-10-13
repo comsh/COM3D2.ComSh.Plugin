@@ -124,31 +124,49 @@ public static class BoneUtil{
             if(tr==null){ boneCache.Remove(nsid); return null; }
             return tr;
         }
-        return ObjUtil.FindObj(sh, name.Split(ParseUtil.colon));
+        return ObjUtil.FindObj(sh, new ParseUtil.ColonDesc(name));
     }
 
+    public static Transform FindBone(ComShInterpreter sh,ParseUtil.ColonDesc cd){
+        return FindBone(sh,cd.type,cd.id,cd.slot,cd.bone);
+    }
     public static Transform FindBone(ComShInterpreter sh,string s1,string s2,string s3){
-        if(s1==""||s2=="") return null;
-        if(s1=="obj"){
-            Transform tr=ObjUtil.FindObj(sh,s2);
+        string[] lr=ParseUtil.LeftAndRight(s2,'.');
+        return FindBone(sh,s1,lr[0],lr[1],s3);
+    }
+    public static Transform FindBone(ComShInterpreter sh,string type,string id,string slot,string bone){
+        if(id=="") return null;
+        if(type==""){
+            if(id=="camera") return GameMain.Instance.MainCamera.camera.transform;
+            else if(id=="bg"){
+                Transform tr=GameMain.Instance.BgMgr.BgObject.transform;
+                if(tr==null) return null;
+                if(bone==""||bone=="/") return tr;
+                var oi=tr.GetComponent<ObjInfo>();
+                if(oi==null) oi=ObjInfo.AddObjInfo(tr,"");
+                return oi.data.FindBone(bone);
+            }else return null;
+        }else if(type=="obj"){
+            Transform tr=ObjUtil.FindObj(sh,id);
             if(tr==null) return null;
-            if(s3==""||s3=="/") return tr;
-            string fullname=ParseUtil.CompleteBoneName(s3,false);
+            if(bone==""||bone=="/") return tr;
+            string fullname=ParseUtil.CompleteBoneName(bone,false);
             var oi=tr.GetComponent<ObjInfo>();
             if(oi==null) oi=ObjInfo.AddObjInfo(tr,"");
             return oi.data.FindBone(fullname);
-        }else if(s1=="maid"||s1=="man"){
-            string[] s2lr=ParseUtil.LeftAndRight(s2,'.');
-            Maid m=MaidUtil.FindMaidMan(s1,s2lr[0]);
+        }else if(type=="light"){
+            return LightUtil.FindLight(sh,id);
+        }else if(type=="maid"||type=="man"){
+            Maid m=MaidUtil.FindMaidMan(type,id);
             if(m==null||m.body0==null) return null;
-            if(s3=="" && s2lr[1]=="") return m.transform;
-            if(s3=="/"){
-                if(s2lr[1]!=""){
-                    if(!m.body0.IsSlotNo(s2lr[1])) return null;
-                    return m.body0.goSlot[m.body0.GetSlotNo(s2lr[1])].obj_tr;
+            if(bone=="" && slot=="") return m.transform;
+            if(bone=="/"){
+                if(slot!=""){
+                    if(!m.body0.IsSlotNo(slot)) return null;
+                    return m.body0.goSlot[m.body0.GetSlotNo(slot)].obj_tr;
                 }else return m.body0.m_trBones;
             }else{
-                MaidBone b=MaidBone.Find(m,s3,s2lr[1]);
+                MaidBone b=MaidBone.Find(m,bone,slot);
                 if(b==null||b.boneTr==null) return null;
                 return b.boneTr;
             }

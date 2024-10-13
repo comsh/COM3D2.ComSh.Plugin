@@ -89,7 +89,7 @@ public class VarDic : Dictionary<string,ReferredVal> {
     public bool SetBind(string key,ReferredVal.GetValue g,ReferredVal.GetValue s){
         string rkey=" "+key;
         if(!this.TryGetValue(key,out ReferredVal rv)) this.Add(key,new ReferredVal(rkey,g,s)); 
-        else rv.SetBind(rkey,g,s);
+        else rv.AddBind(rkey,g,s);
         return true;
     }
 }
@@ -139,6 +139,7 @@ public class ReferredVal {
     }
     public void SetRef(string key,object d){ val=key; dic=d; getter=null; setter=null; }
     public void SetBind(string key,GetValue g,GetValue s){ val=key; dic=null; getter=g; setter=s; }
+    public void AddBind(string key,GetValue g,GetValue s){ val=key; dic=null; getter+=g; setter+=s; }
     public override string ToString(){ return Get(); }
 }
 
