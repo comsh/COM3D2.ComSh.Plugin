@@ -24,15 +24,11 @@ public static class CmdSubCamera {
         subcamParamDic.Add("bgcolor",new CmdParam<Camera>(SubCamParamBgColor));
         subcamParamDic.Add("ss",new CmdParam<Camera>(SubCamParamScreenShot));
         subcamParamDic.Add("png",new CmdParam<Camera>(SubCamParamPng));
-        subcamParamDic.Add("video",new CmdParam<Camera>(SubCamParamVideo));
-        subcamParamDic.Add("video.loop",new CmdParam<Camera>(SubCamParamVideoLoop));
-        subcamParamDic.Add("video.far",new CmdParam<Camera>(SubCamParamVideoFar));
-        subcamParamDic.Add("video.near",new CmdParam<Camera>(SubCamParamVideoNear));
-        subcamParamDic.Add("video.fit",new CmdParam<Camera>(SubCamParamVideoFit));
-        subcamParamDic.Add("video.alpha",new CmdParam<Camera>(SubCamParamVideoAlpha));
-        subcamParamDic.Add("video.time",new CmdParam<Camera>(SubCamParamVideoTime));
-        subcamParamDic.Add("video.speed",new CmdParam<Camera>(SubCamParamVideoSpeed));
-        //subcamParamDic.Add("skybox",new CmdParam<Camera>(SubCamParamSkyBox));
+        subcamParamDic.Add("display",new CmdParam<Camera>(SubCamParamDisplay));
+        subcamParamDic.Add("skybox",new CmdParam<Camera>(SubCamParamSkyBox));
+        subcamParamDic.Add("skybox.prop",new CmdParam<Camera>(SubCamParamSkyBoxProp));
+        subcamParamDic.Add("postprocess",new CmdParam<Camera>(SubCamParamPostProcess));
+        subcamParamDic.Add("postprocess.prop",new CmdParam<Camera>(SubCamParamPostProcessProp));
     }
     private static Dictionary<string,CmdParam<Camera>> subcamParamDic=new Dictionary<string,CmdParam<Camera>>();
 
@@ -205,7 +201,7 @@ public static class CmdSubCamera {
         else if(n==1) cam.clearFlags=CameraClearFlags.Depth;
         else if(n==2) cam.clearFlags=CameraClearFlags.Skybox;
         else if(n==3) cam.clearFlags=CameraClearFlags.Nothing;
-        RecreateRt(cam,-1,-1);
+        if(cam.targetTexture!=null) RecreateRt(cam,-1,-1);
         return 1;
     }
     public static int SubCamParamBgColor(ComShInterpreter sh,Camera cam,string val){
@@ -324,118 +320,145 @@ public static class CmdSubCamera {
         else return sh.io.Error("onかoffを指定してください");
         return 1;
     }
-    public static int SubCamParamVideo(ComShInterpreter sh,Camera cam,string val){ return SubCamParamVideoFar(sh,cam,val); }
-    public static int SubCamParamVideoCommon(ComShInterpreter sh,Camera cam,string val,bool nearq){
-        UnityEngine.Video.VideoPlayer vp=cam.GetComponent<UnityEngine.Video.VideoPlayer>();
+    private static int SubCamParamDisplay(ComShInterpreter sh,Camera cam,string val){
         if(val==null){
-            if(vp==null) return 0;
-            sh.io.Print(vp.name);
+            sh.io.Print(cam.targetDisplay.ToString());
             return 0;
         }
-        if(val==""){
-            UnityEngine.Object.Destroy(cam.GetComponent<UnityEngine.Video.VideoPlayer>());
-            return 1;
+        if(!int.TryParse(val,out int n)||n<0||n>=Display.displays.Length) return sh.io.Error("モニタ番号が不正です");
+        Display.displays[n].Activate();
+        if(cam.targetDisplay==n) return 1;
+        var rt=cam.targetTexture;
+        if(rt!=null){
+            rt.Release(); GameObject.Destroy(rt);
+            cam.targetTexture=null;
         }
-        if(vp==null) vp=cam.gameObject.AddComponent<UnityEngine.Video.VideoPlayer>();
-        if(vp==null) return sh.io.Error("失敗しました");
-        vp.renderMode=nearq?UnityEngine.Video.VideoRenderMode.CameraNearPlane:UnityEngine.Video.VideoRenderMode.CameraFarPlane;
-        vp.isLooping=false;
-        vp.targetCameraAlpha=1;
-        vp.audioOutputMode=UnityEngine.Video.VideoAudioOutputMode.None;
-        vp.aspectRatio=UnityEngine.Video.VideoAspectRatio.FitHorizontally;
-        vp.name=val;
-        string file=ComShInterpreter.homeDir+@"PhotoModeData\Texture\"+val;
-        if(!System.IO.File.Exists(file)) return sh.io.Error("ファイルが見つかりません");
-        vp.url="file://"+file.Replace('\\','/');
-        vp.Play();
-        return 1;
-    }
-    public static int SubCamParamVideoFar(ComShInterpreter sh,Camera cam,string val){
-        return SubCamParamVideoCommon(sh,cam,val,false);
-    }
-    public static int SubCamParamVideoNear(ComShInterpreter sh,Camera cam,string val){
-        return SubCamParamVideoCommon(sh,cam,val,true);
-    }
-    public static int SubCamParamVideoLoop(ComShInterpreter sh,Camera cam,string val){
-        UnityEngine.Video.VideoPlayer vp=cam.GetComponent<UnityEngine.Video.VideoPlayer>();
-        if(vp==null) return sh.io.Error("動画は指定されていません");
-        if(val==null){
-            sh.io.Print(vp.isLooping?"1":"0");
-            return 0;
-        }
-        if(val!="0"&&val!="1") return sh.io.Error("値が不正です");
-        vp.isLooping=(val=="1");
-        if(val=="1" && !vp.isPlaying) vp.Play();
-        return 1;
-    }
-    public static int SubCamParamVideoFit(ComShInterpreter sh,Camera cam,string val){
-        UnityEngine.Video.VideoPlayer vp=cam.GetComponent<UnityEngine.Video.VideoPlayer>();
-        if(vp==null) return sh.io.Error("動画は指定されていません");
-        if(val==null){
-            int n=0;
-            if(vp.aspectRatio==UnityEngine.Video.VideoAspectRatio.NoScaling) n=0;
-            else if(vp.aspectRatio==UnityEngine.Video.VideoAspectRatio.FitHorizontally) n=1;
-            else if(vp.aspectRatio==UnityEngine.Video.VideoAspectRatio.FitVertically) n=2;
-            else if(vp.aspectRatio==UnityEngine.Video.VideoAspectRatio.Stretch) n=3;
-            sh.io.Print(n.ToString());
-            return 0;
-        }
-        UnityEngine.Video.VideoAspectRatio fit;
-        switch(val){
-        case "0": fit=UnityEngine.Video.VideoAspectRatio.NoScaling; break;
-        case "1": fit=UnityEngine.Video.VideoAspectRatio.FitHorizontally; break;
-        case "2": fit=UnityEngine.Video.VideoAspectRatio.FitVertically; break;
-        case "3": fit=UnityEngine.Video.VideoAspectRatio.Stretch; break;
-        default: return sh.io.Error("値が不正です");
-        }
-        vp.aspectRatio=fit;
-        return 1;
-    }
-    public static int SubCamParamVideoAlpha(ComShInterpreter sh,Camera cam,string val){
-        UnityEngine.Video.VideoPlayer vp=cam.GetComponent<UnityEngine.Video.VideoPlayer>();
-        if(vp==null) return sh.io.Error("動画は指定されていません");
-        if(val==null){
-            sh.io.Print(sh.fmt.FVal(vp.targetCameraAlpha));
-            return 0;
-        }
-        if(!float.TryParse(val,out float f)||f<0||f>1) return sh.io.Error("値が不正です");
-        vp.targetCameraAlpha=f;
-        return 1;
-    }
-    public static int SubCamParamVideoTime(ComShInterpreter sh,Camera cam,string val){
-        UnityEngine.Video.VideoPlayer vp=cam.GetComponent<UnityEngine.Video.VideoPlayer>();
-        if(vp==null) return sh.io.Error("動画は指定されていません");
-        if(val==null){
-            sh.io.Print(sh.fmt.FVal(vp.time*1000));
-            return 0;
-        }
-        if(!float.TryParse(val,out float f)) return sh.io.Error("値が不正です");
-        if(!vp.isPlaying) vp.Play();
-        vp.time=f/1000;
-        return 1;
-    }
-    public static int SubCamParamVideoSpeed(ComShInterpreter sh,Camera cam,string val){
-        UnityEngine.Video.VideoPlayer vp=cam.GetComponent<UnityEngine.Video.VideoPlayer>();
-        if(vp==null) return sh.io.Error("動画は指定されていません");
-        if(val==null){
-            sh.io.Print(sh.fmt.FVal(vp.playbackSpeed));
-            return 0;
-        }
-        if(!float.TryParse(val,out float f)) return sh.io.Error("値が不正です");
-        vp.playbackSpeed=f;
+        cam.targetDisplay=n;
         return 1;
     }
     public static int SubCamParamSkyBox(ComShInterpreter sh,Camera cam,string val){
-        /*
-        cam.clearFlags=CameraClearFlags.Skybox;
         var skybox=cam.gameObject.GetComponent<Skybox>();
+        if(val==null){
+            if(skybox==null || cam.clearFlags!=CameraClearFlags.Skybox || skybox.material==null) return 0;
+            sh.io.Print(skybox.material.name);
+            return 0;
+        }
         if(skybox==null) skybox=cam.gameObject.AddComponent<Skybox>();
         if(skybox==null) return sh.io.Error("失敗しました");
-        Shader sdr=Shader.Find("Skybox/Cubemap");
-        if(sdr==null) return sh.io.Error("シェーダSkybox/Cubemapが見つかりません");
-        skybox.material=new Material(sdr);
-        */
+
+        string[] lr=ParseUtil.LeftAndRight2(val,':');
+        if(lr==null) return sh.io.Error("書式が不正です");
+        string texab=lr[0];
+        string file=lr[1];
+        if(file==""){
+            if(texab==""){
+                UnityEngine.Object.Destroy(skybox);
+                Resources.UnloadUnusedAssets();
+                return 1;
+            }
+            List<string> sa=ObjUtil.ListAssetBundle<Cubemap>(texab,ComShInterpreter.textureDir);
+            if(sa!=null) foreach(var s in sa) sh.io.PrintLn(s);
+            return 0;
+        }
+        int ret=Command.SetupSkyBoxMate(sh,texab,file,out Material mate);
+        if(ret<0) return ret;
+        skybox.material=mate;
         return 1;
+    }
+    public static int SubCamParamSkyBoxProp(ComShInterpreter sh,Camera cam,string val){
+        var skybox=cam.gameObject.GetComponent<Skybox>();
+        if(skybox==null||skybox.material==null) return sh.io.Error("skyboxは設定されていません");
+        if(val==null) return 0;
+        string err=CmdMeshes.SetShaderProps(skybox.material,val);
+        if(err!="") return sh.io.Error(err);
+        return 1;
+    }
+    public static int SubCamParamPostProcess(ComShInterpreter sh,Camera cam,string val){
+        var pea=cam.GetComponents<ComShPostProcess>();
+        if(val==null){
+            if(pea!=null) for(int i=0; i<pea.Length; i++)
+                if(pea[i].mate!=null) sh.io.PrintLn($"{i}{sh.ofs}{pea[i].mate.name}");
+            return 0;
+        }
+        if(val==""){
+            if(pea!=null) for(int i=pea.Length-1; i>=0; i--) GameObject.Destroy(pea[i]);
+            Resources.UnloadUnusedAssets();
+            return 1;
+        }
+        string ab="postprocess",file=val;
+        int idx;
+        if((idx=val.IndexOf(':'))>=0){
+            ab=val.Substring(0,idx); file=val.Substring(idx+1);
+        }
+        string[] lr=ParseUtil.LeftAndRight(file,',');
+        if(lr==null) return sh.io.Error("書式が不正です");
+        file=lr[0]; string mode=lr[1];
+        if(file==""){
+            if(ab==""){
+                if(pea!=null) for(int i=pea.Length-1; i>=0; i--) GameObject.Destroy(pea[i]);
+                Resources.UnloadUnusedAssets();
+                return 1;
+            }
+            List<string> sa=ObjUtil.ListAssetBundle<Material>(ab,ComShInterpreter.scriptFolder+@"asset\");
+            if(sa!=null) foreach(var s in sa) sh.io.PrintLn(s);
+            return 0;
+        }
+        DepthTextureMode dm=DepthTextureMode.None;
+        if(mode!=""){
+            if(mode.Length>=1){
+                if(mode[0]=='1') dm|=DepthTextureMode.Depth;
+                else if(mode[0]!='0') return sh.io.Error("値が不正です");
+            }
+            if(mode.Length>=2){
+                if(mode[1]=='1') dm|=DepthTextureMode.DepthNormals;
+                else if(mode[1]!='0') return sh.io.Error("値が不正です");
+            }
+            if(mode.Length>=3){
+                if(mode[2]=='1') dm|=DepthTextureMode.MotionVectors;
+                else if(mode[2]!='0') return sh.io.Error("値が不正です");
+            }
+            if(mode.Length==0||mode.Length>=4) return sh.io.Error("書式が不正です");
+        }
+        Material mate=ObjUtil.LoadAssetBundle<Material>(ab,file,ComShInterpreter.scriptFolder+@"asset\");
+        if(mate==null){
+            return sh.io.Error("読み込みに失敗しました");
+        }
+        ComShPostProcess pe=cam.gameObject.AddComponent<ComShPostProcess>();
+        if(pe==null) return sh.io.Error("失敗しました");
+        pe.mode=dm;
+        pe.mate=mate;
+        return 1;
+    }
+    public static int SubCamParamPostProcessProp(ComShInterpreter sh,Camera cam,string val){
+        var pea=cam.gameObject.GetComponents<ComShPostProcess>();
+        if(pea==null||pea.Length==0) return sh.io.Error("post processは設定されていません");
+        if(val==null) return 0;
+        var lr=ParseUtil.LeftAndRight2(val,':');
+        if(lr==null) return sh.io.Error("書式が不正です");
+        int n=0;
+        if(lr[0]!=""){
+            if(!int.TryParse(lr[0],out n)||n<0||n>=pea.Length) return sh.io.Error("値が不正です");
+        }
+        string err=CmdMeshes.SetShaderProps(pea[n].mate,lr[1]);
+        if(err!="") return sh.io.Error(err);
+        return 1;
+    }
+    public class ComShPostProcess:MonoBehaviour {
+        public Material mate;
+        public DepthTextureMode mode=DepthTextureMode.None;
+        private DepthTextureMode mode0;
+        private void Start(){
+            Camera cam=GetComponent<Camera>();
+            mode0=cam.depthTextureMode;
+            cam.depthTextureMode|=mode;
+        }
+        private void OnRenderImage(RenderTexture src,RenderTexture dst){
+            Graphics.Blit(src,dst,mate);
+        }
+        private void OnDestroy(){
+            Camera cam=GetComponent<Camera>();
+            if(cam!=null) cam.depthTextureMode=mode0;
+        }
     }
 }
 }

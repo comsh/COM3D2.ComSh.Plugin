@@ -19,6 +19,7 @@ public static class CmdObjects {
         objParamDic.Add("wpos.x",new CmdParam<Transform>(_CmdParamWPosX));
         objParamDic.Add("wpos.y",new CmdParam<Transform>(_CmdParamWPosY));
         objParamDic.Add("wpos.z",new CmdParam<Transform>(_CmdParamWPosZ));
+        objParamDic.Add("wposrot",new CmdParam<Transform>(_CmdParamWPosRot));
         objParamDic.Add("lpos",new CmdParam<Transform>(_CmdParamLPos));
         objParamDic.Add("lpos.x",new CmdParam<Transform>(_CmdParamLPosX));
         objParamDic.Add("lpos.y",new CmdParam<Transform>(_CmdParamLPosY));
@@ -32,6 +33,7 @@ public static class CmdObjects {
         objParamDic.Add("lrot.x",new CmdParam<Transform>(_CmdParamLRotX));
         objParamDic.Add("lrot.y",new CmdParam<Transform>(_CmdParamLRotY));
         objParamDic.Add("lrot.z",new CmdParam<Transform>(_CmdParamLRotZ));
+        objParamDic.Add("lposrot",new CmdParam<Transform>(_CmdParamLPosRot));
         objParamDic.Add("orot",new CmdParam<Transform>(_CmdParamORot));
         objParamDic.Add("scale",new CmdParam<Transform>(_CmdParamScale));
         objParamDic.Add("scale.x",new CmdParam<Transform>(_CmdParamScaleX));
@@ -816,7 +818,7 @@ public static class CmdObjects {
             if(file=="") return sh.io.Error("ファイル名が不正です");
             var tex=par.render.sharedMaterial.GetTexture("_MainTex");
             if(tex!=null){
-                int ret=CmdMeshes.MeshParamPNGSub2(sh,tex,file,p);
+                int ret=CmdMeshes.MeshParamPNGSub2(sh,tex,file);
                 if(ret<0) return -1;
             }
             break;
@@ -2881,36 +2883,46 @@ public static class ObjUtil {
         }catch{}
         return ret;
     }
-    private static string myobjDir=ComShInterpreter.homeDir+@"PhotoModeData\MyObject\";
     public static bool ChkAssetBundle(string fname) {
-        var name=Path.GetFullPath(myobjDir+UTIL.Suffix(fname,".asset_bg"));
-        if(!name.StartsWith(myobjDir)) return false;
-        return File.Exists(name);
-    
+        return ChkAssetBundle(fname,ComShInterpreter.myobjDir);
+    }
+    public static bool ChkAssetBundle(string fname,string basedir) {
+        return ChkAssetBundleSub(fname,basedir)!=null;
+    }
+    private static string ChkAssetBundleSub(string fname,string basedir) {
+        var name=Path.GetFullPath(basedir+UTIL.Suffix(fname,".asset_bg"));
+        if(!name.StartsWith(basedir,Ordinal)) return null;
+        return File.Exists(name)?name:null;
     }
     public static List<string> ListAssetBundle<T>(string bundle) where T : UnityEngine.Object {
-        var fname=Path.GetFullPath(myobjDir+UTIL.Suffix(bundle,".asset_bg"));
-        if(!fname.StartsWith(myobjDir)) return null;
-        if(!File.Exists(fname)) return null;
+        return ListAssetBundle<T>(bundle,ComShInterpreter.myobjDir);
+    }
+    public static List<string> ListAssetBundle<T>(string bundle,string basedir) where T : UnityEngine.Object {
+        var fname=ChkAssetBundleSub(bundle,basedir);
+        if(fname==null) return null;
+        return ListAssetBundle_NoChk<T>(fname);
+    }
+    public static List<string> ListAssetBundle_NoChk<T>(string bundle) where T : UnityEngine.Object {
         List<string> lst=new List<string>();
-        T[] arr;
         AssetBundle ab=null;
         try{
-            ab=AssetBundle.LoadFromFile(fname);
+            ab=AssetBundle.LoadFromFile(bundle);
             if(ab==null) return null;
-            arr=ab.LoadAllAssets<T>();
-            ab.Unload(false); ab=null;
-            if(arr==null) return lst;
-            for(int i=0; i<arr.Length; i++) lst.Add(arr[i].name);
-        }catch{if(ab!=null) ab.Unload(false); return null;}
+            string[] names=ab.GetAllAssetNames();
+            for(int i=0; i<names.Length; i++){
+                T a=ab.LoadAsset<T>(names[i]);
+                if(a!=null) lst.Add(a.name);
+            }
+        }catch{ return null;}
+        finally{ if(ab!=null) ab.Unload(true); }
         return lst;
     }
     public static T LoadAssetBundle<T>(string bundle,string path) where T:UnityEngine.Object {
-        return LoadAssetBundle<T>(bundle,path,myobjDir);
+        return LoadAssetBundle<T>(bundle,path,ComShInterpreter.myobjDir);
     }
     public static T LoadAssetBundle<T>(string bundle,string path,string basedir) where T:UnityEngine.Object {
         var fname=Path.GetFullPath(basedir+UTIL.Suffix(bundle,".asset_bg"));
-        if(!fname.StartsWith(basedir)) return null;
+        if(!fname.StartsWith(basedir,Ordinal)) return null;
         T ret;
         AssetBundle ab=null;
         try{
@@ -2919,9 +2931,11 @@ public static class ObjUtil {
             if(!ab.Contains(path)){ab.Unload(false); return null;}
             ret=ab.LoadAsset<T>(path);
             if(ret==null){ab.Unload(false); return null; }
-            ret=UnityEngine.Object.Instantiate(ret);
+            // CubemapのときはInstantiate()はうまくいかないみたいなので個別処理
+            if(ret.GetType()==typeof(Cubemap)) ret=TextureUtil.CloneCubemap(ret as Cubemap) as T;
+            else ret=UnityEngine.Object.Instantiate<T>(ret);
             ab.Unload(false);
-        }catch{if(ab!=null) ab.Unload(false); return null;}
+        }catch(Exception e){Debug.Log(e.ToString());if(ab!=null) ab.Unload(false); return null;}
         return ret;
     }
     public static int ChgMaterial(Transform tr,int no,string fname,string shader=null){

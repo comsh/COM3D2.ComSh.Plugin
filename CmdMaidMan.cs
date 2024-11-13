@@ -18,11 +18,11 @@ public static class CmdMaidMan {
         maidParamDic.Add("lpos.x",new CmdParam<Maid>(MaidParamLPosX));
         maidParamDic.Add("lpos.y",new CmdParam<Maid>(MaidParamLPosY));
         maidParamDic.Add("lpos.z",new CmdParam<Maid>(MaidParamLPosZ));
-        maidParamDic.Add("opos",new CmdParam<Maid>(MaidParamOPos));
         maidParamDic.Add("lrot",new CmdParam<Maid>(MaidParamLRot));
         maidParamDic.Add("lrot.x",new CmdParam<Maid>(MaidParamLRotX));
         maidParamDic.Add("lrot.y",new CmdParam<Maid>(MaidParamLRotY));
         maidParamDic.Add("lrot.z",new CmdParam<Maid>(MaidParamLRotZ));
+        maidParamDic.Add("lposrot",new CmdParam<Maid>(MaidParamLPosRot));
         maidParamDic.Add("wpos",new CmdParam<Maid>(MaidParamWPos));
         maidParamDic.Add("wpos.x",new CmdParam<Maid>(MaidParamWPosX));
         maidParamDic.Add("wpos.y",new CmdParam<Maid>(MaidParamWPosY));
@@ -31,6 +31,8 @@ public static class CmdMaidMan {
         maidParamDic.Add("wrot.x",new CmdParam<Maid>(MaidParamWRotX));
         maidParamDic.Add("wrot.y",new CmdParam<Maid>(MaidParamWRotY));
         maidParamDic.Add("wrot.z",new CmdParam<Maid>(MaidParamWRotZ));
+        maidParamDic.Add("wposrot",new CmdParam<Maid>(MaidParamWPosRot));
+        maidParamDic.Add("opos",new CmdParam<Maid>(MaidParamOPos));
         maidParamDic.Add("orot",new CmdParam<Maid>(MaidParamORot));
         maidParamDic.Add("scale",new CmdParam<Maid>(MaidParamScale));
         maidParamDic.Add("scale.x",new CmdParam<Maid>(MaidParamScaleX));
@@ -113,7 +115,7 @@ public static class CmdMaidMan {
         "motion","shape","iid","list","motion.time","motion.speed","motion.layer","motion.length",
         "motion.weight","motion.timep","motion.timel","motion.timelp","motion.frame",
         "attach","detach","lookat","ik","cloth","style","shape.verlist",
-        "wpos","wrot","lpos","lrot","opos","orot","lquat","wquat",
+        "wpos","wrot","lpos","lrot","opos","orot","lquat","wquat","wposrot","lposrot",
 
         "position.x","position.y","position.z",
         "pos.x","pos.y","pos.z",
@@ -310,6 +312,9 @@ public static class CmdMaidMan {
     private static int MaidParamLRotZ(ComShInterpreter sh,Maid m,string val){
         return _CmdParamLRotZ(sh,m.transform,val);
     }
+    private static int MaidParamLPosRot(ComShInterpreter sh,Maid m,string val){
+        return _CmdParamLPosRot(sh,m.transform,val);
+    }
     private static int MaidParamORot(ComShInterpreter sh,Maid m,string val){
         return _CmdParamORot(sh,m.transform,val);
     }
@@ -324,6 +329,9 @@ public static class CmdMaidMan {
     }
     private static int MaidParamWRotZ(ComShInterpreter sh,Maid m,string val){
         return _CmdParamWRotZ(sh,m.transform,val);
+    }
+    private static int MaidParamWPosRot(ComShInterpreter sh,Maid m,string val){
+        return _CmdParamWPosRot(sh,m.transform,val);
     }
     private static int MaidParamScale(ComShInterpreter sh,Maid m,string val){
         return _CmdParamScale(sh,m.transform,val);

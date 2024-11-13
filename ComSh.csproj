@@ -69,6 +69,7 @@
   <ItemGroup>
     <Compile Include="AnmCnv.cs" />
     <Compile Include="CmdMeshes.cs" />
+    <Compile Include="Video.cs" />
     <Compile Include="CmdSubCamera.cs" />
     <Compile Include="DataFiles.cs" />
     <Compile Include="StudioMode.cs" />

@@ -112,6 +112,8 @@ public static class Command {
         cmdTbl.Add("myposelist", new Cmd(CmdMyPoseList));
         cmdTbl.Add("dancelist", new Cmd(CmdDanceList));
         cmdTbl.Add("menulist", new Cmd(CmdMenuList));
+        cmdTbl.Add("mytexlist", new Cmd(CmdMyTexList));
+        cmdTbl.Add("cubemaplist", new Cmd(CmdCubemapList));
         cmdTbl.Add("scene", new Cmd(CmdScene));
         cmdTbl.Add("fps",new Cmd(CmdFps));
         cmdTbl.Add("vsync", new Cmd(CmdVSync));
@@ -122,6 +124,7 @@ public static class Command {
         cmdTbl.Add("ceil", new Cmd(CmdCeil));
         cmdTbl.Add("truncate", new Cmd(CmdTruncate));
         cmdTbl.Add("round", new Cmd(CmdRound));
+        cmdTbl.Add("round2", new Cmd(CmdRound2));
         cmdTbl.Add("roundup", new Cmd(CmdRoundUp));
         cmdTbl.Add("perlinnoise", new Cmd(CmdPerlinNoise));
         cmdTbl.Add("pixellights", new Cmd(CmdPixelLights));
@@ -151,7 +154,10 @@ public static class Command {
         cmdTbl.Add("physics", new Cmd(CmdPhysicsParam));
         cmdTbl.Add("findcollider", new Cmd(CmdFindCollider));
         cmdTbl.Add("outputlog", new Cmd(CmdOutputLog));
-
+        cmdTbl.Add("skybox", new Cmd(CmdGlobalSkyBox));
+        cmdTbl.Add("skybox.color", new Cmd(CmdGlobalSkyBoxColor));
+        cmdTbl.Add("skybox.power", new Cmd(CmdGlobalSkyBoxPower));
+        cmdTbl.Add("skybox.rotation", new Cmd(CmdGlobalSkyBoxRotation));
 
         cmdTbl.Add("__res",new Cmd(Cmd__Resource));
         cmdTbl.Add("__files",new Cmd(Cmd__Files));
@@ -427,6 +433,32 @@ public static class Command {
         if(fns==null) return 0;
         int len=ComShInterpreter.myposeDir.Length;
         for(int i=0; i<fns.Length; i++) sh.io.PrintLn(fns[i].Substring(len).Replace("\\","/"));
+        return 0;
+    }
+    private static int CmdMyTexList(ComShInterpreter sh,List<string> args){
+        string path="";
+        if(args.Count==2) path=args[1];
+        var files=new List<string>();
+        string[] fns=Directory.GetFiles(ComShInterpreter.textureDir+path,"*.png",SearchOption.AllDirectories);
+        if(fns==null) return 0;
+        int len=ComShInterpreter.textureDir.Length;
+        for(int i=0; i<fns.Length; i++) sh.io.PrintLn(fns[i].Substring(len).Replace("\\","/"));
+        return 0;
+    }
+    private static int CmdCubemapList(ComShInterpreter sh,List<string> args){
+        string path="";
+        if(args.Count==2) path=args[1];
+        var files=new List<string>();
+        string[] fns=Directory.GetFiles(ComShInterpreter.textureDir+path,"*.asset_bg",SearchOption.AllDirectories);
+        if(fns==null) return 0;
+        int len=ComShInterpreter.textureDir.Length;
+        for(int i=0; i<fns.Length; i++){
+            var cma=ObjUtil.ListAssetBundle_NoChk<Cubemap>(fns[i]);
+            if(cma==null||cma.Count==0) continue;
+            string ab=fns[i].Substring(len).Replace("\\","/");
+            if(ab.EndsWith(".asset_bg")) ab=ab.Substring(0,ab.Length-9);
+            foreach(var cm in cma) sh.io.PrintLn(ab+":"+cm);
+        }
         return 0;
     }
     private static int CmdMenuList(ComShInterpreter sh,List<string> args){
@@ -1015,21 +1047,41 @@ public static class Command {
             if(args.Count==7 && (!int.TryParse(args[6],out prio) || prio<0 || prio>100)) return sh.io.Error("順序の値が不正です");
             var sbo=new ComShInterpreter.SubShOutput();
             var subsh=new ComShInterpreter(new ComShInterpreter.Output(sbo.Output),sh.env,sh.func,sh.ns);
-            var psr=EvalParser(sh,3,true,sh.currentParser.lineno);
-            if(psr==null) return -1;
-            subsh.env[ComShInterpreter.SCRIPT_ERR_ON]="1";
-            subsh.env.args.Clear();
-            subsh.env.args.Add("");
-            subsh.env.args.Add("");
-            long stime=DateTime.UtcNow.Ticks,lasttime=0;
-            var j=bg.AddJob(name,(long)(ms*TimeSpan.TicksPerMillisecond),(long)(life*TimeSpan.TicksPerMillisecond),(long t)=>{
-                long cur=(t-stime)/TimeSpan.TicksPerMillisecond;
-                subsh.env.args[0]=cur.ToString();
-                subsh.env.args[1]=(cur-lasttime).ToString();
-                lasttime=cur;
-                psr.Reset(); subsh.exitq=false;
-                return subsh.InterpretParser(psr);
-            },(int)prio);
+
+            ComShBg.Job j;
+            if(args[3].Length>0 && args[3][0]=='&'){
+                if(!sh.func.TryGetValue(args[3].Substring(1),out ComShInterpreter.ScriptStatus ss)||!ss.isFunc) return sh.io.Error("funcが未定義です");
+                subsh.env[ComShInterpreter.SCRIPT_ERR_ON]="1";
+                subsh.env.args.Clear();
+                subsh.env.args.Add("");
+                subsh.env.args.Add("");
+                subsh.runningScript=ss;
+                long stime=DateTime.UtcNow.Ticks,lasttime=0;
+                j=bg.AddJob(name,(long)(ms*TimeSpan.TicksPerMillisecond),(long)(life*TimeSpan.TicksPerMillisecond),(long t)=>{
+                    long cur=(t-stime)/TimeSpan.TicksPerMillisecond;
+                    subsh.env.args[0]=cur.ToString();
+                    subsh.env.args[1]=(cur-lasttime).ToString();
+                    lasttime=cur;
+                    ss.rewind(); subsh.exitq=false;
+                    return ss.Run(subsh);
+                },(int)prio);
+            }else{
+                var psr=EvalParser(sh,3,true,sh.currentParser.lineno);
+                if(psr==null) return -1;
+                subsh.env[ComShInterpreter.SCRIPT_ERR_ON]="1";
+                subsh.env.args.Clear();
+                subsh.env.args.Add("");
+                subsh.env.args.Add("");
+                long stime=DateTime.UtcNow.Ticks,lasttime=0;
+                j=bg.AddJob(name,(long)(ms*TimeSpan.TicksPerMillisecond),(long)(life*TimeSpan.TicksPerMillisecond),(long t)=>{
+                    long cur=(t-stime)/TimeSpan.TicksPerMillisecond;
+                    subsh.env.args[0]=cur.ToString();
+                    subsh.env.args[1]=(cur-lasttime).ToString();
+                    lasttime=cur;
+                    psr.Reset(); subsh.exitq=false;
+                    return subsh.InterpretParser(psr);
+                },(int)prio);
+            }
             if(j==null) return sh.io.Error("登録に失敗しました");          
             j.sh=subsh;
         }else if(args[1]=="del"){
@@ -1337,16 +1389,18 @@ public static class Command {
         }
         return 0;
     }
-    private static int CmdRound(ComShInterpreter sh,List<string> args){
+    private static int CmdRound(ComShInterpreter sh,List<string> args){ return CmdRoundSub(sh,args,MidpointRounding.AwayFromZero); }
+    private static int CmdRound2(ComShInterpreter sh,List<string> args){ return CmdRoundSub(sh,args,MidpointRounding.ToEven); }
+    private static int CmdRoundSub(ComShInterpreter sh,List<string> args,MidpointRounding mr){
         if(args.Count!=2 && args.Count!=3) return sh.io.Error($"使い方: round 値 [小数部桁数]");
         double v=ParseUtil.ParseDouble(args[1]);
         if(double.IsNaN(v)) return sh.io.Error("数値の指定が不正です");
         if(args.Count==3){
             float n=ParseUtil.ParseFloat(args[2]);
             if(float.IsNaN(n) || n<0 || n>99) return sh.io.Error("桁数の指定が不正です");
-            sh.io.Print(Math.Round(v,(int)n,MidpointRounding.AwayFromZero).ToString($"F{(int)n}"));
+            sh.io.Print(Math.Round(v,(int)n,mr).ToString($"F{(int)n}"));
         }else{
-            sh.io.Print(((long)Math.Round(v,MidpointRounding.AwayFromZero)).ToString());
+            sh.io.Print(((long)Math.Round(v,mr)).ToString());
         }
         return 0;
     }
@@ -2056,6 +2110,21 @@ public static class Command {
         string type=args[3],sub=(args.Count==5)?args[4]:"";
         ReferredVal.GetValue g=null,s=null;
         switch(type){
+        case "wposrot":
+            g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                v1=v0; if(tr==null) return -1;
+                v1=sh.fmt.FPosRot(tr.position,tr.rotation.eulerAngles);
+                return 0;
+            });
+            s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                v1=v0; if(tr==null) return -1;
+                float[] fa=ParseUtil.FloatArr(v0);
+                if(fa==null||fa.Length!=6) return 1;
+                tr.position=new Vector3(fa[0],fa[1],fa[2]);
+                tr.rotation=Quaternion.Euler(fa[3],fa[4],fa[5]);
+                return 0;
+            });
+            break;
         case "wpos":
             if(sub==""){
                 g=new ReferredVal.GetValue((string v0,out string v1)=>{
@@ -2159,6 +2228,21 @@ public static class Command {
                     return 0;
                 });
             }
+            break;
+        case "lposrot":
+            g=new ReferredVal.GetValue((string v0,out string v1)=>{
+                v1=v0; if(tr==null) return -1;
+                v1=sh.fmt.FPosRot(tr.localPosition,tr.localRotation.eulerAngles);
+                return 0;
+            });
+            s=new ReferredVal.GetValue((string v0,out string v1)=>{
+                v1=v0; if(tr==null) return -1;
+                float[] fa=ParseUtil.FloatArr(v0);
+                if(fa==null||fa.Length!=6) return 1;
+                tr.localPosition=new Vector3(fa[0],fa[1],fa[2]);
+                tr.localRotation=Quaternion.Euler(fa[3],fa[4],fa[5]);
+                return 0;
+            });
             break;
         case "lpos":
             if(sub==""){
@@ -2636,6 +2720,96 @@ public static class Command {
         if(srm!="" && int.TryParse(srm,out int ret) && ret>0 ) return ret;
         return 20;
     }
+    private static int CmdGlobalSkyBox(ComShInterpreter sh,List<string> args){
+        const string usage="使い方: skybox テクスチャファイル名";
+        if(args.Count>2) return sh.io.Error(usage);
+        if(args.Count==1){
+            if(RenderSettings.skybox==null) return 0;
+            sh.io.Print(RenderSettings.skybox.name);
+            return 0;
+        }
+        string file=args[1];
+        string[] lr=ParseUtil.LeftAndRight2(file,':');
+        if(lr==null) return sh.io.Error("書式が不正です");
+        string texab=lr[0];
+        file=lr[1];
+        if(file==""){
+            if(texab==""){
+                RenderSettings.skybox=null;
+                DynamicGI.UpdateEnvironment();
+                Resources.UnloadUnusedAssets();
+                return 1;
+            }
+            List<string> sa=ObjUtil.ListAssetBundle<Cubemap>(texab,ComShInterpreter.textureDir);
+            if(sa!=null) foreach(var s in sa) sh.io.PrintLn(s);
+            return 0;
+        }
+        int ret=SetupSkyBoxMate(sh,texab,file,out Material mate);
+        if(ret<0) return ret;
+        RenderSettings.skybox=mate;
+        Cubemap cm=(Cubemap)mate.GetTexture("_Tex");
+        RenderSettings.defaultReflectionResolution=cm.width;
+        RenderSettings.defaultReflectionMode=UnityEngine.Rendering.DefaultReflectionMode.Custom;
+        RenderSettings.customReflection=cm;
+        DynamicGI.UpdateEnvironment();
+        return 1;
+    }
+    public static int SetupSkyBoxMate(ComShInterpreter sh,string ab,string name,out Material mate){
+        mate=ObjUtil.LoadAssetBundle<Material>("skybox","skybox",ComShInterpreter.scriptFolder+@"asset\");
+        if(mate==null) return sh.io.Error("失敗しました");
+        mate.name=name;
+        Cubemap cm;
+        if(ab!=""){
+            cm=ObjUtil.LoadAssetBundle<Cubemap>(ab,name,ComShInterpreter.textureDir);
+            if(cm==null) return sh.io.Error("ファイルが見つかりません");
+        }else{
+            Texture tex0=TextureUtil.ReadTexture(name);
+            if(tex0==null) return sh.io.Error("ファイルが見つかりません");
+            try{ cm=TextureUtil.T2DToCube((Texture2D)tex0,1); }catch{ return sh.io.Error("テクスチャの形式が不正です"); }
+        }
+        var old=mate.GetTexture("_Tex");
+        if(old!=null && CmdMeshes.texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
+        mate.SetTexture("_Tex",cm);
+        CmdMeshes.texiid.Add(cm);
+        return 1;
+    }
+    private static int CmdGlobalSkyBoxColor(ComShInterpreter sh,List<string> args){
+        Material sb=RenderSettings.skybox;
+        if(args.Count==1){
+            if(sb==null) return 0;
+            var c=sb.GetColor("_Tint");
+            sh.io.Print(sh.fmt.RGBA(c));
+            return 0;
+        }else if(args.Count>2) return sh.io.Error("引数が多すぎます");
+        var col=ParseUtil.Rgba(args[1]);
+        if(col==null) return sh.io.Error(ParseUtil.error);
+        sb.SetColor("_Tint",new Color(col[0],col[1],col[2],col[3]));
+        return 1;
+    }
+    private static int CmdGlobalSkyBoxPower(ComShInterpreter sh,List<string> args){
+        Material sb=RenderSettings.skybox;
+        if(args.Count==1){
+            if(sb==null) return 0;
+            float e=sb.GetFloat("_Exposure");
+            sh.io.Print(sh.fmt.FInt(e));
+            return 0;
+        }else if(args.Count>2) return sh.io.Error("引数が多すぎます");
+        if(!float.TryParse(args[1],out float f)||f<0) return sh.io.Error("数値が不正です");
+        sb.SetFloat("_Exposure",f);
+        return 1;
+    }
+    private static int CmdGlobalSkyBoxRotation(ComShInterpreter sh,List<string> args){
+        Material sb=RenderSettings.skybox;
+        if(args.Count==1){
+            if(sb==null) return 0;
+            float e=sb.GetFloat("_Rotation");
+            sh.io.Print(sh.fmt.FInt(e));
+            return 0;
+        }else if(args.Count>2) return sh.io.Error("引数が多すぎます");
+        if(!float.TryParse(args[1],out float f)) return sh.io.Error("数値が不正です");
+        sb.SetFloat("_Rotation",f);
+        return 1;
+    }
 
     public delegate int CmdParam<T>(ComShInterpreter sh,T m,string val);
     public static int currentArgNo=0;
@@ -2734,6 +2908,22 @@ public static class Command {
         float v=ParseUtil.ParseFloat(val);
         if(float.IsNaN(v)) return sh.io.Error("数値の指定が不正です");
         Vector3 pos=tr.localPosition; pos.z=v; tr.localPosition=pos;
+        return 1;
+    }
+    public static int _CmdParamLPosRot(ComShInterpreter sh,Transform tr,string val){
+        if(val==null){ sh.io.Print(sh.fmt.FPosRot(tr.localPosition,tr.localRotation.eulerAngles)); return 0; }
+        float[] fa=ParseUtil.FloatArr(val);
+        if(fa==null||fa.Length!=6) return sh.io.Error("書式が不正です");
+        tr.localPosition=new Vector3(fa[0],fa[1],fa[2]);
+        tr.localRotation=Quaternion.Euler(fa[3],fa[4],fa[5]);
+        return 1;
+    }
+    public static int _CmdParamWPosRot(ComShInterpreter sh,Transform tr,string val){
+        if(val==null){ sh.io.PrintJoin(sh.fmt.FPosRot(tr.position,tr.rotation.eulerAngles)); return 0; }
+        float[] fa=ParseUtil.FloatArr(val);
+        if(fa==null||fa.Length!=6) return sh.io.Error("書式が不正です");
+        tr.position=new Vector3(fa[0],fa[1],fa[2]);
+        tr.rotation=Quaternion.Euler(fa[3],fa[4],fa[5]);
         return 1;
     }
     public static int _CmdParamWRot(ComShInterpreter sh,Transform tr,string val){
@@ -3017,9 +3207,16 @@ public static class UTIL {
         return pftr;
     }
     public static Regex dosdev=new Regex(@"^(?:AUX|CON|NUL|PRN|CLOCK\$|COM\d|LPT\d)(?:\..*)?$",RegexOptions.Compiled|RegexOptions.IgnoreCase);
+    public static string GetFullPath(string fname,string path){
+        if(CheckFileName(fname)<0) return "";
+        string full=Path.GetFullPath(path+fname);
+        string dir=Path.GetDirectoryName(full);
+        if(dir.Length<path.Length-1) return "";
+        return full;
+    }
     public static int CheckFileName(string fname){
         if(fname.IndexOfAny(Path.GetInvalidFileNameChars())>=0) return -1;
-        if(dosdev.Match(fname).Success) return -1;
+        if(dosdev.Match(Path.GetFileName(fname)).Success) return -1;
         return 0;
     }
     public static byte[] ReadAll(string fname){

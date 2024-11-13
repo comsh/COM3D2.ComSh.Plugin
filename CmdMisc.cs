@@ -534,37 +534,71 @@ public static class CmdMisc {
         }
         int ret=0;
         for(int i=0; i<(args.Count-2)/2; i++) if((ret=CmdParamProjector(sh,proj,args[2+i*2],args[2+i*2+1]))<=0) return ret;
-        if((args.Count&1)>0) return CmdParamProjector(sh,proj,args[args.Count-1],"");
+        if((args.Count&1)>0) return CmdParamProjector(sh,proj,args[args.Count-1],null);
         return 0;
     }
     private static int CmdParamProjector(ComShInterpreter sh,Projector proj,string cmd,string val){
-        if(val=="") return 0;
         if(cmd=="range"){
+            if(val==null){
+                sh.io.PrintJoin(sh.fmt.FXY(proj.nearClipPlane,proj.farClipPlane));
+                return 0;
+            }
             float[] fa=ParseUtil.FloatArr(val);
             if(fa==null||fa.Length!=2) return sh.io.Error("数値が不正です");
             proj.nearClipPlane=fa[0];
             proj.farClipPlane=fa[1];
         }else if(cmd=="fov"){
+            if(val==null){
+                sh.io.Print(sh.fmt.FInt(proj.orthographic?0:proj.fieldOfView));
+                return 0;
+            }
             if(!float.TryParse(val,out float f)||f<=0||f>=180) return sh.io.Error("視野角は1～179度で指定してください");
             proj.fieldOfView=f;
             proj.orthographic=false;
         }else if(cmd=="size"){
+            if(val==null){
+                sh.io.Print(sh.fmt.FInt(proj.orthographic?proj.orthographicSize:0));
+                return 0;
+            }
             if(!float.TryParse(val,out float f)||f<=0) return sh.io.Error("数値が不正です");
             proj.orthographic=true;
             proj.orthographicSize=f*0.5f;
         }else if(cmd=="aspect"){
+            if(val==null){
+                sh.io.Print(sh.fmt.F0to1(proj.aspectRatio));
+                return 0;
+            }
             if(!float.TryParse(val,out float f)||f<0) return sh.io.Error("数値が不正です");
             proj.aspectRatio=f;
         }else if(cmd=="mask"){
+            if(val==null){
+                sh.io.Print(proj.ignoreLayers.ToString("X8"));
+                return 0;
+            }
             if(!int.TryParse(val,System.Globalization.NumberStyles.HexNumber,null,out int bits)) return sh.io.Error("数値が不正です");
             proj.ignoreLayers=~bits;
         }else if(cmd=="texture"){
+            if(val==null){
+                CmdMeshes.PrintTextureInfo(sh,proj.material,"_ShadowTex");
+                return 0;
+            }
+            Video.KillVideo(proj.transform);
             string msg=CmdMeshes.SetTexProp(proj.material,"_ShadowTex",val,null,0);
             if(msg!="") return sh.io.Error(msg);
         }else if(cmd=="falloff"){
+            if(val==null){
+                CmdMeshes.PrintTextureInfo(sh,proj.material,"_FalloffTex");
+                return 0;
+            }
             string msg=CmdMeshes.SetTexProp(proj.material,"_FalloffTex",val,null,0);
             if(msg!="") return sh.io.Error(msg);
         }else if(cmd=="blend"){
+            if(val==null){
+                string srctxt=GetBlendFactorTxt(proj.material.GetInt("_SrcBlend"));
+                string dsttxt=GetBlendFactorTxt(proj.material.GetInt("_DstBlend"));
+                sh.io.PrintJoin(",",srctxt,dsttxt);
+                return 0;
+            }
             string[] sa=val.Split(ParseUtil.comma);
             if(sa.Length!=2) return sh.io.Error("書式が不正です");
             int src=GetBlendFactor(sa[0]),dst=GetBlendFactor(sa[1]);
@@ -572,6 +606,12 @@ public static class CmdMisc {
             proj.material.SetInt("_SrcBlend",src);
             proj.material.SetInt("_DstBlend",dst);
         }else if(cmd=="uvwh"){
+            if(val==null){
+                var offset=proj.material.GetTextureOffset("_ShadowTex");
+                var scale=proj.material.GetTextureScale("_ShadowTex");
+                sh.io.PrintJoin(",",sh.fmt.FXY(offset),sh.fmt.FXY(scale));
+                return 0;
+            }
             float[] xywh={0,0,0,0};
             int n=ParseUtil.XyzSub(val,xywh);
             if(n<0||(n!=2&&n!=4)) return sh.io.Error("書式が不正です");
@@ -580,29 +620,107 @@ public static class CmdMisc {
             if(n==2) return 1;
             mate.SetTextureScale("_ShadowTex",new Vector2(xywh[2],xywh[3]));
         }else if(cmd=="rq"){
+            if(val==null){
+                sh.io.Print(proj.material.renderQueue.ToString());
+                return 0;
+            }
             if(!int.TryParse(val,out int n)||n<0) return sh.io.Error("数値が不正です");
             proj.material.renderQueue=n;
         }else if(cmd=="color"){
+            if(val==null){
+                sh.io.Print(sh.fmt.RGBA(proj.material.GetColor("_Color")));
+                return 0;
+            }
             float[] fa=ParseUtil.RgbaLenient(val);
             if(fa==null) return sh.io.Error(ParseUtil.error);
-            proj.material.SetFloatArray("_Color",fa);
+            proj.material.SetColor("_Color",new Color(fa[0],fa[1],fa[2],fa[3]));
+        }else if(cmd=="bgcolor"){
+            if(val==null){
+                sh.io.Print(sh.fmt.RGBA(proj.material.GetColor("_BgColor")));
+                return 0;
+            }
+            float[] fa=ParseUtil.Rgba(val);
+            if(fa==null) return sh.io.Error(ParseUtil.error);
+            proj.material.SetColor("_BgColor",new Color(fa[0],fa[1],fa[2],fa[3]));
+        }else if(cmd=="video"){
+            if(val==null){ sh.io.Print(Video.CurrentVideoName(proj.transform)); return 0;}
+            if(val==""){ Video.KillVideo(proj.transform); return 1; }
+            string[] sa=val.Split(ParseUtil.comma);
+            if(sa.Length<1||sa.Length>4) return sh.io.Error("書式が不正です");
+            string fname=Video.VideoFileCheck(sa[0]);
+            if(fname==null) return sh.io.Error("ファイルが見つかりません");
+            int loopq=0;
+            int w=1024,h=1024;
+            if(sa.Length>=2){
+                if(!int.TryParse(sa[1],out w)||w<0) return sh.io.Error("数値が不正です");
+                h=w;
+            }
+            if(sa.Length>=3){
+                if(!int.TryParse(sa[2],out h)||h<0 ) return sh.io.Error("数値が不正です");
+            }
+            if(sa.Length==4){
+                if(!int.TryParse(sa[3],out loopq)||(loopq!=0&&loopq!=1)) return sh.io.Error("数値が不正です");
+            }
+            int ret=Video.VideoLoad(proj.transform,proj.material,"_ShadowTex",fname,w,h,loopq);
+            if(ret<0) return sh.io.Error("失敗しました");
+        }else if(cmd=="video.loop"){
+            return Video.VideoLoop(sh,proj.transform,val);
+        }else if(cmd=="video.speed"){
+            return Video.VideoSpeed(sh,proj.transform,val);
+        }else if(cmd=="video.time"){
+            return Video.VideoTime(sh,proj.transform,val);
+        }else if(cmd=="video.timep"){
+            return Video.VideoTimep(sh,proj.transform,val);
+        }else if(cmd=="video.length"){
+            return Video.VideoLength(sh,proj.transform,val);
+        }else if(cmd=="video.mute"){
+            return Video.VideoMute(sh,proj.transform,val);
+        }else if(cmd=="video.a3d"){
+            return Video.VideoAudio3D(sh,proj.transform,val);
+        }else if(cmd=="video.pause"){
+            return Video.VideoPause(sh,proj.transform,val);
         }else return sh.io.Error("パラメータが不正です");
         return 1;
     }
     private static int GetBlendFactor(string name){
         switch(name.ToLower()){
+        case "1":
         case "one": return (int)UnityEngine.Rendering.BlendMode.One;
+        case "0":
         case "zero": return (int)UnityEngine.Rendering.BlendMode.Zero;
+        case "sc":
         case "srccolor": return (int)UnityEngine.Rendering.BlendMode.SrcColor;
+        case "dc":
         case "dstcolor": return (int)UnityEngine.Rendering.BlendMode.DstColor;
+        case "sa":
         case "srcalpha": return (int)UnityEngine.Rendering.BlendMode.SrcAlpha;
+        case "da":
         case "dstalpha": return (int)UnityEngine.Rendering.BlendMode.DstAlpha;
+        case "1-sc":
         case "oneminussrccolor": return (int)UnityEngine.Rendering.BlendMode.OneMinusSrcColor;
+        case "1-dc":
         case "oneminusdstcolor": return (int)UnityEngine.Rendering.BlendMode.OneMinusDstColor;
+        case "1-sa":
         case "oneminussrcalpha": return (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha;
+        case "1-da":
         case "oneminusdstalpha": return (int)UnityEngine.Rendering.BlendMode.OneMinusDstAlpha;
         }
         return -1;
+    }
+    private static string GetBlendFactorTxt(int mode){
+        switch((UnityEngine.Rendering.BlendMode)mode){
+        case UnityEngine.Rendering.BlendMode.Zero: return "0";
+        case UnityEngine.Rendering.BlendMode.One: return "1";
+        case UnityEngine.Rendering.BlendMode.SrcColor: return "sc";
+        case UnityEngine.Rendering.BlendMode.DstColor: return "dc";
+        case UnityEngine.Rendering.BlendMode.SrcAlpha: return "sa";
+        case UnityEngine.Rendering.BlendMode.DstAlpha: return "da";
+        case UnityEngine.Rendering.BlendMode.OneMinusSrcColor: return "1-sc";
+        case UnityEngine.Rendering.BlendMode.OneMinusDstColor: return "1-dc";
+        case UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha: return "1-sa";
+        case UnityEngine.Rendering.BlendMode.OneMinusDstAlpha: return "1-da";
+        }
+        return "";
     }
     private static int CmdReflectionProbe(ComShInterpreter sh,List<string> args){
         ReflectionProbe rp;
@@ -635,11 +753,11 @@ public static class CmdMisc {
             rp.size=new Vector3(10,10,10);
             rp.shadowDistance=10f;
             rp.intensity=1;
+            rp.importance=0;
             rp.boxProjection=true;
-            rp.clearFlags=UnityEngine.Rendering.ReflectionProbeClearFlags.SolidColor;
+            rp.clearFlags=UnityEngine.Rendering.ReflectionProbeClearFlags.Skybox;
             rp.backgroundColor=Color.black;
             rp.cullingMask=-1;
-            RenderSettings.defaultReflectionMode=UnityEngine.Rendering.DefaultReflectionMode.Custom;
             return 0;
         }else if(args[1]=="del"){
             for(int i=2; i<args.Count; i++) if(ObjUtil.DeleteObj<ReflectionProbe>(sh,args[i])<0) return -1;
@@ -655,12 +773,24 @@ public static class CmdMisc {
         }
         int ret=0;
         for(int i=0; i<(args.Count-2)/2; i++) if((ret=CmdParamReflectionProbe(sh,rp,args[2+i*2],args[2+i*2+1]))<=0) return ret;
-        if((args.Count&1)>0) return CmdParamReflectionProbe(sh,rp,args[args.Count-1],"");
+        if((args.Count&1)>0) return CmdParamReflectionProbe(sh,rp,args[args.Count-1],null);
         return 0;
     }
     private static int CmdParamReflectionProbe(ComShInterpreter sh,ReflectionProbe rp,string cmd,string val){
         if(val=="") return 0;
         if(cmd=="update"){
+            if(val==null){
+                switch(rp.refreshMode){
+                case UnityEngine.Rendering.ReflectionProbeRefreshMode.OnAwake:
+                case UnityEngine.Rendering.ReflectionProbeRefreshMode.ViaScripting:
+                    sh.io.Print("0");
+                    return 0;
+                case UnityEngine.Rendering.ReflectionProbeRefreshMode.EveryFrame:
+                    sh.io.Print((rp.timeSlicingMode==UnityEngine.Rendering.ReflectionProbeTimeSlicingMode.AllFacesAtOnce)?"1":"2");
+                    return 0;
+                }
+                return 0;
+            }
             if(!float.TryParse(val,out float f)||f<0) return sh.io.Error("数値が不正です");
             if(f==0){
                 rp.refreshMode=UnityEngine.Rendering.ReflectionProbeRefreshMode.OnAwake;
@@ -674,42 +804,94 @@ public static class CmdMisc {
                 rp.refreshMode=UnityEngine.Rendering.ReflectionProbeRefreshMode.ViaScripting;
                 rp.RenderProbe();
             }
+        }else if(cmd=="priority"){
+            if(val==null){
+                sh.io.Print(rp.importance.ToString());
+                return 0;
+            }
+            if(!int.TryParse(val,out int n)||n<0) return sh.io.Error("数値が不正です");
+            rp.importance=n;
         }else if(cmd=="range"){
+            if(val==null){
+                sh.io.Print(sh.fmt.FXY(rp.nearClipPlane,rp.farClipPlane));
+                return 0;
+            }
             float[] fa=ParseUtil.Xy(val);
             if(fa==null) return sh.io.Error(ParseUtil.error);
             rp.nearClipPlane=fa[0];
             rp.farClipPlane=fa[1];
         }else if(cmd=="power"){
+            if(val==null){
+                sh.io.Print(sh.fmt.FInt(rp.intensity));
+                return 0;
+            }
             if(!float.TryParse(val,out float f)||f<0) return sh.io.Error("数値が不正です");
             rp.intensity=f;
         }else if(cmd=="shadowrange"){
+            if(val==null){
+                sh.io.Print(sh.fmt.FInt(rp.shadowDistance));
+                return 0;
+            }
             if(!float.TryParse(val,out float f)||f<0) return sh.io.Error("数値が不正です");
             rp.shadowDistance=f;
         }else if(cmd=="position"){
+            if(val==null){
+                sh.io.Print(sh.fmt.FPos(rp.center));
+                return 0;
+            }
             float[] fa=ParseUtil.Xyz(val);
             if(fa==null) return sh.io.Error(ParseUtil.error);
             rp.center=new Vector3(fa[0],fa[1],fa[2]);
         }else if(cmd=="size"){
+            if(val==null){
+                sh.io.Print(sh.fmt.FPos(rp.size));
+                return 0;
+            }
             float[] fa=ParseUtil.Xyz(val);
             if(fa==null) return sh.io.Error(ParseUtil.error);
             rp.size=new Vector3(fa[0],fa[1],fa[2]);
         }else if(cmd=="clrflg"){
-            if(!int.TryParse(val,out int n)||n<0||n>3) return sh.io.Error("数値が不正です");
+            if(val==null){
+                sh.io.Print(rp.clearFlags==UnityEngine.Rendering.ReflectionProbeClearFlags.SolidColor?"0":"1");
+                return 0;
+            }
+            if(!int.TryParse(val,out int n)||n<0||n>1) return sh.io.Error("数値が不正です");
             if(n==0) rp.clearFlags=UnityEngine.Rendering.ReflectionProbeClearFlags.SolidColor;
             else if(n==1) rp.clearFlags=UnityEngine.Rendering.ReflectionProbeClearFlags.Skybox;
         }else if(cmd=="bgcolor"){
+            if(val==null){
+                sh.io.Print(sh.fmt.RGBA(rp.backgroundColor));
+                return 0;
+            }
             float[] fa=ParseUtil.RgbaLenient(val);
             if(fa==null) return sh.io.Error(ParseUtil.error);
             rp.backgroundColor=new Color(fa[0],fa[1],fa[2],fa[3]);
         }else if(cmd=="mask"){
+            if(val==null){
+                sh.io.Print(rp.cullingMask.ToString("X8"));
+                return 0;
+            }
             if(!int.TryParse(val,System.Globalization.NumberStyles.HexNumber,null,out int bits))
                 return sh.io.Error("数値が不正です");
             rp.cullingMask=bits;
         }else if(cmd=="box"){
+            if(val==null){
+                sh.io.Print(rp.boxProjection?"1":"0");
+                return 0;
+            }
             int onoff=ParseUtil.OnOff(val);
             if(onoff<0) return sh.io.Error(ParseUtil.error);
             rp.boxProjection=(onoff==1);
-        }else return sh.io.Error("パラメータが不正です");
+        } else if(cmd=="png"){ // 書いただけ。今のとこ機能しない
+            if(val==null||val=="") return 0;
+            string file="";
+            if(val[0]=='*'){
+                var tf=DataFiles.CreateTempFile(val.Substring(1),"");
+                file=tf.filename;
+            }else file=UTIL.GetFullPath(UTIL.Suffix(val,".png"),ComShInterpreter.textureDir);
+            if(file=="") return sh.io.Error("ファイル名が不正です");
+            return CmdMeshes.MeshParamPNGSub2(sh,rp.texture,file);
+        } else return sh.io.Error("パラメータが不正です");
         return 1;
     }
 }

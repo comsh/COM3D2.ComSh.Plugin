@@ -18,6 +18,7 @@ public static class CmdLights {
         lightParamDic.Add("wrot.x",new CmdParam<Transform>(_CmdParamWRotX));
         lightParamDic.Add("wrot.y",new CmdParam<Transform>(_CmdParamWRotY));
         lightParamDic.Add("wrot.z",new CmdParam<Transform>(_CmdParamWRotZ));
+        lightParamDic.Add("wposrot",new CmdParam<Transform>(_CmdParamWPosRot));
         lightParamDic.Add("lpos",new CmdParam<Transform>(_CmdParamLPos));
         lightParamDic.Add("lpos.x",new CmdParam<Transform>(_CmdParamLPosX));
         lightParamDic.Add("lpos.y",new CmdParam<Transform>(_CmdParamLPosY));
@@ -26,6 +27,7 @@ public static class CmdLights {
         lightParamDic.Add("lrot.x",new CmdParam<Transform>(_CmdParamLRotX));
         lightParamDic.Add("lrot.y",new CmdParam<Transform>(_CmdParamLRotY));
         lightParamDic.Add("lrot.z",new CmdParam<Transform>(_CmdParamLRotZ));
+        lightParamDic.Add("lposrot",new CmdParam<Transform>(_CmdParamLPosRot));
         lightParamDic.Add("opos",new CmdParam<Transform>(_CmdParamOPos));
         lightParamDic.Add("orot",new CmdParam<Transform>(_CmdParamORot));
         lightParamDic.Add("power",new CmdParam<Transform>(LightParamPower));
@@ -139,11 +141,12 @@ public static class CmdLights {
             sh.io.PrintLn2("mode:",s);
             if(s=="color")
                 sh.io.PrintLn2("color:",sh.fmt.RGB(RenderSettings.ambientLight));
-            if(s=="gradient"){
+            else if(s=="gradient"){
                 sh.io.PrintLn2("color-up:",sh.fmt.RGB(RenderSettings.ambientSkyColor));
                 sh.io.PrintLn2("color-side:",sh.fmt.RGB(RenderSettings.ambientEquatorColor));
                 sh.io.PrintLn2("color-down:",sh.fmt.RGB(RenderSettings.ambientGroundColor));
-            }
+            }else if(s=="skybox")
+                sh.io.Print(sh.fmt.FXY(RenderSettings.ambientIntensity,RenderSettings.reflectionIntensity));
             return 0;
         }
         int ret,cnt=args.Count;
@@ -156,23 +159,27 @@ public static class CmdLights {
     private static int CmdParamEnvLight(ComShInterpreter sh,string cmd,string val){
         if(cmd=="color"){
             if(val==null){
-                sh.io.PrintLn(sh.fmt.RGB(RenderSettings.ambientLight));
+                if(RenderSettings.ambientMode==UnityEngine.Rendering.AmbientMode.Flat)
+                    sh.io.PrintLn(sh.fmt.RGB(RenderSettings.ambientLight));
                 return 0;
             }
             float[] c=ParseUtil.Rgb(val);
             if(c==null) return sh.io.Error(ParseUtil.error);
+            var old=RenderSettings.ambientMode;
             RenderSettings.ambientMode=(UnityEngine.Rendering.AmbientMode)AmbMode(cmd);
             RenderSettings.ambientLight=new Color(c[0],c[1],c[2]);
+            RenderSettings.ambientIntensity=1;
+            if(old==UnityEngine.Rendering.AmbientMode.Skybox) DynamicGI.UpdateEnvironment();
             return 1;
         }else if(cmd=="gradient"){
             if(val==null){
-                sh.io.PrintJoinLn(":",
-                    sh.fmt.RGB(RenderSettings.ambientSkyColor),
-                    sh.fmt.RGB(RenderSettings.ambientEquatorColor),
-                    sh.fmt.RGB(RenderSettings.ambientGroundColor)
-                );
-                string s=AmbMode(RenderSettings.ambientMode);
-                if(s!=null) sh.io.PrintLn(s);
+                if(RenderSettings.ambientMode==UnityEngine.Rendering.AmbientMode.Trilight){
+                    sh.io.PrintJoinLn(":",
+                        sh.fmt.RGB(RenderSettings.ambientSkyColor),
+                        sh.fmt.RGB(RenderSettings.ambientEquatorColor),
+                        sh.fmt.RGB(RenderSettings.ambientGroundColor)
+                    );
+                }
                 return 0;
             }
             string[] sa=val.Split(ParseUtil.colon);
@@ -183,10 +190,27 @@ public static class CmdLights {
             if(csd==null) return sh.io.Error(ParseUtil.error);
             float[] cdn=ParseUtil.Rgb(sa[2]);
             if(cdn==null) return sh.io.Error(ParseUtil.error);
+            var old=RenderSettings.ambientMode;
             RenderSettings.ambientMode=(UnityEngine.Rendering.AmbientMode)AmbMode(cmd);
             RenderSettings.ambientSkyColor=new Color(cup[0],cup[1],cup[2]);
             RenderSettings.ambientEquatorColor=new Color(csd[0],csd[1],csd[2]);
             RenderSettings.ambientGroundColor=new Color(cdn[0],cdn[1],cdn[2]);
+            RenderSettings.ambientIntensity=1;
+            if(old==UnityEngine.Rendering.AmbientMode.Skybox) DynamicGI.UpdateEnvironment();
+            return 1;
+        }else if(cmd=="skybox"){
+            if(val==null){
+                if(RenderSettings.ambientMode==UnityEngine.Rendering.AmbientMode.Skybox)
+                    sh.io.Print( sh.fmt.FXY(RenderSettings.ambientIntensity,RenderSettings.reflectionIntensity) );
+                return 0;
+            }
+            float[] fa=ParseUtil.FloatArr(val);
+            if(fa==null||(fa.Length!=1&&fa.Length!=2)) return sh.io.Error("書式が不正です");
+            if(fa[0]<0||(fa.Length==2&&fa[1]<0)) return sh.io.Error("数値が不正です");
+            RenderSettings.ambientMode=(UnityEngine.Rendering.AmbientMode)AmbMode(cmd);
+            RenderSettings.ambientIntensity=fa[0];
+            if(fa.Length==2) RenderSettings.reflectionIntensity=fa[1];
+            DynamicGI.UpdateEnvironment();
             return 1;
         }else return sh.io.Error("パラメータが不正です");
     }

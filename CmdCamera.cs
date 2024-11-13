@@ -37,14 +37,11 @@ public static class CmdCamera {
         cameraParamDic.Add("clrflg",new CmdParam<CameraMain>(CameraParamClrFlg));
         cameraParamDic.Add("bgcolor",new CmdParam<CameraMain>(CameraParamBgColor));
         cameraParamDic.Add("flare",new CmdParam<CameraMain>(CameraParamFlare));
-        cameraParamDic.Add("video",new CmdParam<CameraMain>(CameraParamVideo));
-        cameraParamDic.Add("video.far",new CmdParam<CameraMain>(CameraParamVideoFar));
-        cameraParamDic.Add("video.near",new CmdParam<CameraMain>(CameraParamVideoNear));
-        cameraParamDic.Add("video.fit",new CmdParam<CameraMain>(CameraParamVideoFit));
-        cameraParamDic.Add("video.alpha",new CmdParam<CameraMain>(CameraParamVideoAlpha));
-        cameraParamDic.Add("video.time",new CmdParam<CameraMain>(CameraParamVideoTime));
-        cameraParamDic.Add("video.speed",new CmdParam<CameraMain>(CameraParamVideoSpeed));
-        //cameraParamDic.Add("skybox",new CmdParam<CameraMain>(CameraParamSkyBox));
+        cameraParamDic.Add("skybox",new CmdParam<CameraMain>(CameraParamSkyBox));
+        cameraParamDic.Add("postprocess",new CmdParam<CameraMain>(CameraParamPostProcess));
+        cameraParamDic.Add("postprocess.prop",new CmdParam<CameraMain>(CameraParamPostProcessProp));
+        cameraParamDic.Add("bloom",new CmdParam<CameraMain>(CameraParamBloom));
+        cameraParamDic.Add("display",new CmdParam<CameraMain>(CameraParamDisplay));
 
         CmdParamPosRotCp(cameraParamDic,"pos","position");
         CmdParamPosRotCp(cameraParamDic,"rot","rotation");
@@ -181,32 +178,35 @@ public static class CmdCamera {
         else return sh.io.Error("onかoffを指定してください");
         return 1;
     }
-    private static int CameraParamVideo(ComShInterpreter sh,CameraMain mc,string val){
-        return CmdSubCamera.SubCamParamVideoFar(sh,mc.camera,val);
-    }
-    private static int CameraParamVideoCommon(ComShInterpreter sh,CameraMain mc,string val,bool nearq){
-        return CmdSubCamera.SubCamParamVideoCommon(sh,mc.camera,val,nearq);
-    }
-    private static int CameraParamVideoFar(ComShInterpreter sh,CameraMain mc,string val){
-        return CmdSubCamera.SubCamParamVideoFar(sh,mc.camera,val);
-    }
-    private static int CameraParamVideoNear(ComShInterpreter sh,CameraMain mc,string val){
-        return CmdSubCamera.SubCamParamVideoNear(sh,mc.camera,val);
-    }
-    private static int CameraParamVideoFit(ComShInterpreter sh,CameraMain mc,string val){
-        return CmdSubCamera.SubCamParamVideoFit(sh,mc.camera,val);
-    }
-    private static int CameraParamVideoAlpha(ComShInterpreter sh,CameraMain mc,string val){
-        return CmdSubCamera.SubCamParamVideoAlpha(sh,mc.camera,val);
-    }
-    private static int CameraParamVideoTime(ComShInterpreter sh,CameraMain mc,string val){
-        return CmdSubCamera.SubCamParamVideoTime(sh,mc.camera,val);
-    }
-    private static int CameraParamVideoSpeed(ComShInterpreter sh,CameraMain mc,string val){
-        return CmdSubCamera.SubCamParamVideoSpeed(sh,mc.camera,val);
-    }
     private static int CameraParamSkyBox(ComShInterpreter sh,CameraMain mc,string val){
         return CmdSubCamera.SubCamParamSkyBox(sh,mc.camera,val);
+    }
+    private static int CameraParamPostProcess(ComShInterpreter sh,CameraMain mc,string val){
+        return CmdSubCamera.SubCamParamPostProcess(sh,mc.camera,val);
+    }
+    private static int CameraParamPostProcessProp(ComShInterpreter sh,CameraMain mc,string val){
+        return CmdSubCamera.SubCamParamPostProcessProp(sh,mc.camera,val);
+    }
+    private static int CameraParamBloom(ComShInterpreter sh,CameraMain mc,string val){
+        var blm=mc.GetComponent<Bloom>();
+        if(blm==null) return 0;
+        if(val==null){
+            sh.io.Print(sh.fmt.FVal(GameMain.Instance.CMSystem.BloomValue/100));
+            return 0;
+        }
+        if(!float.TryParse(val,out float f)||f<0||f>1) return sh.io.Error("数値が不正です");
+        GameMain.Instance.CMSystem.BloomValue=(int)(f*100);
+        return 1;
+    }
+    private static int CameraParamDisplay(ComShInterpreter sh,CameraMain mc,string val){
+        if(val==null){
+            sh.io.Print(mc.camera.targetDisplay.ToString());
+            return 0;
+        }
+        if(!int.TryParse(val,out int n)||n<0||n>=Display.displays.Length) return sh.io.Error("モニタ番号が不正です");
+        Display.displays[n].Activate();
+        mc.camera.targetDisplay=n;
+        return 1;
     }
     private static int CameraParamRot(ComShInterpreter sh,CameraMain mc,string val){
         Transform tr=mc.transform;

@@ -42,8 +42,12 @@ public static class CmdMeshes {
         meshParamDic.Add("texcolmat.hsv",new CmdParam<SingleMesh>(MeshParamTexColorMatrixHsv));
         meshParamDic.Add("video",new CmdParam<SingleMesh>(MeshParamVideo));
         meshParamDic.Add("video.loop",new CmdParam<SingleMesh>(MeshParamVideoLoop));
-        meshParamDic.Add("video.fit",new CmdParam<SingleMesh>(MeshParamVideoFit));
+        meshParamDic.Add("video.pause",new CmdParam<SingleMesh>(MeshParamVideoPause));
+        meshParamDic.Add("video.mute",new CmdParam<SingleMesh>(MeshParamVideoMute));
+        meshParamDic.Add("video.a3d",new CmdParam<SingleMesh>(MeshParamAudio3D));
         meshParamDic.Add("video.time",new CmdParam<SingleMesh>(MeshParamVideoTime));
+        meshParamDic.Add("video.timep",new CmdParam<SingleMesh>(MeshParamVideoTimep));
+        meshParamDic.Add("video.length",new CmdParam<SingleMesh>(MeshParamVideoLength));
         meshParamDic.Add("video.speed",new CmdParam<SingleMesh>(MeshParamVideoSpeed));
     }
     private static Dictionary<string,CmdParam<SingleMesh>> meshParamDic=new Dictionary<string,CmdParam<SingleMesh>>();
@@ -208,8 +212,7 @@ public static class CmdMeshes {
         }
         return emptyva;
     }
-    private static T[] hashset2arr<T>(HashSet<T> hs){var ret=new T[hs.Count]; hs.CopyTo(ret,0); return ret;
-    }
+    private static T[] hashset2arr<T>(HashSet<T> hs){ var ret=new T[hs.Count]; hs.CopyTo(ret,0); return ret; }
 
     private static Vector2[] empty_uv=new Vector2[0];
     private static int MeshParamVerLoop(ComShInterpreter sh,SingleMesh sm,string val){
@@ -445,27 +448,32 @@ public static class CmdMeshes {
         "_UVSec","_Mode","_SrcBlend","_DstBlend","_TintColor","_Step",
         "_Brightness","_Direction","_ScanTiling","_ScanSpeed","_GlowTiling","_GlowSpeed","GlitchSpeed","_GlitchIntensity", "_FlickerSpeed","_Fold"
     };
+    public static void PrintShaderProps(ComShInterpreter sh,Material mate,string[] def=null){
+        string[] pns=def;
+        if(pns==null) pns=propnames;
+        for(int i=0; i<pns.Length; i++){
+            string prop=pns[i];
+            if(!mate.HasProperty(prop)) continue;
+
+            var c=mate.GetColor(prop);
+            var v=mate.GetVector(prop);
+            if(prop.EndsWith("Color",StringComparison.Ordinal)){
+                var col=mate.GetColor(prop);
+                sh.io.Print(prop).Print(':').PrintLn(sh.fmt.RGBA(c));
+            }else{
+                float f=mate.GetFloat(prop);
+                sh.io.Print(prop).Print(':').PrintLn(sh.fmt.FVal(f));
+            }
+        }
+        var ka=mate.shaderKeywords;
+        if(ka!=null && ka.Length>0) sh.io.Print("keywords:").PrintJoin(sh.ofs,ka);
+    }
     private static int MeshParamProp(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null){
-            var m=sm.mi.material[sm.submeshno];
-            for(int i=0; i<propnames.Length; i++){
-                string prop=propnames[i];
-                if(!m.HasProperty(prop)) continue;
-                float[] fa;
-                fa=m.GetFloatArray(prop);
-                if(fa==null || fa.Length==0){
-                    var col=m.GetColor(prop);
-                    fa=new float[]{col.r,col.g,col.b,col.a};
-                }
-                sh.io.Print(prop).Print(':').Print(sh.fmt.FVal(fa[0]));
-                for(int j=1; j<fa.Length; j++) sh.io.Print(',').Print(sh.fmt.FVal(fa[j]));
-                sh.io.PrintLn("");
-            }
-            var ka=sm.mi.material[sm.submeshno].shaderKeywords;
-            if(ka!=null && ka.Length>0) sh.io.Print("keywords:").PrintJoin(sh.ofs,ka);
+            PrintShaderProps(sh,sm.mi.material[sm.submeshno]);
             return 0;
         }
-        string[] kv;
+
         if(val.IndexOf('=')<0){
             var m=sm.mi.material[sm.submeshno];
             if(!m.HasProperty(val)) return sh.io.Error("指定されたプロパティは現在のシェーダでは無効です");
@@ -478,24 +486,27 @@ public static class CmdMeshes {
             }
             return 0;
         }
-        string err;
 
         sm.mi.EditMaterial();
 
-        string[] sa=val.Split(ParseUtil.lf);
-        for(int pi=0; pi<sa.Length; pi++){
-            kv=ParseUtil.LeftAndRight(sa[pi],'=');
-            if(kv[1]=="on"){
-                sm.mi.material[sm.submeshno].EnableKeyword(kv[0]);
-            }else if(kv[1]=="off"){
-                sm.mi.material[sm.submeshno].DisableKeyword(kv[0]);
-            }else if(kv[1].IndexOf(',')>=0){
-                if((err=SetVectorProp(sm.mi.material[sm.submeshno],kv[0],kv[1]))!="") return sh.io.Error(err);
+        string err=SetShaderProps(sm.mi.material[sm.submeshno],val);
+        if(err!="") return sh.io.Error(err);
+        return 1;
+    }
+    public static string SetShaderProps(Material mate,string val){
+        string err="";
+        var prop=ParseUtil.ParseProp(val);
+        if(prop==null) return "書式が不正です";
+        foreach(var kv in prop.kva){
+            if(kv.value=="on") mate.EnableKeyword(kv.key);
+            else if(kv.value=="off") mate.DisableKeyword(kv.key);
+            else if(kv.value.IndexOf(',')>=0){
+                if((err=SetVectorProp(mate,kv.key,kv.value))!="") return err;
             }else{
-                if((err=SetFloatProp(sm.mi.material[sm.submeshno],kv[0],kv[1]))!="") return sh.io.Error(err);
+                if((err=SetFloatProp(mate,kv.key,kv.value))!="") return err;
             }
         }
-        return 1;
+        return err;
     }
     public static string SetVectorProp(Material m, string key, string val){
         if(!m.HasProperty(key)) return "指定されたプロパティは現在のシェーダでは無効です";
@@ -688,7 +699,7 @@ public static class CmdMeshes {
         return 1;
     }
 
-    private static HashSet<Texture> texiid=new HashSet<Texture>();
+    public static HashSet<Texture> texiid=new HashSet<Texture>();
     private static int MeshParamTexture(ComShInterpreter sh,SingleMesh sm,string val){
         Material mate;
         if(val==null){
@@ -729,7 +740,7 @@ public static class CmdMeshes {
         if(msg!="") return sh.io.Error(msg);
         return 1;
     }
-    private static void PrintTextureInfo(ComShInterpreter sh,Material mate,string prop){
+    public static void PrintTextureInfo(ComShInterpreter sh,Material mate,string prop){
         if(!mate.HasProperty(prop)) return;
         Texture tx=mate.GetTexture(prop);
         if(tx==null) return;
@@ -780,6 +791,15 @@ public static class CmdMeshes {
             var old=mate.GetTexture(prop);
             if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
             mate.SetTexture(prop,tex);
+        }else if(cube==1&&name.IndexOf(':')>=0){
+                string[] lr=ParseUtil.LeftAndRight2(name,':');
+                if(lr[0]=="") return "ファイルが見つかりません";
+                Cubemap cm=ObjUtil.LoadAssetBundle<Cubemap>(lr[0],lr[1],ComShInterpreter.textureDir);
+                if(cm==null) return "ファイルが見つかりません";
+                var old=mate.GetTexture(prop);
+                if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
+                mate.SetTexture(prop,cm);
+                texiid.Add(cm);
         }else {
             Texture tex0=TextureUtil.ReadTexture(name);
             if(tex0==null) return "texファイルが見つかりません";
@@ -812,7 +832,7 @@ public static class CmdMeshes {
             right=lr[0];
             var opts=lr[1].Split(ParseUtil.comma);
             if(cube==1){
-                if(opts.Length>=1 && (!int.TryParse(opts[1],out mode) || mode<0 || mode>1)) return "書式が不正です";
+                if(opts.Length>=1 && (!int.TryParse(opts[0],out mode) || mode<0 || mode>1)) return "書式が不正です";
             }else{
                 if(opts.Length>=1 && (!int.TryParse(opts[0],out wrap) || wrap<0 || wrap>1)) return "書式が不正です";
                 if(opts.Length>=2 && (!int.TryParse(opts[1],out mode) || mode<0 || mode>1)) return "書式が不正です";
@@ -1197,13 +1217,11 @@ public static class CmdMeshes {
         if(sa[1]==""){ fname=sa[0]; prop="_MainTex";} else { fname=sa[1]; prop=sa[0];}
 
         string file="";
-        if(fname!="" && fname.IndexOf('\\')<0){
+        if(fname!=""&&fname.IndexOf('\\')<0){
             if(fname[0]=='*'){
                 var tf=DataFiles.CreateTempFile(fname.Substring(1),"");
                 file=tf.filename;
-            }else if(UTIL.CheckFileName(fname)>=0){
-                file=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+UTIL.Suffix(fname,".png");
-            }
+            }else file=UTIL.GetFullPath(UTIL.Suffix(fname,".png"),ComShInterpreter.textureDir);
         }
         if(file=="") return sh.io.Error("ファイル名が不正です");
         int ret=MeshParamPNGSub(sh,sm,file,prop);
@@ -1214,29 +1232,29 @@ public static class CmdMeshes {
     private static int MeshParamPNGSub(ComShInterpreter sh,SingleMesh sm,string fname,string prop){
         var tex=sm.mi.material[sm.submeshno].GetTexture(prop);
         if(tex==null) return sh.io.Error("テクスチャがありません");
-        return MeshParamPNGSub2(sh,tex,fname,prop);
+        return MeshParamPNGSub2(sh,tex,fname);
     }
-    public static int MeshParamPNGSub2(ComShInterpreter sh,Texture tex,string fname,string prop){
+    public static int MeshParamPNGSub2(ComShInterpreter sh,Texture tex,string fname){
+        Texture2D t2d=null;
         if(ReferenceEquals(tex.GetType(),typeof(RenderTexture))){
             RenderTexture rt=(RenderTexture)tex;
-            if(TextureUtil.Rt2Png(rt,fname)<0) return sh.io.Error("書き込みに失敗しました");
-            return 1;
-        }else{
-            Texture2D t2d=null;
-            try{
-                if(ReferenceEquals(tex.GetType(),typeof(Texture2D))){
-                    t2d=TextureUtil.CloneBitmap(tex); // readableじゃない時はこれが必要
-                }else if(ReferenceEquals(tex.GetType(),typeof(Cubemap))){
-                    t2d=TextureUtil.CubeToT2D(TextureUtil.CloneCubemap((Cubemap)tex)); // readableじゃない時はこれが必要
-                    if(t2d!=null) UnityEngine.Object.Destroy(t2d);
-                }else return sh.io.Error("未対応の形式です");
-                System.IO.File.WriteAllBytes(fname, t2d.EncodeToPNG());
-            }catch{
-                return sh.io.Error("書き込みに失敗しました");
-            }finally{
-                if(t2d!=null) UnityEngine.Object.Destroy(t2d);
+            if(rt.dimension==UnityEngine.Rendering.TextureDimension.Cube){
+                // TODO代わりに書いただけ。Rt2Cube()は機能しない
+                t2d=TextureUtil.CubeToT2D(TextureUtil.Rt2Cube(rt));
+            }else{
+                if(TextureUtil.Rt2Png(rt,fname)<0) return sh.io.Error("書き込みに失敗しました");
             }
-        }
+            return 1;
+        }else if(ReferenceEquals(tex.GetType(),typeof(Texture2D))){
+            t2d=TextureUtil.CloneBitmap(tex);
+        }else if(ReferenceEquals(tex.GetType(),typeof(Cubemap))){
+            t2d=TextureUtil.CubeToT2D(TextureUtil.CloneCubemap((Cubemap)tex));
+        }else return sh.io.Error("未対応の形式です");
+        if(t2d==null) return sh.io.Error("失敗しました");
+
+        try{ System.IO.File.WriteAllBytes(fname,t2d.EncodeToPNG());}
+        catch{ return sh.io.Error("書き込みに失敗しました"); }
+        finally{ if(t2d!=null) UnityEngine.Object.Destroy(t2d); }
         return 1;
     }
     private static int MeshParamReverse(ComShInterpreter sh,SingleMesh sm,string val){
@@ -1381,16 +1399,14 @@ public static class CmdMeshes {
         }
         return 0;
     }
-    private static int[] default_video_size={1024,1024};
+
     private static int MeshParamVideo(ComShInterpreter sh,SingleMesh sm,string val){
         int midx=sm.mi.mesh.FindMeshIdx(sm.submeshno);
         if(midx<0) return sh.io.Error("メッシュ番号が不正です");
         Renderer rend=sm.mi.mesh[midx].rend;
         if(rend==null) return sh.io.Error("レンダラがありません");
-        var vp=rend.GetComponent<UnityEngine.Video.VideoPlayer>();
         if(val==null){
-            if(vp==null) return 0;
-            sh.io.Print(vp.name);
+            sh.io.Print( Video.CurrentVideoName(rend.transform));
             return 0;
         }
         string prop="_MainTex";
@@ -1398,119 +1414,70 @@ public static class CmdMeshes {
         if(lr!=null && lr[0]!="") prop=lr[0];
         lr=ParseUtil.LeftAndRight(lr[1],',');
         if(lr==null) return sh.io.Error("ファイルが見つかりません");
-        int[] xy=default_video_size;
+        int w=1024,h=1024;
+        int loopq=0;
         if(lr[1]!=""){
-            float[] fa=ParseUtil.Xy(lr[1]);
-            if(fa==null) return sh.io.Error(ParseUtil.error);
-            xy[0]=(int)fa[0]; xy[1]=(int)fa[1];
+            float[] fa=ParseUtil.FloatArr(lr[1]);
+            if(fa==null||fa.Length<1||fa.Length>3) return sh.io.Error("書式が不正です");
+            w=(int)fa[0]; h=(int)((fa.Length==1)?fa[0]:fa[1]);
+            if(fa.Length==3){
+                loopq=(int)fa[2];
+                if(loopq!=0&&loopq!=1) return sh.io.Error("数値が不正です");
+            }
         }
-        if(lr[0]==""){
-            UnityEngine.Object.Destroy(rend.GetComponent<UnityEngine.Video.VideoPlayer>());
-            return 1;
-        }
-        string file=lr[0];
-        string path=ComShInterpreter.homeDir+@"PhotoModeData\Texture\";
-        string fname=path+file;
-        string path2=Path.GetFullPath(fname);
-        if(Path.GetDirectoryName(Path.GetFullPath(fname)).Length<path.Length) return sh.io.Error("ファイル名が不正です");
-        if(!File.Exists(fname)) return sh.io.Error("ファイルが見つかりません");
+        if(lr[0]==""){ Video.KillVideo(rend.transform); return 1; }
+
+        string fname=Video.VideoFileCheck(lr[0]);
+        if(fname==null) return sh.io.Error("ファイルが見つかりません");
 
         Transform rendtr=rend.transform;
-        if(vp==null) vp=rendtr.gameObject.AddComponent<UnityEngine.Video.VideoPlayer>();
-        if(vp==null) return sh.io.Error("失敗しました");
         sm.mi.EditMaterial();
         Material mate=sm.mi.material[sm.submeshno];
-        if(rend==null) return sh.io.Error("マテリアルがありません");
-        Texture old=mate.GetTexture(prop);
-        RenderTexture rt;
-        if(old!=null){
-            rt=new RenderTexture(xy[0],xy[1],0,RenderTextureFormat.ARGB32);
-            if(texiid.Remove(old)) UnityEngine.Object.Destroy(old);
-        }else{
-            rt=new RenderTexture(xy[0],xy[1],0,RenderTextureFormat.ARGB32);
-        }
-        texiid.Add(rt);
-        mate.SetTexture(prop,rt);
-        vp.renderMode=UnityEngine.Video.VideoRenderMode.RenderTexture;
-        vp.targetTexture=rt;
-        vp.isLooping=false;
-        vp.targetCameraAlpha=1;
-        vp.aspectRatio=UnityEngine.Video.VideoAspectRatio.FitHorizontally;
-        vp.name=file;
-        vp.url="file://"+fname.Replace('\\','/');
-        vp.audioOutputMode=UnityEngine.Video.VideoAudioOutputMode.None;
-        vp.Play();
+        if(mate==null) return sh.io.Error("マテリアルがありません");
+
+        if(Video.VideoLoad(rendtr,mate,prop,fname,w,h,loopq)<0) return sh.io.Error("失敗しました");
         return 1;
     }
+
     private static int MeshParamVideoLoop(ComShInterpreter sh,SingleMesh sm,string val){
-        UnityEngine.Video.VideoPlayer vp;
         int midx=sm.mi.mesh.FindMeshIdx(sm.submeshno);
         Renderer rend=sm.mi.mesh[midx].rend;
-        vp=rend.GetComponent<UnityEngine.Video.VideoPlayer>();
-        if(vp==null) return sh.io.Error("動画は指定されていません");
-        if(val==null){
-            sh.io.Print(vp.isLooping?"1":"0");
-            return 0;
-        }
-        if(val!="0"&&val!="1") return sh.io.Error("値が不正です");
-        vp.isLooping=(val=="1");
-        if(val=="1" && !vp.isPlaying) vp.Play();
-        return 1;
+        return Video.VideoLoop(sh,rend.transform,val);
     }
-    private static int MeshParamVideoFit(ComShInterpreter sh,SingleMesh sm,string val){
-        UnityEngine.Video.VideoPlayer vp;
+    private static int MeshParamVideoPause(ComShInterpreter sh,SingleMesh sm,string val){
         int midx=sm.mi.mesh.FindMeshIdx(sm.submeshno);
         Renderer rend=sm.mi.mesh[midx].rend;
-        vp=rend.GetComponent<UnityEngine.Video.VideoPlayer>();
-        if(vp==null) return sh.io.Error("動画は指定されていません");
-        if(val==null){
-            int n=0;
-            if(vp.aspectRatio==UnityEngine.Video.VideoAspectRatio.NoScaling) n=0;
-            else if(vp.aspectRatio==UnityEngine.Video.VideoAspectRatio.FitHorizontally) n=1;
-            else if(vp.aspectRatio==UnityEngine.Video.VideoAspectRatio.FitVertically) n=2;
-            else if(vp.aspectRatio==UnityEngine.Video.VideoAspectRatio.Stretch) n=3;
-            sh.io.Print(n.ToString());
-            return 0;
-        }
-        UnityEngine.Video.VideoAspectRatio fit;
-        switch(val){
-        case "0": fit=UnityEngine.Video.VideoAspectRatio.NoScaling; break;
-        case "1": fit=UnityEngine.Video.VideoAspectRatio.FitHorizontally; break;
-        case "2": fit=UnityEngine.Video.VideoAspectRatio.FitVertically; break;
-        case "3": fit=UnityEngine.Video.VideoAspectRatio.Stretch; break;
-        default: return sh.io.Error("値が不正です");
-        }
-        vp.aspectRatio=fit;
-        return 1;
+        return Video.VideoPause(sh,rend.transform,val);
+    }
+    private static int MeshParamVideoMute(ComShInterpreter sh,SingleMesh sm,string val){
+        int midx=sm.mi.mesh.FindMeshIdx(sm.submeshno);
+        Renderer rend=sm.mi.mesh[midx].rend;
+        return Video.VideoMute(sh,rend.transform,val);
+    }
+    private static int MeshParamAudio3D(ComShInterpreter sh,SingleMesh sm,string val){
+        int midx=sm.mi.mesh.FindMeshIdx(sm.submeshno);
+        Renderer rend=sm.mi.mesh[midx].rend;
+        return Video.VideoAudio3D(sh,rend.transform,val);
     }
     private static int MeshParamVideoTime(ComShInterpreter sh,SingleMesh sm,string val){
         int midx=sm.mi.mesh.FindMeshIdx(sm.submeshno);
         Renderer rend=sm.mi.mesh[midx].rend;
-        UnityEngine.Video.VideoPlayer vp;
-        vp=rend.GetComponent<UnityEngine.Video.VideoPlayer>();
-        if(vp==null) return sh.io.Error("動画は指定されていません");
-        if(val==null){
-            sh.io.Print(sh.fmt.FVal(vp.time*1000));
-            return 0;
-        }
-        if(!float.TryParse(val,out float f)) return sh.io.Error("値が不正です");
-        vp.time=f/1000;
-        return 1;
+        return Video.VideoTime(sh,rend.transform,val);
+    }
+    private static int MeshParamVideoTimep(ComShInterpreter sh,SingleMesh sm,string val){
+        int midx=sm.mi.mesh.FindMeshIdx(sm.submeshno);
+        Renderer rend=sm.mi.mesh[midx].rend;
+        return Video.VideoTimep(sh,rend.transform,val);
+    }
+    private static int MeshParamVideoLength(ComShInterpreter sh,SingleMesh sm,string val){
+        int midx=sm.mi.mesh.FindMeshIdx(sm.submeshno);
+        Renderer rend=sm.mi.mesh[midx].rend;
+        return Video.VideoLength(sh,rend.transform,val);
     }
     private static int MeshParamVideoSpeed(ComShInterpreter sh,SingleMesh sm,string val){
         int midx=sm.mi.mesh.FindMeshIdx(sm.submeshno);
         Renderer rend=sm.mi.mesh[midx].rend;
-        UnityEngine.Video.VideoPlayer vp;
-        vp=rend.GetComponent<UnityEngine.Video.VideoPlayer>();
-        if(vp==null) return sh.io.Error("動画は指定されていません");
-        if(val==null){
-            sh.io.Print(sh.fmt.FVal(vp.playbackSpeed));
-            return 0;
-        }
-        if(!float.TryParse(val,out float f)) return sh.io.Error("値が不正です");
-        vp.playbackSpeed=f;
-        if(f!=0 && !vp.isPlaying) vp.Play();
-        return 1;
+        return Video.VideoSpeed(sh,rend.transform,val);
     }
 
     private class VerLoopChange {
@@ -1666,7 +1633,7 @@ public static class CmdMeshes {
 public static class TextureUtil {
     public static string[] texnames={
         "_AlphaTex", "_BumpMap", "_Caustics", "_DerivativeTex", "_DetailNormalMap", "_EmissionMap",
-        "_EnvMap", "_FlowTex", "_Fresnel", "_HiTex", "_LightMap", "_MainTex", "_MultiColTex",
+        "_EnvMap", "_FlowTex", "_Fresnel", "_HiTex", "_LightMap", "_MainTex", "_MultiColTex","_CutoffTex",
         "_NormalMap", "_OcclusionMap", "_MetallicGlossMap","_SpecGlossMap",
         "_OutlineTex", "_OutlineToonRamp", "_OutlineWidthTex",
         "_ParallaxMap", "_ReflectionTex", "_ReflectiveColor", "_ReflectiveColorCube", "_RefractionTex",
@@ -1735,7 +1702,7 @@ public static class TextureUtil {
                 var tf=DataFiles.GetTempFile(name.Substring(1));
                 if(tf!=null) fname=tf.filename;
             }else{
-                fname=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+UTIL.Suffix(name,".png");
+                fname=ComShInterpreter.textureDir+UTIL.Suffix(name,".png");
             }
             if(System.IO.File.Exists(fname)){
                 byte[] buf=UTIL.ReadAll(fname);
@@ -1756,12 +1723,23 @@ public static class TextureUtil {
     }
     public static Cubemap CloneCubemap(Cubemap src){
         int h=src.height;
-        var ret=new Cubemap(h,src.format,false);
+        var ret=new Cubemap(h,TextureFormat.ARGB32,src.mipmapCount>0);
         ret.name=src.name;
         ret.wrapMode=src.wrapMode;
         ret.anisoLevel=src.anisoLevel;
         ret.filterMode=src.filterMode;
-        for(int i=0; i<6; i++) Graphics.CopyTexture(src,i,0,ret,i,0);
+        ret.mipMapBias=src.mipMapBias;
+        Graphics.ConvertTexture(src,ret);
+        return ret;
+    }
+    public static Cubemap Rt2Cube(RenderTexture rt){
+        int h=rt.height;
+        var ret=new Cubemap(h,TextureFormat.ARGB32,false);
+        ret.name=rt.name;
+        ret.wrapMode=rt.wrapMode;
+        ret.anisoLevel=rt.anisoLevel;
+        ret.filterMode=rt.filterMode;
+        Graphics.ConvertTexture(rt,ret); // ここどうやっても無理なんだが
         return ret;
     }
     public static Cubemap T2DToCube(Texture2D t2d,int mode){
@@ -1769,8 +1747,8 @@ public static class TextureUtil {
         Cubemap cube=new Cubemap(d,t2d.format,false);
         for(int i=0; i<6; i++){
             Color[] ca=t2d.GetPixels(i*d,0,d,d,0);
-            if(mode==0) cube.SetPixels(upsidedown(ca,d),(CubemapFace)i,0);  //reflection
-            else{ Array.Reverse(ca); cube.SetPixels(ca,(CubemapFace)i,0); } //skybox
+            if(mode==0) cube.SetPixels(upsidedown(ca,d),(CubemapFace)i,0);
+            else{ Array.Reverse(ca); cube.SetPixels(ca,(CubemapFace)i,0); }
         }
         cube.Apply();
         return cube;
@@ -1780,7 +1758,7 @@ public static class TextureUtil {
         Texture2D t2d=new Texture2D(d*6,cube.height,cube.format,false);
         for(int i=0; i<6; i++){
             Color[] ca=cube.GetPixels((CubemapFace)i,0);
-            t2d.SetPixels(i*d,0,d,d,upsidedown(ca,d),0); // reflection
+            t2d.SetPixels(i*d,0,d,d,upsidedown(ca,d),0);
         }
         t2d.Apply();
         return t2d;

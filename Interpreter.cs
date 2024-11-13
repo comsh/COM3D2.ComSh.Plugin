@@ -12,6 +12,8 @@ public partial class ComShInterpreter {
     public static string homeDir=Path.GetFullPath(Application.dataPath.TrimEnd('\\')+@"\..")+"\\";
 	public static string scriptFolder = homeDir+@"Sybaris\UnityInjector\Config\ComSh\";
     public static string myposeDir = homeDir+@"PhotoModeData\Mypose\";
+    public static string textureDir = homeDir+@"PhotoModeData\Texture\";
+    public static string myobjDir = homeDir+@"PhotoModeData\MyObject\";
     public const string SCRIPT_ERR_ON="_enable_script_error";
     public const string SEARCH_RESULT_MAX="_search_result_max";
 
@@ -477,20 +479,18 @@ public partial class ComShInterpreter {
         public string FInt(double f){ return f.ToString(fmt_int); } // 倍率や角度など整数1-3桁がメインの値
         public string FVal(float f){ return f.ToString(fmt_val); }  // 上記以外
         public string FVal(double f){ return f.ToString(fmt_val); }  // 上記以外
-        public string FPos(Vector3 v){ return FVal(v.x)+","+FVal(v.y)+","+FVal(v.z);}
-        public string FPos(float x,float y,float z){ return FVal(x)+","+FVal(y)+","+FVal(z);}
-        public string FEuler(Vector3 v){ return FInt(v.x)+","+FInt(v.y)+","+FInt(v.z);}
-        public string FQuat(Quaternion v){ return FVal(v.x)+","+FVal(v.y)+","+FVal(v.z)+","+FVal(v.w);}
-        public string FQuat(float[] v){ return FVal(v[0])+","+FVal(v[1])+","+FVal(v[2])+","+FVal(v[3]);}
+        public string FPos(Vector3 v){ return FVal(v.x)+","+FVal(v.y)+","+FVal(v.z); }
+        public string FPosRot(Vector3 v,Vector3 e){ return FVal(v.x)+","+FVal(v.y)+","+FVal(v.z)+","+FInt(e.x)+","+FInt(e.y)+","+FInt(e.z); }
+        public string FPos(float x,float y,float z){ return FVal(x)+","+FVal(y)+","+FVal(z); }
+        public string FEuler(Vector3 v){ return FInt(v.x)+","+FInt(v.y)+","+FInt(v.z); }
+        public string FQuat(Quaternion v){ return FVal(v.x)+","+FVal(v.y)+","+FVal(v.z)+","+FVal(v.w); }
+        public string FQuat(float[] v){ return FVal(v[0])+","+FVal(v[1])+","+FVal(v[2])+","+FVal(v[3]); }
         public string FMul(Vector3 v){ return FInt(v.x)+","+FInt(v.y)+","+FInt(v.z);}
         public string FEA2(Vector3 v){ return FVal(v.x)+","+FVal(v.y); }
         public string FXY(Vector2 v){ return FVal(v.x)+","+FVal(v.y); }
         public string FXY(Vector3 v){ return FVal(v.x)+","+FVal(v.y); }
         public string FXY(float x,float y){ return FVal(x)+","+FVal(y); }
-        public string RGB(Color c){
-            int rgb=(((int)(c.r*255))<<16)|(((int)(c.g*255))<<8)|((int)(c.b*255));
-            return rgb.ToString("X6");
-        }
+        public string RGB(Color c){ int rgb=(((int)(c.r*255))<<16)|(((int)(c.g*255))<<8)|((int)(c.b*255)); return rgb.ToString("X6"); }
         public string RGB2(Color c){ return F0to1(c.r)+","+F0to1(c.g)+","+F0to1(c.b); }
         public string RGBA(Color c){ return F0to1(c.r)+","+F0to1(c.g)+","+F0to1(c.b)+","+F0to1(c.a); }
         public string OnOff(bool sw){ return sw?"on":"off"; }

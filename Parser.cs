@@ -1014,5 +1014,53 @@ public static class ParseUtil {
             }
         }
     }
+    public static PropDesc ParseProp(string val){
+        PropDesc pd=new PropDesc(val);
+        if(pd.kva==null) return null;
+        return pd;
+    }
+    public class PropDesc {
+        public struct PropKV {
+            public string key;
+            public string value;
+            public PropKV(string k,string v){key=k;value=v;}
+        }
+        public List<PropKV> kva=null;
+        public PropDesc(string val){
+            var lst=new List<PropKV>();
+            int i=0,p=0;
+            string k=null;
+            for(; i<val.Length; i++){
+                if(val[i]=='='){ 
+                    if(k!=null) continue;
+                    k=val.Substring(p,i-p);
+                    p=i+1;
+                }else if(val[i]=='\n'){
+                    if(k==null) return;
+                    lst.Add(new PropKV(k,val.Substring(p,i-p)));
+                    p=i+1; k=null;
+                }
+            }
+            if(p<val.Length){
+                if(k==null) return;
+                lst.Add(new PropKV(k,val.Substring(p,i-p)));
+            }
+            kva=lst;
+        }
+        public bool HasEmptyKey(){
+            for(int i=0; i<kva.Count; i++) if(kva[i].key=="") return true;
+            return false;
+        }
+        public bool HasEmptyValue(){
+            for(int i=1; i<kva.Count; i++) if(kva[i].value=="") return true;
+            return false;
+        }
+        public Dictionary<string,string> ToDict(){
+            // .Netが古いので、IEnumerable<KeyValuePair<T,T>>をとるコンストラクタは無い
+            var ret=new Dictionary<string,string>(kva.Count);
+            for(int i=0; i<kva.Count; i++) ret.Add(kva[i].key,kva[i+1].value);
+            return ret;
+        }
+    }
 }
 }
