@@ -2919,7 +2919,7 @@ public static class Command {
         return 1;
     }
     public static int _CmdParamWPosRot(ComShInterpreter sh,Transform tr,string val){
-        if(val==null){ sh.io.PrintJoin(sh.fmt.FPosRot(tr.position,tr.rotation.eulerAngles)); return 0; }
+        if(val==null){ sh.io.Print(sh.fmt.FPosRot(tr.position,tr.rotation.eulerAngles)); return 0; }
         float[] fa=ParseUtil.FloatArr(val);
         if(fa==null||fa.Length!=6) return sh.io.Error("書式が不正です");
         tr.position=new Vector3(fa[0],fa[1],fa[2]);

@@ -61,6 +61,7 @@ public static class CmdMisc {
     private static CmdParam<Transform> GetCmdParamBg(string cmd){
         if(cmd=="pos"||cmd=="wpos"||cmd=="position") return _CmdParamWPos;
         if(cmd=="rot"||cmd=="wrot"||cmd=="rotation") return _CmdParamWRot;
+        if(cmd=="wposrot") return _CmdParamWPosRot;
         if(cmd=="scale") return _CmdParamScale;
         if(cmd=="iid") return _CmdParamIid;
         return null;
