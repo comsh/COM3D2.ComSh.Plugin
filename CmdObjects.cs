@@ -218,6 +218,8 @@ public static class CmdObjects {
         var oset=new HashSet<string>(); // 重複削除
         Transform pftr=ObjUtil.GetPhotoPrefabTr2(sh);
 
+        var studiobase=GameMain.Instance.transform.Find("BG/PhotoPrefab");
+
         if(sh.objRef.Length>0){ // スタジオモード分参照
             var stdlist=StudioMode.GetObjectList();
             if(stdlist!=null) for(int i=0; i<stdlist.Count; i++) ObjUtil.objDic[stdlist[i].name]=stdlist[i];
@@ -246,6 +248,7 @@ public static class CmdObjects {
             Transform tr=kv.Value;
             if(tr==null){ remove.Add(kv.Key); continue; }
             if(oset.Contains(tr.name)) continue; // root直下のものは取得済
+            if(sh.objRef.Length==0 && studiobase!=null && tr.parent==studiobase) continue;
             // 何かにアタッチされているもの
             ret.Add(tr);
         }
@@ -561,7 +564,7 @@ public static class CmdObjects {
         }
         string[] sa=val.Split(ParseUtil.lf);
         for(int pi=0; pi<sa.Length; pi++){
-            string[] kv=ParseUtil.LeftAndRight(sa[pi],ParseUtil.eqcln);
+            string[] kv=ParseUtil.LeftAndRight(sa[pi],ParseUtil.eqcln2);
             string[] np=ParseUtil.LeftAndRight(kv[0],'.');
             string n=np[0],p=np[1],v=kv[1];
             if(p==""){ p=n; n=""; }
@@ -751,7 +754,7 @@ public static class CmdObjects {
         }
         string[] sa=val.Split(ParseUtil.lf);
         for(int pi=0; pi<sa.Length; pi++){
-            string[] kv=ParseUtil.LeftAndRight(sa[pi],ParseUtil.eqcln);
+            string[] kv=ParseUtil.LeftAndRight(sa[pi],ParseUtil.eqcln2);
             string[] np=ParseUtil.LeftAndRight(kv[0],'.');
             string n=np[0],p=np[1],v=kv[1];
             int ret;
@@ -930,32 +933,37 @@ public static class CmdObjects {
             if(sa.Length==1){
                 if(sa[0]=="box") shape.shapeType=ParticleSystemShapeType.Box;
                 else if(sa[0]=="boxshell") shape.shapeType=ParticleSystemShapeType.BoxShell;
-                else if(sa[0]=="mesh"){
-                    var smr=tr.GetComponentInChildren<SkinnedMeshRenderer>();
+                else return sh.io.Error("shapeの指定が不正です");
+                shape.randomDirectionAmount=0;
+            }else if(sa.Length==2){
+                if(sa[0]=="mesh"){
+                    var cd=new ParseUtil.ColonDesc(sa[1]);
+                    var meshtr=ObjUtil.FindObj(sh,cd);
+                    if(meshtr==null) return sh.io.Error("メッシュがありません");
+                    var smr=meshtr.GetComponentInChildren<SkinnedMeshRenderer>();
                     if(smr!=null){
                         shape.shapeType=ParticleSystemShapeType.SkinnedMeshRenderer;
                         shape.skinnedMeshRenderer=smr; 
                     }else{
-                       var mf=tr.GetComponentInChildren<MeshRenderer>();
+                       var mf=meshtr.GetComponentInChildren<MeshRenderer>();
                         if(mf!=null){
                             shape.shapeType=ParticleSystemShapeType.MeshRenderer;
                             shape.meshRenderer=mf;
                         }else return sh.io.Error("メッシュがありません");
                     }
-                } else return sh.io.Error("shapeの指定が不正です");
-                shape.randomDirectionAmount=0;
-            }else if(sa.Length==2){
-                if(sa[0]=="hemisphere") shape.shapeType=ParticleSystemShapeType.Hemisphere;
-                else if(sa[0]=="hemisphereshell") shape.shapeType=ParticleSystemShapeType.HemisphereShell;
-                else if(sa[0]=="sphere") shape.shapeType=ParticleSystemShapeType.Sphere;
-                else if(sa[0]=="sphereshell") shape.shapeType=ParticleSystemShapeType.SphereShell;
-                else return sh.io.Error("shapeの指定が不正です");
-                if(!float.TryParse(sa[1],out f)||f<0) return sh.io.Error("数値の指定が不正です");
-                shape.radius=f;
-                shape.arc=360.0f;
-                shape.arcMode=ParticleSystemShapeMultiModeValue.Random;
-                shape.radiusMode=ParticleSystemShapeMultiModeValue.Random;
-                shape.randomDirectionAmount=0;
+                }else{
+                    if(sa[0]=="hemisphere") shape.shapeType=ParticleSystemShapeType.Hemisphere;
+                    else if(sa[0]=="hemisphereshell") shape.shapeType=ParticleSystemShapeType.HemisphereShell;
+                    else if(sa[0]=="sphere") shape.shapeType=ParticleSystemShapeType.Sphere;
+                    else if(sa[0]=="sphereshell") shape.shapeType=ParticleSystemShapeType.SphereShell;
+                    else return sh.io.Error("shapeの指定が不正です");
+                    if(!float.TryParse(sa[1],out f)||f<0) return sh.io.Error("数値の指定が不正です");
+                    shape.radius=f;
+                    shape.arc=360.0f;
+                    shape.arcMode=ParticleSystemShapeMultiModeValue.Random;
+                    shape.radiusMode=ParticleSystemShapeMultiModeValue.Random;
+                    shape.randomDirectionAmount=0;
+                }
             }else if(sa.Length==3){
                 if(sa[0]=="cone"){
                     if(!float.TryParse(sa[1],out f)||f<0) return sh.io.Error("数値の指定が不正です");

@@ -1869,50 +1869,55 @@ public static class CmdMaidMan {
         const string usage="スロット名.ボーン名{+|-}の形で指定してください";
         if(val==null||val=="") return sh.io.Error(usage);
 
-        char sw=val[val.Length-1];
-        if(sw!='+'&&sw!='-') return sh.io.Error(usage);
-        var sa=ParseUtil.LeftAndRight(val.Substring(0,val.Length-1),'.');
-        if(sa[0]==""||sa[1]=="") return sh.io.Error(usage);
+        string[] va=val.Split(ParseUtil.comma);
+        for(int vi=0; vi<va.Length; vi++){
+            string v=va[vi];
 
-        if(!m.body0.IsSlotNo(sa[0])) return sh.io.Error("スロット名が不正です");
-        var skin=m.body0.GetSlot(m.body0.GetSlotNo(sa[0]));
-        if(skin==null) return sh.io.Error("スロット名が不正です");
-
-        List<Transform> lstTr,lstScl;
-        try{
-            if(skinTrField==null)
-                skinTrField=typeof(TBodySkin).GetField("listTrs",BindingFlags.Instance | BindingFlags.NonPublic);
-            if(skinTrSclField==null)
-                skinTrSclField=typeof(TBodySkin).GetField("listTrsScr",BindingFlags.Instance | BindingFlags.NonPublic);
-            lstTr=(List<Transform>)skinTrField.GetValue(skin);
-            lstScl=(List<Transform>)skinTrField.GetValue(skin);
-            if(lstTr==null||lstScl==null) return sh.io.Error("失敗しました");
-        }catch{ return sh.io.Error("失敗しました"); }
-
-        string bname=ParseUtil.CompleteBoneName(sa[1],m.boMAN);
-
-        if(sw=='+'){
-            int idx; for(idx=0; idx<lstTr.Count; idx+=2) if(lstTr[idx].name==bname) break;
-            if(idx<lstTr.Count) return 1;
-            Transform bone,cbone;
-            if(!m.body0.m_dicTrans.TryGetValue(bname,out bone)
-             || (cbone=CMT.SearchObjName(skin.obj_tr,bname,false))==null) return sh.io.Error("ボーンがありません");
-            lstTr.Add(cbone);
-            lstTr.Add(bone);
-            if(bname=="Mune_L"||bname=="Mune_R"||bname.Contains("chnko")){
-                lstScl.Add(cbone);
-                lstScl.Add(bone);
-            }
-        }else{
-            int idx; for(idx=0; idx<lstTr.Count; idx+=2) if(lstTr[idx].name==bname) break;
-            if(idx==lstTr.Count) return 1;
-            lstTr[idx+1]=lstTr[lstTr.Count-1]; lstTr.RemoveAt(lstTr.Count-1);
-            lstTr[idx]=lstTr[lstTr.Count-1]; lstTr.RemoveAt(lstTr.Count-1);
-
-            for(idx=0; idx<lstScl.Count; idx+=2) if(lstScl[idx].name==bname) break;
-            if(idx<lstScl.Count){
-                lstScl[idx+1]=lstScl[lstScl.Count-1]; lstScl.RemoveAt(lstScl.Count-1);
-                lstScl[idx]=lstScl[lstScl.Count-1]; lstScl.RemoveAt(lstScl.Count-1);
+            char sw=v[v.Length-1];
+            if(sw!='+'&&sw!='-') return sh.io.Error(usage);
+            var sa=ParseUtil.LeftAndRight(v.Substring(0,v.Length-1),'.');
+            if(sa[0]==""||sa[1]=="") return sh.io.Error(usage);
+    
+            if(!m.body0.IsSlotNo(sa[0])) return sh.io.Error("スロット名が不正です");
+            var skin=m.body0.GetSlot(m.body0.GetSlotNo(sa[0]));
+            if(skin==null) return sh.io.Error("スロット名が不正です");
+    
+            List<Transform> lstTr,lstScl;
+            try{
+                if(skinTrField==null)
+                    skinTrField=typeof(TBodySkin).GetField("listTrs",BindingFlags.Instance | BindingFlags.NonPublic);
+                if(skinTrSclField==null)
+                    skinTrSclField=typeof(TBodySkin).GetField("listTrsScr",BindingFlags.Instance | BindingFlags.NonPublic);
+                lstTr=(List<Transform>)skinTrField.GetValue(skin);
+                lstScl=(List<Transform>)skinTrField.GetValue(skin);
+                if(lstTr==null||lstScl==null) return sh.io.Error("失敗しました");
+            }catch{ return sh.io.Error("失敗しました"); }
+    
+            string bname=ParseUtil.CompleteBoneName(sa[1],m.boMAN);
+    
+            if(sw=='+'){
+                int idx; for(idx=0; idx<lstTr.Count; idx+=2) if(lstTr[idx].name==bname) break;
+                if(idx<lstTr.Count) return 1;
+                Transform bone,cbone;
+                if(!m.body0.m_dicTrans.TryGetValue(bname,out bone)
+                || (cbone=CMT.SearchObjName(skin.obj_tr,bname,false))==null) return sh.io.Error("ボーンがありません");
+                lstTr.Add(cbone);
+                lstTr.Add(bone);
+                if(bname=="Mune_L"||bname=="Mune_R"||bname.Contains("chnko")){
+                    lstScl.Add(cbone);
+                    lstScl.Add(bone);
+                }
+            }else{
+                int idx; for(idx=0; idx<lstTr.Count; idx+=2) if(lstTr[idx].name==bname) break;
+                if(idx==lstTr.Count) return 1;
+                lstTr[idx+1]=lstTr[lstTr.Count-1]; lstTr.RemoveAt(lstTr.Count-1);
+                lstTr[idx]=lstTr[lstTr.Count-1]; lstTr.RemoveAt(lstTr.Count-1);
+    
+                for(idx=0; idx<lstScl.Count; idx+=2) if(lstScl[idx].name==bname) break;
+                if(idx<lstScl.Count){
+                    lstScl[idx+1]=lstScl[lstScl.Count-1]; lstScl.RemoveAt(lstScl.Count-1);
+                    lstScl[idx]=lstScl[lstScl.Count-1]; lstScl.RemoveAt(lstScl.Count-1);
+                }
             }
         }
         return 1;

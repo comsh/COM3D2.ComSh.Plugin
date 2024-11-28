@@ -428,6 +428,7 @@ public static class ParseUtil {
     public static char[] cr={'\r'};
     public static char[] crlf={'\r','\n'};
     public static char[] eqcln={':','='};
+    public static char[] eqcln2={'=',':'};
 
     public static string[] NormalizeParams(List<string> args,string[] dflt,int start=0){
         string[] ret=new string[dflt.Length];

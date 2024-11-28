@@ -158,6 +158,9 @@ public static class Command {
         cmdTbl.Add("skybox.color", new Cmd(CmdGlobalSkyBoxColor));
         cmdTbl.Add("skybox.power", new Cmd(CmdGlobalSkyBoxPower));
         cmdTbl.Add("skybox.rotation", new Cmd(CmdGlobalSkyBoxRotation));
+        cmdTbl.Add("numformat", new Cmd(CmdNumFormat));
+        cmdTbl.Add("tohex", new Cmd(CmdToHex));
+        cmdTbl.Add("todec", new Cmd(CmdToDec));
 
         cmdTbl.Add("__res",new Cmd(Cmd__Resource));
         cmdTbl.Add("__files",new Cmd(Cmd__Files));
@@ -350,21 +353,49 @@ public static class Command {
             try{ UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(args[1]);}catch{}
         return 0;
     }
+
+    private static bool IsCommonByFilename(string name){
+        return name.StartsWith("kaiwa",Ordinal)
+            || name.StartsWith("h_kaiwa",Ordinal)
+            || name.StartsWith("gm_",Ordinal)
+            || name.StartsWith("event",Ordinal)
+            || name.StartsWith("edit_pose",Ordinal);
+    }
+    private static bool IsCommonByDirnameCOM(string name){
+        return name.Contains("\\common\\")
+            || name.Contains("\\dance_mc\\");
+    }
+    private static bool IsCommonByDirnameCM(string name){
+        return name.Contains("\\common\\")
+            || name.Contains("\\event")
+            || name.Contains("\\vr_event\\")
+            || name.Contains("\\hanyou\\")
+            || name.Contains("\\work\\")
+            || name.Contains("\\_maid\\")
+            || name.Contains("\\_man\\");
+    }
+
     private static int CmdAnmList(ComShInterpreter sh,List<string> args){
         var files_sex=new List<string>();
         var files_dance=new List<string>();
         var files_common=new List<string>();
-        string[] fa=GameUty.FileSystem.GetList("motion",AFileSystemBase.ListType.AllFile);
+        string[] fa=GameUty.FileSystem.GetFileListAtExtension("anm");
         string name;
         for(int i=0; i<fa.Length; i++) if(fa[i].EndsWith(".anm",Ordinal)){
             name=Last2(fa[i],'\\');
-            if(name==null) continue;
+            if(name==null){     //フォルダ分けされてないやつ。手がかりないのでテキトーにやるしかない
+                string fn=Path.GetFileNameWithoutExtension(fa[i]);
+                if(fn==null||fn=="") continue;
+                if(fn.Contains("crc_")||fn.Contains("cbl_")) continue;
+                if(IsCommonByFilename(fn)) files_common.Add(fn);
+                if(fn.StartsWith("dance",Ordinal) && !fn.StartsWith("dance_mc")) files_dance.Add(fn);
+                continue;
+            }
             if(name.Contains("\\crc_")) continue;
             if(name.Contains("\\cbl_")) continue;
             if(fa[i].Contains("\\sex\\")) files_sex.Add(name);
             else if(fa[i].Contains("\\dance\\")) files_dance.Add(Path.GetFileNameWithoutExtension(name));
-            else if(fa[i].Contains("\\common\\") || fa[i].Contains("\\dance_mc\\") || fa[i].Contains("\\evnet") || fa[i].Contains("\\hanyo"))
-                files_common.Add(Path.GetFileNameWithoutExtension(name));
+            else if(IsCommonByDirnameCOM(fa[i])) files_common.Add(Path.GetFileNameWithoutExtension(name));
         }
         fa=GameUty.FileSystemOld.GetList("motion",AFileSystemBase.ListType.AllFile);
         for(int i=0; i<fa.Length; i++) if(fa[i].EndsWith(".anm",Ordinal)){
@@ -374,8 +405,7 @@ public static class Command {
             if(name.Contains("\\cbl_")) continue;
             if(fa[i].Contains("\\sex\\")) files_sex.Add(name);
             else if(fa[i].Contains("\\dance\\")) files_dance.Add(Path.GetFileNameWithoutExtension(name));
-            else if(fa[i].Contains("\\common\\") || fa[i].Contains("\\dance_mc\\") || fa[i].Contains("\\evnet") || fa[i].Contains("\\hanyo"))
-                files_common.Add(Path.GetFileNameWithoutExtension(name));
+            else if(IsCommonByDirnameCM(fa[i])) files_common.Add(Path.GetFileNameWithoutExtension(name));
         }
 
         if(files_sex.Count>0){
@@ -449,16 +479,18 @@ public static class Command {
         string path="";
         if(args.Count==2) path=args[1];
         var files=new List<string>();
-        string[] fns=Directory.GetFiles(ComShInterpreter.textureDir+path,"*.asset_bg",SearchOption.AllDirectories);
-        if(fns==null) return 0;
-        int len=ComShInterpreter.textureDir.Length;
-        for(int i=0; i<fns.Length; i++){
-            var cma=ObjUtil.ListAssetBundle_NoChk<Cubemap>(fns[i]);
-            if(cma==null||cma.Count==0) continue;
-            string ab=fns[i].Substring(len).Replace("\\","/");
-            if(ab.EndsWith(".asset_bg")) ab=ab.Substring(0,ab.Length-9);
-            foreach(var cm in cma) sh.io.PrintLn(ab+":"+cm);
-        }
+        try{
+            string[] fns=Directory.GetFiles(ComShInterpreter.textureDir+path,"*.asset_bg",SearchOption.AllDirectories);
+            if(fns==null) return 0;
+            int len=ComShInterpreter.textureDir.Length;
+            for(int i=0; i<fns.Length; i++){
+                var cma=ObjUtil.ListAssetBundle_NoChk<Cubemap>(fns[i]);
+                if(cma==null||cma.Count==0) continue;
+                string ab=fns[i].Substring(len).Replace("\\","/");
+                if(ab.EndsWith(".asset_bg")) ab=ab.Substring(0,ab.Length-9);
+                foreach(var cm in cma) sh.io.PrintLn(ab+":"+cm);
+            }
+        }catch{ return 0; };
         return 0;
     }
     private static int CmdMenuList(ComShInterpreter sh,List<string> args){
@@ -2752,7 +2784,7 @@ public static class Command {
         RenderSettings.defaultReflectionMode=UnityEngine.Rendering.DefaultReflectionMode.Custom;
         RenderSettings.customReflection=cm;
         DynamicGI.UpdateEnvironment();
-        return 1;
+        return 0;
     }
     public static int SetupSkyBoxMate(ComShInterpreter sh,string ab,string name,out Material mate){
         mate=ObjUtil.LoadAssetBundle<Material>("skybox","skybox",ComShInterpreter.scriptFolder+@"asset\");
@@ -2784,7 +2816,7 @@ public static class Command {
         var col=ParseUtil.Rgba(args[1]);
         if(col==null) return sh.io.Error(ParseUtil.error);
         sb.SetColor("_Tint",new Color(col[0],col[1],col[2],col[3]));
-        return 1;
+        return 0;
     }
     private static int CmdGlobalSkyBoxPower(ComShInterpreter sh,List<string> args){
         Material sb=RenderSettings.skybox;
@@ -2796,7 +2828,7 @@ public static class Command {
         }else if(args.Count>2) return sh.io.Error("引数が多すぎます");
         if(!float.TryParse(args[1],out float f)||f<0) return sh.io.Error("数値が不正です");
         sb.SetFloat("_Exposure",f);
-        return 1;
+        return 0;
     }
     private static int CmdGlobalSkyBoxRotation(ComShInterpreter sh,List<string> args){
         Material sb=RenderSettings.skybox;
@@ -2808,7 +2840,33 @@ public static class Command {
         }else if(args.Count>2) return sh.io.Error("引数が多すぎます");
         if(!float.TryParse(args[1],out float f)) return sh.io.Error("数値が不正です");
         sb.SetFloat("_Rotation",f);
-        return 1;
+        return 0;
+    }
+    private static int CmdNumFormat(ComShInterpreter sh,List<string> args){
+        if(args.Count!=3) return sh.io.Error("使い方: numformat 10進数値 書式指定");
+        string ret;
+        if(args[1].IndexOf('.')>=0){
+            if(!double.TryParse(args[1],out double d)) return sh.io.Error("数値が不正です");
+            try{ret=d.ToString(args[2]);}catch{return sh.io.Error("書式が不正です");}
+        }else{
+            if(!ulong.TryParse(args[1],out ulong n)) return sh.io.Error("数値が不正です");
+            try{ret=n.ToString(args[2]);}catch{return sh.io.Error("書式が不正です");}
+            sh.io.Print(n.ToString(args[2]));
+        }
+        sh.io.Print(ret);
+        return 0;
+    }
+    private static int CmdToHex(ComShInterpreter sh,List<string> args){
+        if(args.Count!=2) return sh.io.Error("使い方: tohex 10進数値");
+        if(!ulong.TryParse(args[1],out ulong n)) return sh.io.Error("数値が不正です");
+        sh.io.Print(n.ToString("X"));
+        return 0;
+    }
+    private static int CmdToDec(ComShInterpreter sh,List<string> args){
+        if(args.Count!=2) return sh.io.Error("使い方: todec 16進数値");
+        if(!ulong.TryParse(args[1],System.Globalization.NumberStyles.HexNumber,null,out ulong n)) return sh.io.Error("数値が不正です");
+        sh.io.Print(n.ToString());
+        return 0;
     }
 
     public delegate int CmdParam<T>(ComShInterpreter sh,T m,string val);
