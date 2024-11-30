@@ -501,7 +501,7 @@ public static class Command {
             fa=Directory.GetFiles(ComShInterpreter.homeDir+@"Mod\","*.menu",SearchOption.AllDirectories);
             Add2MenuList(fa,list,dup);
         }catch{}
-        fa=GameUty.FileSystem.GetList("parts",AFileSystemBase.ListType.AllFile);
+        fa=GameUty.FileSystem.GetFileListAtExtension("menu");
         Add2MenuList(fa,list,dup);
         fa=GameUty.FileSystemOld.GetList("menu",AFileSystemBase.ListType.AllFile);
         Add2MenuList(fa,list,dup);
