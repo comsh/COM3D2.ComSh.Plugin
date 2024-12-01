@@ -2384,6 +2384,7 @@ public static class MaidUtil {
         byte[] buffer=UTIL.AReadAll(fileName);
         if(buffer==null) return null;
         var mh=new MenuHeader();
+        mh.name=mh.cate="";
         try{
             using(BinaryReader br=new BinaryReader(new MemoryStream(buffer))){
                 string hdr=br.ReadString();

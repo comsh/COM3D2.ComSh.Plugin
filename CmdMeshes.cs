@@ -1490,7 +1490,7 @@ public static class CmdMeshes {
         public string uv4;
         public VerLoopChange(int idx){ this.idx=idx; }
     }
-    private class SingleMesh {
+    public class SingleMesh {
         public int submeshno;
         public MeshInfo mi;
         public SingleMesh(int no,MeshInfo mi){ this.submeshno=no; this.mi=mi; }

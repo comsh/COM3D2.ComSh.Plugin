@@ -45,7 +45,7 @@ public class ComShHandle:GizmoRender {
 
     private static List<ComShHandle> hdllst=new List<ComShHandle>();
     public static void Clear(){
-        foreach(var h in hdllst) GameObject.Destroy(h.gameObject);
+        foreach(var h in hdllst) if(h!=null) GameObject.Destroy(h.gameObject);
         hdllst.Clear();
     }
     public static ComShHandle GetHandle(Transform tr){

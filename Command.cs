@@ -514,8 +514,9 @@ public static class Command {
     private static void Add2MenuList(string[] files,List<string> result,HashSet<string> hs){
         for(int i=0; i<files.Length; i++) if(files[i].EndsWith(".menu",Ordinal)){
             if(files[i].Contains("\\man\\")) continue;
-            string name=Last1(files[i],'\\').ToLower();
+            string name=Last1(files[i],'\\');
             if(name==null) continue;
+            name=name.ToLower();
             if(name.Contains("_zurashi")||name.Contains("_mekure")||name.Contains("_mekure_back")||name.Contains("_porori")) continue;
             var mh=MaidUtil.ReadMenuHeader(name);
             if(mh==null) continue;

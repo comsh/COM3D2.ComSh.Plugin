@@ -940,16 +940,21 @@ public static class CmdObjects {
                     var cd=new ParseUtil.ColonDesc(sa[1]);
                     var meshtr=ObjUtil.FindObj(sh,cd);
                     if(meshtr==null) return sh.io.Error("メッシュがありません");
-                    var smr=meshtr.GetComponentInChildren<SkinnedMeshRenderer>();
-                    if(smr!=null){
+
+                    Transform meshtr0=ObjUtil.FindObjRoot(sh,cd);
+                    if(meshtr0==null) return sh.io.Error("オブジェクトが存在しません");
+                    var mi=new CmdMeshes.MeshInfo(meshtr,meshtr0);
+                    if(mi.count<=cd.meshno) return sh.io.Error("メッシュがありません");
+                    int midx=mi.mesh.FindMeshIdx(cd.meshno);
+                    if(midx<0) return sh.io.Error("メッシュがありません");
+                    Renderer r=mi.mesh[midx].rend;
+
+                    if(r.GetType()==typeof(SkinnedMeshRenderer)){
                         shape.shapeType=ParticleSystemShapeType.SkinnedMeshRenderer;
-                        shape.skinnedMeshRenderer=smr; 
+                        shape.skinnedMeshRenderer=(SkinnedMeshRenderer)r; 
                     }else{
-                       var mf=meshtr.GetComponentInChildren<MeshRenderer>();
-                        if(mf!=null){
-                            shape.shapeType=ParticleSystemShapeType.MeshRenderer;
-                            shape.meshRenderer=mf;
-                        }else return sh.io.Error("メッシュがありません");
+                        shape.shapeType=ParticleSystemShapeType.MeshRenderer;
+                        shape.meshRenderer=(MeshRenderer)r;
                     }
                 }else{
                     if(sa[0]=="hemisphere") shape.shapeType=ParticleSystemShapeType.Hemisphere;
