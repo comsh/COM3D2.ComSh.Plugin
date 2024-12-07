@@ -127,6 +127,7 @@ public static class Command {
         cmdTbl.Add("round2", new Cmd(CmdRound2));
         cmdTbl.Add("roundup", new Cmd(CmdRoundUp));
         cmdTbl.Add("perlinnoise", new Cmd(CmdPerlinNoise));
+        cmdTbl.Add("fbm", new Cmd(CmdFbmNoise));
         cmdTbl.Add("pixellights", new Cmd(CmdPixelLights));
         cmdTbl.Add("namespace", new Cmd(CmdNameSpace));
         cmdTbl.Add("namespace.clear", new Cmd(CmdNameSpaceClear));
@@ -1162,6 +1163,7 @@ public static class Command {
         sh.io.output=new ComShInterpreter.Output(subout.Output);
 
         int ret=0;
+        sh.StartLoop();
         if(dlmt.Length==1){
             char d=dlmt[0]; // char型の方が若干速いので分ける。処理は同じ
             while(ParseUtil.CutNext(txt,d,pa)){
@@ -1180,9 +1182,9 @@ public static class Command {
             if(ret<0 || sh.exitq){ ret=sh.io.exitStatus; sh.exitq=false; break; }
             i++;
         }
-
         sh.io.output=orig;
         if(ret>=0) sh.io.Print(subout.GetSubShResult());
+        sh.EndLoop();
         return ret;
     }
     private static int CmdLineLoop(ComShInterpreter sh,List<string> args){
@@ -1220,6 +1222,7 @@ public static class Command {
         sh.io.output=new ComShInterpreter.Output(subout.Output);
 
         int ret=0;
+        sh.StartLoop();
         Match m=reg.Match(text);
         while(m.Success){
             for(int i=0; i<m.Groups.Count; i++) sh.env[$"_{i}"]=m.Groups[i].Value;
@@ -1230,6 +1233,7 @@ public static class Command {
         }
         sh.io.output=orig;
         if(ret>=0) sh.io.Print(subout.GetSubShResult());
+        sh.EndLoop();
         return ret;
     }
     private static int CmdPs(ComShInterpreter sh,List<string> args){
@@ -1450,17 +1454,27 @@ public static class Command {
         return SinCosCommon(sh,args,1);
     }
     private static int SinCosCommon(ComShInterpreter sh, List<string> args, int sc){
-        float w,t,p,r,m;
+        float[] w,p,r,m;
+        float t;
         var prms=ParseUtil.NormalizeParams(args,new string[]{null,"1","0","0","0"},1);
         if(prms==null) return sh.io.Error(ParseUtil.error);
-        p=ParseUtil.ParseFloat(prms[0]); r=ParseUtil.ParseFloat(prms[1]);
-        m=ParseUtil.ParseFloat(prms[2]); w=ParseUtil.ParseFloat(prms[3]);
+
+        p=ParseUtil.FloatArr(prms[0]); r=ParseUtil.FloatArr(prms[1]);
+        m=ParseUtil.FloatArr(prms[2]); w=ParseUtil.FloatArr(prms[3]);
         t=ParseUtil.ParseFloat(prms[4]);
-        if(float.IsNaN(p)||float.IsNaN(r)||float.IsNaN(m)
-            ||float.IsNaN(w)||float.IsNaN(t)) sh.io.Error("数値の指定が不正です");
-        float val;
-        if(sc==0) val=Mathf.Sin((t*w+p)*Mathf.Deg2Rad)*r+m;
-        else val=Mathf.Cos((t*w+p)*Mathf.Deg2Rad)*r+m;
+        if(p==null||r==null||m==null||w==null||float.IsNaN(t)) return sh.io.Error("数値の指定が不正です");
+        int n=Math.Max(p.Length,Math.Max(r.Length,Math.Max(m.Length,w.Length)));
+        if(n==0) return sh.io.Error("数値の指定が不正です");
+
+        float val=0;
+        float co=(sc==1)?90:0;
+        for(int i=0; i<n; i++){
+            float pi=(i<p.Length)?p[i]:p[p.Length-1],
+            ri=(i<r.Length)?r[i]:r[r.Length-1],
+            mi=(i<m.Length)?m[i]:m[m.Length-1],
+            wi=(i<w.Length)?w[i]:w[w.Length-1];
+            val+=Mathf.Sin((t*wi+pi+co)*Mathf.Deg2Rad)*ri+mi;
+        }
         sh.io.Print(sh.fmt.FVal(val));
         return 0;
     }
@@ -1593,6 +1607,45 @@ public static class Command {
             xy[1]+=r*Mathf.Sin(rad);
         }
         sh.io.Print(sh.fmt.FVal(Mathf.PerlinNoise(xy[0],xy[1])));
+        return 0;
+    }
+    private static int CmdFbmNoise(ComShInterpreter sh,List<string> args){
+        const string usage="使い方: fbm 振幅 周波数 x y [半径 角度]";
+        float[] amp,freq;
+        float x,y;
+ 
+        if(args.Count<4 || args.Count>7) return sh.io.Error(usage);
+        amp=ParseUtil.FloatArr(args[1]);
+        freq=ParseUtil.FloatArr(args[2]);
+        if(amp==null||freq==null) return sh.io.Error("数値が不正です");
+        int n=Math.Max(amp.Length,freq.Length);
+        if(n==0) return sh.io.Error("数値が不正です");
+        int idx,ridx;
+        if((idx=args[3].IndexOf(','))>=0){
+            if(args.Count==7) return sh.io.Error(usage);
+            ridx=4;
+            if(!float.TryParse(args[3].Substring(0,idx),out x)
+             ||!float.TryParse(args[3].Substring(idx+1),out y)) return sh.io.Error("数値が不正です");
+        }else{
+            if(args.Count==4) return sh.io.Error(usage);
+            ridx=5;
+            if(!float.TryParse(args[3],out x)
+             ||!float.TryParse(args[4],out y)) return sh.io.Error("数値が不正です");
+        }
+        if(args.Count==ridx+2){
+            if(!float.TryParse(args[ridx],out float r)||r<=0
+             ||!float.TryParse(args[ridx+1],out float d)||d<0) return sh.io.Error("数値が不正です");
+            float th=d*Mathf.Deg2Rad;
+            x=r*Mathf.Cos(th)+x;
+            y=r*Mathf.Sin(th)+y;
+        }
+        float val=0;
+        for(int i=0; i<n; i++){
+            float a=(i<amp.Length)?amp[i]:amp[amp.Length-1];
+            float f=(i<freq.Length)?freq[i]:freq[freq.Length-1];
+            val+=Mathf.PerlinNoise(x*f,y*f)*a;
+        }
+        sh.io.Print(sh.fmt.FVal(val));
         return 0;
     }
     private static int CmdQuat(ComShInterpreter sh,List<string> args){
@@ -1981,6 +2034,7 @@ public static class Command {
         var subout=new ComShInterpreter.SubShOutput();
         sh.io.output=new ComShInterpreter.Output(subout.Output);
         int ret=0;
+        sh.StartLoop();
         for(int i=0; i<n; i++){
             sh.env["_1"]=i.ToString();
             sh.env["_2"]=(i+1).ToString();
@@ -1990,6 +2044,7 @@ public static class Command {
         }
         sh.io.output=orig;
         if(ret>=0) sh.io.Print(subout.GetSubShResult());
+        sh.EndLoop();
         return ret;
     }
 
@@ -2852,7 +2907,6 @@ public static class Command {
         }else{
             if(!ulong.TryParse(args[1],out ulong n)) return sh.io.Error("数値が不正です");
             try{ret=n.ToString(args[2]);}catch{return sh.io.Error("書式が不正です");}
-            sh.io.Print(n.ToString(args[2]));
         }
         sh.io.Print(ret);
         return 0;

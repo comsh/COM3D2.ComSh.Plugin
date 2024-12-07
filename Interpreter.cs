@@ -29,6 +29,11 @@ public partial class ComShInterpreter {
     public string ns="";
     public int lastcmp=1;
 
+    public int looplv=0;
+    public Action onloopend=null;
+    public void StartLoop(){looplv++;}
+    public void EndLoop(){if((--looplv)==0 && onloopend!=null){onloopend.Invoke(); onloopend=null;}}
+
 	public ComShInterpreter(Output op=null, VarDic parentEnv=null,Dictionary<string,ScriptStatus> parentFunc=null,string ns="") {
         env=(parentEnv!=null)?new VarDic(parentEnv):new VarDic();
         env.output=string.Empty;

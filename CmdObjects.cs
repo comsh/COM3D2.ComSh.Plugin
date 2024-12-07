@@ -1184,15 +1184,33 @@ public static class CmdObjects {
     }
     private static int ObjParamLookAt(ComShInterpreter sh,Transform tr,string val){
         if(val==null){ return 0; }
-        if(val.IndexOf(':')>=0){
+        Vector3 up=Vector3.up;
+        string[] sa=val.Split(ParseUtil.comma);
+        if(sa[0].IndexOf(':')>=0){
+            if(sa.Length!=1&&sa.Length!=4) return sh.io.Error("書式が不正です");
             var cd=new ParseUtil.ColonDesc(val);
             var tgt=ObjUtil.FindObj(sh,cd);
             if(tgt==null) return sh.io.Error("対象が見つかりません");
-            tr.transform.LookAt(tgt.position,Vector3.up);
+            if(sa.Length==4){
+                if(!float.TryParse(sa[1],out float x)
+                 ||!float.TryParse(sa[2],out float y)
+                 ||!float.TryParse(sa[3],out float z)) return sh.io.Error("数値が不正です");
+                up=new Vector3(x,y,z);
+            }
+            tr.transform.LookAt(tgt.position,up);
         }else{
-            float[] xyz=ParseUtil.Xyz(val);
-            if(xyz==null) return sh.io.Error(ParseUtil.error);
-            tr.transform.LookAt(new Vector3(xyz[0],xyz[1],xyz[2]),Vector3.up);
+            if(sa.Length!=3&&sa.Length!=6) return sh.io.Error("書式が不正です");
+            if(!float.TryParse(sa[0],out float x)
+             ||!float.TryParse(sa[1],out float y)
+             ||!float.TryParse(sa[2],out float z)) return sh.io.Error("数値が不正です");
+            var tgt=new Vector3(x,y,z);
+            if(sa.Length==6){
+                if(!float.TryParse(sa[3],out x)
+                 ||!float.TryParse(sa[4],out y)
+                 ||!float.TryParse(sa[5],out z)) return sh.io.Error("数値が不正です");
+                up=new Vector3(x,y,z);
+            }
+            tr.transform.LookAt(tgt,up);
         }
         return 1;
     }
@@ -2915,20 +2933,46 @@ public static class ObjUtil {
         if(fname==null) return null;
         return ListAssetBundle_NoChk<T>(fname);
     }
+    private static bool abcacheq=false;
+    private static Dictionary<string,AssetBundle> abdic=new Dictionary<string,AssetBundle>();
+    public static void ABCache(){ abcacheq=true; }
+    public static void ABNoCache(){
+        if(!abcacheq) return;
+        foreach(var ab in abdic.Values) if(ab!=null) ab.Unload(false);
+        abdic.Clear();
+        abcacheq=false;
+    }
     public static List<string> ListAssetBundle_NoChk<T>(string bundle) where T : UnityEngine.Object {
+        T[] aa=AllAsset_NoChk<T>(bundle);
+        if(aa==null) return null;
         List<string> lst=new List<string>();
+        for(int i=0; i<aa.Length; i++) if(aa[i]!=null){ lst.Add(aa[i].name); GameObject.Destroy(aa[i]); }
+        return lst;
+    }
+    public static T[] AllAsset<T>(string bundle) where T : UnityEngine.Object {
+        return AllAsset<T>(bundle,ComShInterpreter.myobjDir);
+    }
+    public static T[] AllAsset<T>(string bundle,string basedir) where T : UnityEngine.Object {
+        var fname=ChkAssetBundleSub(bundle,basedir);
+        if(fname==null) return null;
+        return AllAsset_NoChk<T>(fname);
+    }
+    public static T[] AllAsset_NoChk<T>(string bundle) where T : UnityEngine.Object {
         AssetBundle ab=null;
         try{
-            ab=AssetBundle.LoadFromFile(bundle);
-            if(ab==null) return null;
-            string[] names=ab.GetAllAssetNames();
-            for(int i=0; i<names.Length; i++){
-                T a=ab.LoadAsset<T>(names[i]);
-                if(a!=null) lst.Add(a.name);
+            if(abcacheq){
+                if(!abdic.TryGetValue(bundle,out ab)){
+                    ab=AssetBundle.LoadFromFile(bundle);
+                    if(ab==null) return null;
+                    abdic[bundle]=ab; 
+                }
+            }else{
+                ab=AssetBundle.LoadFromFile(bundle);
+                if(ab==null) return null;
             }
+            return ab.LoadAllAssets<T>();
         }catch{ return null;}
-        finally{ if(ab!=null) ab.Unload(true); }
-        return lst;
+        finally{ if(!abcacheq && ab!=null) ab.Unload(false); }
     }
     public static T LoadAssetBundle<T>(string bundle,string path) where T:UnityEngine.Object {
         return LoadAssetBundle<T>(bundle,path,ComShInterpreter.myobjDir);
@@ -2939,16 +2983,23 @@ public static class ObjUtil {
         T ret;
         AssetBundle ab=null;
         try{
-            ab=AssetBundle.LoadFromFile(fname);
-            if(ab==null) return null;
-            if(!ab.Contains(path)){ab.Unload(false); return null;}
+            if(abcacheq){
+                if(!abdic.TryGetValue(fname,out ab)){
+                    ab=AssetBundle.LoadFromFile(fname);
+                    if(ab==null) return null;
+                    abdic[fname]=ab;
+                }
+            }else{
+                ab=AssetBundle.LoadFromFile(fname);
+                if(ab==null) return null;
+            }
+            if(!ab.Contains(path)){if(!abcacheq) ab.Unload(false); return null;}
             ret=ab.LoadAsset<T>(path);
-            if(ret==null){ab.Unload(false); return null; }
-            // CubemapのときはInstantiate()はうまくいかないみたいなので個別処理
+            if(ret==null){if(!abcacheq) ab.Unload(false); return null; }
             if(ret.GetType()==typeof(Cubemap)) ret=TextureUtil.CloneCubemap(ret as Cubemap) as T;
             else ret=UnityEngine.Object.Instantiate<T>(ret);
-            ab.Unload(false);
-        }catch(Exception e){Debug.Log(e.ToString());if(ab!=null) ab.Unload(false); return null;}
+            if(!abcacheq) ab.Unload(false);
+        }catch(Exception e){Debug.Log(e.ToString());if(ab!=null && !abcacheq) ab.Unload(false); return null;}
         return ret;
     }
     public static int ChgMaterial(Transform tr,int no,string fname,string shader=null){

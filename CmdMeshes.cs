@@ -35,6 +35,7 @@ public static class CmdMeshes {
         meshParamDic.Add("findverno",new CmdParam<SingleMesh>(MeshParamFindVerno));
         meshParamDic.Add("findverlist",new CmdParam<SingleMesh>(MeshParamFindVerlist));
         meshParamDic.Add("weightverno",new CmdParam<SingleMesh>(MeshParamWeightVerno));
+        meshParamDic.Add("weightverlist",new CmdParam<SingleMesh>(MeshParamWeightVerlist));
         meshParamDic.Add("uvwh",new CmdParam<SingleMesh>(MeshParamUVWH));
         meshParamDic.Add("graft",new CmdParam<SingleMesh>(MeshParamGraft));
         meshParamDic.Add("reverse",new CmdParam<SingleMesh>(MeshParamReverse));
@@ -405,29 +406,37 @@ public static class CmdMeshes {
             sh.io.Print(sm.mi.material[sm.submeshno].shader.name);
             return 0;
         }
-
         Shader shader=null;
         Material mate=null;
         string[] lr=ParseUtil.LeftAndRight2(val,':');
         if(lr[0]!=""){
-            var lst=ObjUtil.ListAssetBundle<Material>(lr[0]);
+            if(sh.looplv>0) ObjUtil.ABCache();
+            var ma=ObjUtil.AllAsset<Material>(lr[0]);
+            if(ma==null) return sh.io.Error("ファイルが読み込めません");
             if(lr[1]==""){
-                var names=new List<string>();
-                foreach(var s in lst){
-                    mate=ObjUtil.LoadAssetBundle<Material>(lr[0],s);
-                    if(mate==null || mate.shader==null){GameObject.Destroy(mate); continue;}
-                    if(mate.shader.name!=null) names.Add(mate.shader.name);
+                var names=new List<string>(ma.Length);
+                for(int i=0; i<ma.Length; i++){
+                    if(ma[i].shader!=null&&ma[i].shader.name!=null) names.Add(ma[i].shader.name);
+                    GameObject.Destroy(ma[i]);
                 }
-                if(names.Count==0) return 0;
-                names.Sort();
-                var prev="";
-                foreach(var s in names) if(s!=prev){ sh.io.PrintLn(s); prev=s; }
+                if(names.Count>0){
+                    names.Sort();
+                    var prev="";
+                    foreach(var s in names) if(s!=prev){ sh.io.PrintLn(s); prev=s; }
+                }
+                if(sh.looplv==0) ObjUtil.ABNoCache(); else{
+                    sh.onloopend-=ObjUtil.ABNoCache;
+                    sh.onloopend+=ObjUtil.ABNoCache;
+                }
                 return 0;
             }
-            foreach(var s in lst){
-                mate=ObjUtil.LoadAssetBundle<Material>(lr[0],s);
-                if(mate==null || mate.shader==null || mate.shader.name!=lr[1]){GameObject.Destroy(mate); continue;}
-                shader=mate.shader;
+            for(int i=0; i<ma.Length; i++){
+                if(ma[i].shader!=null&&ma[i].shader.name==lr[1]){mate=ma[i]; shader=mate.shader; break;}
+                GameObject.Destroy(ma[i]);
+            }
+            if(sh.looplv==0) ObjUtil.ABNoCache(); else{
+                sh.onloopend-=ObjUtil.ABNoCache;
+                sh.onloopend+=ObjUtil.ABNoCache;
             }
         }else shader=Shader.Find(val);
         if(shader==null) return sh.io.Error("指定されたシェーダは見つかりません");
@@ -435,6 +444,7 @@ public static class CmdMeshes {
         sm.mi.material[sm.submeshno].shader=shader;
         if(mate!=null){
             sm.mi.material[sm.submeshno].shaderKeywords=(string[])mate.shaderKeywords.Clone();
+            GameObject.Destroy(mate);
         }
         return 1;
     }
@@ -1358,8 +1368,24 @@ public static class CmdMeshes {
         for(int i=0; i<l; i++) rn[i]=arr[idx[i]];
         return rn;
     }
-
     private static int MeshParamWeightVerno(ComShInterpreter sh,SingleMesh sm,string val){
+        int ret=MeshParamWeightVernoSub(sh,sm,val,out List<int> vers);
+        if(ret<=0) return ret;
+        if(vers.Count>0){
+            sh.io.Print(vers[0].ToString());
+            for(int i=1; i<vers.Count; i++) sh.io.Print(',').Print(vers[i].ToString());
+        }
+        return 1;
+    }
+    private static int MeshParamWeightVerlist(ComShInterpreter sh,SingleMesh sm,string val){
+        int ret=MeshParamWeightVernoSub(sh,sm,val,out List<int> vers);
+        if(ret<=0) return ret;
+        sm.list=vers.ToArray();
+        return 1;
+    }
+
+    private static int MeshParamWeightVernoSub(ComShInterpreter sh,SingleMesh sm,string val,out List<int> vers){
+        vers=null;
         if(val==null) return 0;
         var sa=ParseUtil.LeftAndRight(val,',');
         
@@ -1383,21 +1409,17 @@ public static class CmdMeshes {
         int boneidx=Array.IndexOf(smr.bones,tr);
         var ia=sm.mi.GetIndices3(sm.submeshno);
         var wt=smr.sharedMesh.boneWeights;
-        var ret=new List<int>();
+        vers=new List<int>();
         for(int i=0; i<ia.Length; i++){
             int idx=ia[i];
             if( (wt[idx].boneIndex0==boneidx && wt[idx].weight0>=mm[0] && wt[idx].weight0<=mm[1])
              || (wt[idx].boneIndex1==boneidx && wt[idx].weight1>=mm[0] && wt[idx].weight1<=mm[1])
              || (wt[idx].boneIndex2==boneidx && wt[idx].weight2>=mm[0] && wt[idx].weight2<=mm[1])
              || (wt[idx].boneIndex3==boneidx && wt[idx].weight3>=mm[0] && wt[idx].weight3<=mm[1])){
-                ret.Add(idx);
+                vers.Add(idx);
             }
         }
-        if(ret.Count>0){
-            sh.io.Print(ret[0].ToString());
-            for(int i=1; i<ret.Count; i++) sh.io.Print(',').Print(ret[i].ToString());
-        }
-        return 0;
+        return 1;
     }
 
     private static int MeshParamVideo(ComShInterpreter sh,SingleMesh sm,string val){
