@@ -189,6 +189,7 @@ public static class CmdObjects {
                 else{
                     float[] xy=ParseUtil.Xy(ParseUtil.RightOf(type,':'));
                     if(xy==null) return sh.io.Error("書式が不正です");
+                    if(xy[0]<=0||xy[1]<=0) return sh.io.Error("数値が不正です");
                     go=ObjUtil.CreateCustomPlane((int)xy[0],(int)xy[1]);
                 }
             }else return sh.io.Error("種類にはcube|sphere|cylinder|quad|plane|capsuleのいずれかを指定してください");
@@ -3095,7 +3096,7 @@ public static class ObjUtil {
         var uv=new Vector2[wn*hn];
         int idx=0;
         for(int y=0; y<hn; y++) for(int x=0; x<hn; x++){
-            float u=(float)x/w,v=(float)y/h;
+            float u=(float)x/w-0.5f,v=(float)y/h-0.5f;
             va[idx]=new Vector3(u,0,v);
             uv[idx++]=new Vector3(u,v);
         }
