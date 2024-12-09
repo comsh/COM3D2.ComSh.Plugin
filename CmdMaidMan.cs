@@ -55,6 +55,7 @@ public static class CmdMaidMan {
         maidParamDic.Add("list",new CmdParam<Maid>(MaidParamList));
         maidParamDic.Add("ik",new CmdParam<Maid>(MaidParamIK));
         maidParamDic.Add("preset",new CmdParam<Maid>(MaidParamPreset));
+        maidParamDic.Add("presetsave",new CmdParam<Maid>(MaidParamPresetSave));
         maidParamDic.Add("cloth",new CmdParam<Maid>(MaidParamCloth));
         maidParamDic.Add("cloth2",new CmdParam<Maid>(MaidParamCloth2));
         maidParamDic.Add("mekure",new CmdParam<Maid>(MaidParamMekure));
@@ -799,14 +800,21 @@ public static class CmdMaidMan {
     }
     private static int MaidParamPreset(ComShInterpreter sh,Maid m,string val){
         if(sh.IsSafeMode()) return sh.io.Error("この機能はセーフモードでは使用できません");
-        if(val==null) return 0;
+        CharacterMgr cm=GameMain.Instance.CharacterMgr;
+        if(val==null){
+		    string[] files = Directory.GetFiles(cm.PresetDirectory, "*.preset");
+            if(files!=null) for(int i=0; i<files.Length; i++) sh.io.PrintLn(Path.GetFileNameWithoutExtension(files[i])); 
+
+            UnityEngine.Object[] r=Resources.LoadAll("Preset/");
+            for(int i=0; i<r.Length; i++) sh.io.PrintLn(r[i].name); 
+            return 0;
+        }
         int mode=2;
         if(val.Length>2 && val[val.Length-2]==','){
             mode=val[val.Length-1]-'0';
             if(mode<0||mode>2) return sh.io.Error("読込モードは0～2で指定してください");
             val=val.Substring(0,val.Length-2);
         }
-        CharacterMgr cm=GameMain.Instance.CharacterMgr;
         CharacterMgr.Preset preset=null;
         string fname=cm.PresetDirectory+"\\"+UTIL.Suffix(val,".preset");
         TextAsset ta=Resources.Load<TextAsset>("Preset/" + val);
@@ -814,13 +822,8 @@ public static class CmdMaidMan {
         else if(File.Exists(fname)) preset=cm.PresetLoad(fname);
         Resources.UnloadAsset(ta);
         if(preset==null) return sh.io.Error("プリセットファイルが読み込めません");
-        if(mode==0){
-            if(preset.ePreType==CharacterMgr.PresetType.Wear) return 1;
-            preset.ePreType=CharacterMgr.PresetType.Body;
-        }else if(mode==1){
-            if(preset.ePreType==CharacterMgr.PresetType.Body) return 1;
-            preset.ePreType=CharacterMgr.PresetType.Wear;
-        }
+        if(mode==0) preset.ePreType=CharacterMgr.PresetType.Body;
+        else if(mode==1) preset.ePreType=CharacterMgr.PresetType.Wear;
         cm.PresetSet(m,preset);
         m.boAllProcPropBUSY=false;
         m.AllProcProp();
@@ -828,7 +831,24 @@ public static class CmdMaidMan {
         MaidUtil.FixGravity(m);
         return 1;
     }
-
+    private static int MaidParamPresetSave(ComShInterpreter sh,Maid m,string val){
+        if(val==null) return sh.io.Error("ファイル名を指定してください");
+        string[] sa=val.Split(ParseUtil.comma);
+        CharacterMgr.PresetType type=CharacterMgr.PresetType.All;
+        if(sa.Length==2){
+            switch(sa[1]){
+            case "0": type=CharacterMgr.PresetType.Body; break;
+            case "1": type=CharacterMgr.PresetType.Wear; break;
+            case "2": type=CharacterMgr.PresetType.All; break;
+            }
+        }
+        CharacterMgr cm=GameMain.Instance.CharacterMgr;
+        byte[] bin=cm.PresetSaveNotWriteFile(m,type);
+        try{
+            File.WriteAllBytes(cm.PresetDirectory+"\\"+UTIL.Suffix(sa[0],".preset"),bin);
+        }catch{return sh.io.Error("失敗しました");}
+        return 1;
+    }
     private static int MaidParamCloth(ComShInterpreter sh,Maid m,string val){
         return MaidParamClothSub(sh,m,val,true);
     }

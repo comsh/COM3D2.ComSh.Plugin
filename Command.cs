@@ -1454,26 +1454,27 @@ public static class Command {
         return SinCosCommon(sh,args,1);
     }
     private static int SinCosCommon(ComShInterpreter sh, List<string> args, int sc){
-        float[] w,p,r,m;
-        float t;
+        float[] w,p,r;
+        float t,m;
         var prms=ParseUtil.NormalizeParams(args,new string[]{null,"1","0","0","0"},1);
         if(prms==null) return sh.io.Error(ParseUtil.error);
 
-        p=ParseUtil.FloatArr(prms[0]); r=ParseUtil.FloatArr(prms[1]);
-        m=ParseUtil.FloatArr(prms[2]); w=ParseUtil.FloatArr(prms[3]);
+        p=ParseUtil.FloatArr(prms[0]);
+        r=ParseUtil.FloatArr(prms[1]);
+        w=ParseUtil.FloatArr(prms[3]);
+        m=ParseUtil.ParseFloat(prms[2]);
         t=ParseUtil.ParseFloat(prms[4]);
-        if(p==null||r==null||m==null||w==null||float.IsNaN(t)) return sh.io.Error("数値の指定が不正です");
-        int n=Math.Max(p.Length,Math.Max(r.Length,Math.Max(m.Length,w.Length)));
+        if(p==null||r==null||w==null||float.IsNaN(m)||float.IsNaN(t)) return sh.io.Error("数値の指定が不正です");
+        int n=Math.Max(p.Length,Math.Max(r.Length,w.Length));
         if(n==0) return sh.io.Error("数値の指定が不正です");
 
-        float val=0;
+        float val=m;
         float co=(sc==1)?90:0;
         for(int i=0; i<n; i++){
             float pi=(i<p.Length)?p[i]:p[p.Length-1],
             ri=(i<r.Length)?r[i]:r[r.Length-1],
-            mi=(i<m.Length)?m[i]:m[m.Length-1],
             wi=(i<w.Length)?w[i]:w[w.Length-1];
-            val+=Mathf.Sin((t*wi+pi+co)*Mathf.Deg2Rad)*ri+mi;
+            val+=Mathf.Sin((t*wi+pi+co)*Mathf.Deg2Rad)*ri;
         }
         sh.io.Print(sh.fmt.FVal(val));
         return 0;
@@ -1609,41 +1610,47 @@ public static class Command {
         sh.io.Print(sh.fmt.FVal(Mathf.PerlinNoise(xy[0],xy[1])));
         return 0;
     }
+    private static float[] no_radius=new float[]{0};
     private static int CmdFbmNoise(ComShInterpreter sh,List<string> args){
-        const string usage="使い方: fbm 振幅 周波数 x y [半径 角度]";
-        float[] amp,freq;
-        float x,y;
- 
-        if(args.Count<4 || args.Count>7) return sh.io.Error(usage);
+        const string usage="使い方: fbm 振幅 周波数 バイアス x y [半径 角度]";
+        float[] amp,freq,rx=no_radius,ry=no_radius;
+        float x,y,bias;
+        if(args.Count<5 || args.Count>8) return sh.io.Error(usage);
         amp=ParseUtil.FloatArr(args[1]);
         freq=ParseUtil.FloatArr(args[2]);
         if(amp==null||freq==null) return sh.io.Error("数値が不正です");
         int n=Math.Max(amp.Length,freq.Length);
-        if(n==0) return sh.io.Error("数値が不正です");
+        if(!float.TryParse(args[3],out bias)) return sh.io.Error("数値が不正です");
         int idx,ridx;
-        if((idx=args[3].IndexOf(','))>=0){
-            if(args.Count==7) return sh.io.Error(usage);
-            ridx=4;
-            if(!float.TryParse(args[3].Substring(0,idx),out x)
-             ||!float.TryParse(args[3].Substring(idx+1),out y)) return sh.io.Error("数値が不正です");
-        }else{
-            if(args.Count==4) return sh.io.Error(usage);
+        if((idx=args[4].IndexOf(','))>=0){
+            if(args.Count==8) return sh.io.Error(usage);
             ridx=5;
-            if(!float.TryParse(args[3],out x)
-             ||!float.TryParse(args[4],out y)) return sh.io.Error("数値が不正です");
+            if(!float.TryParse(args[4].Substring(0,idx),out x)
+             ||!float.TryParse(args[4].Substring(idx+1),out y)) return sh.io.Error("数値が不正です");
+        }else{
+            if(args.Count==5) return sh.io.Error(usage);
+            ridx=6;
+            if(!float.TryParse(args[4],out x)
+             ||!float.TryParse(args[5],out y)) return sh.io.Error("数値が不正です");
         }
         if(args.Count==ridx+2){
-            if(!float.TryParse(args[ridx],out float r)||r<=0
-             ||!float.TryParse(args[ridx+1],out float d)||d<0) return sh.io.Error("数値が不正です");
-            float th=d*Mathf.Deg2Rad;
-            x=r*Mathf.Cos(th)+x;
-            y=r*Mathf.Sin(th)+y;
+            var ra=ParseUtil.FloatArr(args[ridx]);
+            if(ra==null||ra.Length==0) return sh.io.Error("数値が不正です");
+            n=Math.Max(n,ra.Length);
+            for(int i=0; i<ra.Length; i++) if(ra[i]<=0) return sh.io.Error("数値が不正です");
+            if(!float.TryParse(args[ridx+1],out float d)||d<0) return sh.io.Error("数値が不正です");
+            float th=d*Mathf.Deg2Rad,c=Mathf.Cos(th),s=Mathf.Sin(th);
+            rx=new float[ra.Length]; ry=new float[ra.Length];
+            for(int i=0; i<ra.Length; i++){ rx[i]=ra[i]*c; ry[i]=ra[i]*s; }
         }
-        float val=0;
+        if(n==0) return sh.io.Error("数値が不正です");
+        float val=bias;
         for(int i=0; i<n; i++){
             float a=(i<amp.Length)?amp[i]:amp[amp.Length-1];
             float f=(i<freq.Length)?freq[i]:freq[freq.Length-1];
-            val+=Mathf.PerlinNoise(x*f,y*f)*a;
+            float r_x=(i<rx.Length)?rx[i]:rx[rx.Length-1];
+            float r_y=(i<ry.Length)?ry[i]:ry[ry.Length-1];
+            val+=Mathf.PerlinNoise((r_x+x)*f,(r_y+y)*f)*a;
         }
         sh.io.Print(sh.fmt.FVal(val));
         return 0;

@@ -169,7 +169,7 @@ public static class CmdObjects {
         if(args[1]=="create"){
             if(args.Count==2) return sh.io.Error("使い方: obj create 種類 [識別名]");
             if(args.Count>4) return sh.io.Error("引数が多すぎます");
-            string type=args[2]; string name=(args.Count==3)?AutoObjName(type):args[3];
+            string type=args[2],name=(args.Count==3)?AutoObjName(type):args[3];
             if(!UTIL.ValidObjName(name)) return sh.io.Error("その名前は使用できません");
             if((pftr=ObjUtil.GetPhotoPrefabTr(sh))==null) return sh.io.Error("オブジェクト作成に失敗しました");
             if(ObjUtil.FindObj(sh,name)!=null||LightUtil.FindLight(sh,name)!=null) return sh.io.Error("その名前は既に使われています");
@@ -182,10 +182,15 @@ public static class CmdObjects {
                 go=GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             }else if(type=="quad"){
                 go=GameObject.CreatePrimitive(PrimitiveType.Quad);
-            }else if(type=="plane"){
-                go=GameObject.CreatePrimitive(PrimitiveType.Plane);
             }else if(type=="capsule"){
                 go=GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            }else if(type.StartsWith("plane",Ordinal)){
+                if(type.Length==5) go=GameObject.CreatePrimitive(PrimitiveType.Plane);
+                else{
+                    float[] xy=ParseUtil.Xy(ParseUtil.RightOf(type,':'));
+                    if(xy==null) return sh.io.Error("書式が不正です");
+                    go=ObjUtil.CreateCustomPlane((int)xy[0],(int)xy[1]);
+                }
             }else return sh.io.Error("種類にはcube|sphere|cylinder|quad|plane|capsuleのいずれかを指定してください");
             UTIL.ResetTr(go.transform);
             go.name=name;
@@ -1188,7 +1193,7 @@ public static class CmdObjects {
         string[] sa=val.Split(ParseUtil.comma);
         if(sa[0].IndexOf(':')>=0){
             if(sa.Length!=1&&sa.Length!=4) return sh.io.Error("書式が不正です");
-            var cd=new ParseUtil.ColonDesc(val);
+            var cd=new ParseUtil.ColonDesc(sa[0]);
             var tgt=ObjUtil.FindObj(sh,cd);
             if(tgt==null) return sh.io.Error("対象が見つかりません");
             if(sa.Length==4){
@@ -3081,6 +3086,40 @@ public static class ObjUtil {
     public static void ClearComponent<T>(Transform tr,bool recursiveq=false) where T:Component{
         var ca=(recursiveq)?tr.GetComponentsInChildren<T>():tr.GetComponents<T>();
         for(int i=0; i<ca.Length; i++) if(ca[i]!=null) UnityEngine.Object.Destroy(ca[i]);
+    }
+    public static GameObject CreateCustomPlane(int w,int h){
+        Mesh mesh=new Mesh();
+        int wn=w+1,hn=h+1;
+        var va=new Vector3[wn*hn];
+        var tri=new int[w*h*6];
+        var uv=new Vector2[wn*hn];
+        int idx=0;
+        for(int y=0; y<hn; y++) for(int x=0; x<hn; x++){
+            float u=(float)x/w,v=(float)y/h;
+            va[idx]=new Vector3(u,0,v);
+            uv[idx++]=new Vector3(u,v);
+        }
+        idx=0;
+        for(int y=0; y<h; y++) for(int x=0; x<h; x++){
+            int a=y*wn+x,b=a+1,c=b+wn,d=b+wn-1;
+            tri[idx++]=a;
+            tri[idx++]=c;
+            tri[idx++]=b;
+            tri[idx++]=a;
+            tri[idx++]=d;
+            tri[idx++]=c;
+        }
+        mesh.vertices=va;
+        mesh.triangles=tri;
+        mesh.uv=uv;
+        mesh.RecalculateNormals();
+
+        var go=new GameObject();
+        var mf=go.AddComponent<MeshFilter>();
+        mf.mesh=mesh;
+        var mr=go.AddComponent<MeshRenderer>();
+        mr.material=new Material(Shader.Find("Standard"));
+        return go;
     }
 }
 }

@@ -204,10 +204,11 @@ public static class StudioMode {
 
         // ロード確認ダイアログ OK押下時
         var dlg=GameMain.Instance.SysDlg.gameObject;
-        var okbtn=UTY.GetChildObject(dlg.gameObject,"Base/Ok").GetComponent<UIButton>();
-        EventDelegate.Add(okbtn.onClick,OnLoadDlgOkClick,true);
-        //var canbtn=UTY.GetChildObject(dlg,"Base/Cancel").GetComponent<UIButton>();
-        //EventDelegate.Add(canbtn.onClick,OnLoadDlgCancelClick,true);
+        var msglbl=UTY.GetChildObject(dlg.gameObject,"Base/Message").GetComponent<UILabel>();
+        if(msglbl!=null&&msglbl.text.Contains("ロード")){
+            var okbtn=UTY.GetChildObject(dlg.gameObject,"Base/Ok").GetComponent<UIButton>();
+            EventDelegate.Add(okbtn.onClick,OnLoadDlgOkClick,true);
+        }
     }
 
     // コメントからコマンド($$[～]$$)を取り出す
