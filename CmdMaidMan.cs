@@ -1606,24 +1606,30 @@ public static class CmdMaidMan {
                 sh.fmt.FInt(jbl.bGravity),
                 sh.fmt.FInt(jbl.targetDistance),
                 sh.fmt.FInt(jbl.boBRA?jbl.bStiffnessBRA[0]:jbl.bStiffness[0]),
-                sh.fmt.FInt(jbl.boBRA?jbl.bStiffnessBRA[1]:jbl.bStiffness[1])
+                sh.fmt.FInt(jbl.boBRA?jbl.bStiffnessBRA[1]:jbl.bStiffness[1]),
+                sh.fmt.FInt(jbl.frontStretch),
+                sh.fmt.FInt(jbl.sideStretch),
+                sh.fmt.FInt(jbl.m_fLimitRot)
             );
             return 0;
         }
         var jbr=m.body0.jbMuneR;
         var sa=val.Split(',');
         float f;
-        if(sa.Length>4) return sh.io.Error("数値が不正です");
+        if(sa.Length>7) return sh.io.Error("数値が不正です");
         if(sa.Length>=1 && float.TryParse(sa[0],out f)) jbl.bGravity=jbr.bGravity=f;
         if(sa.Length>=2 && float.TryParse(sa[1],out f)) jbl.targetDistance=jbr.targetDistance=f;
         if(sa.Length>=3 && float.TryParse(sa[2],out f)){
             if(jbl.boBRA) jbl.bStiffnessBRA[0]=f; else jbl.bStiffness[0]=f;
             if(jbr.boBRA) jbr.bStiffnessBRA[0]=f; else jbr.bStiffness[0]=f;
         }
-        if(sa.Length==4 && float.TryParse(sa[3],out f)){
+        if(sa.Length>=4 && float.TryParse(sa[3],out f)){
             if(jbl.boBRA) jbl.bStiffnessBRA[1]=f; else jbl.bStiffness[1]=f;
             if(jbr.boBRA) jbr.bStiffnessBRA[1]=f; else jbr.bStiffness[1]=f;
         }
+        if(sa.Length>=5 && float.TryParse(sa[4],out f)) jbl.frontStretch=jbr.frontStretch=f;
+        if(sa.Length>=6 && float.TryParse(sa[5],out f)) jbl.sideStretch=jbr.sideStretch=f;
+        if(sa.Length==7 && float.TryParse(sa[6],out f)) jbl.m_fLimitRot=jbr.m_fLimitRot=f;
         return 1;
     }
     private static int MaidParamBBox(ComShInterpreter sh,Maid m,string val){

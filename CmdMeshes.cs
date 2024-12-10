@@ -1375,7 +1375,7 @@ public static class CmdMeshes {
             sh.io.Print(vers[0].ToString());
             for(int i=1; i<vers.Count; i++) sh.io.Print(',').Print(vers[i].ToString());
         }
-        return 1;
+        return 0;
     }
     private static int MeshParamWeightVerlist(ComShInterpreter sh,SingleMesh sm,string val){
         int ret=MeshParamWeightVernoSub(sh,sm,val,out List<int> vers);
