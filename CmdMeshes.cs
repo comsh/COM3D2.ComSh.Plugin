@@ -36,6 +36,7 @@ public static class CmdMeshes {
         meshParamDic.Add("findverlist",new CmdParam<SingleMesh>(MeshParamFindVerlist));
         meshParamDic.Add("weightverno",new CmdParam<SingleMesh>(MeshParamWeightVerno));
         meshParamDic.Add("weightverlist",new CmdParam<SingleMesh>(MeshParamWeightVerlist));
+        meshParamDic.Add("wrap",new CmdParam<SingleMesh>(MeshParamTexWrap));
         meshParamDic.Add("uvwh",new CmdParam<SingleMesh>(MeshParamUVWH));
         meshParamDic.Add("graft",new CmdParam<SingleMesh>(MeshParamGraft));
         meshParamDic.Add("reverse",new CmdParam<SingleMesh>(MeshParamReverse));
@@ -1184,6 +1185,29 @@ public static class CmdMeshes {
         sm.mi.material[sm.submeshno].renderQueue=n;
         return 1;
     }
+    private static int MeshParamTexWrap(ComShInterpreter sh,SingleMesh sm,string val){
+        if(val==null) return 0;
+        Material mate;
+        Texture tex;
+        string ts,prop="_MainTex";
+        var sa=ParseUtil.LeftAndRight2(val,':');
+        if(sa[0]!="") prop=sa[0];
+        if(sa[1]==""){
+            mate=sm.mi.material[sm.submeshno];
+            tex=mate.GetTexture(prop);
+            if(tex==null) return 0;
+            var wrap=tex.wrapMode;
+            sh.io.Print((wrap==TextureWrapMode.Clamp)?"0":"1");
+            return 0;
+        }else ts=sa[1];
+        if(ts!="0" && ts!="1") return sh.io.Error("数値が不正です");
+        sm.mi.EditMaterial();
+        mate=sm.mi.material[sm.submeshno];
+        tex=mate.GetTexture(prop);
+        if(tex==null) return sh.io.Error("テクスチャがありません");
+        tex.wrapMode=(ts=="0")?TextureWrapMode.Clamp:TextureWrapMode.Repeat;
+        return 1;
+    }
     private static int MeshParamUVWH(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null) return 0;
         string ts,prop;
@@ -1726,7 +1750,7 @@ public static class TextureUtil {
             }else{
                 fname=ComShInterpreter.textureDir+UTIL.Suffix(name,".png");
             }
-            if(System.IO.File.Exists(fname)){
+            if(fname!="" && System.IO.File.Exists(fname)){
                 byte[] buf=UTIL.ReadAll(fname);
                 Texture2D t2d=new Texture2D(2,2);
                 t2d.LoadImage(buf);

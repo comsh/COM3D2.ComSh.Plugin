@@ -28,6 +28,9 @@ public static class CmdGui {
         Command.AddCmd("panel.close",new Cmd(CmdClose));
         Command.AddCmd("panel.update",new Cmd(CmdUpdate));
         Command.AddCmd("panel.richtext",new Cmd(CmdRichText));
+        Command.AddCmd("page",new Cmd(CmdPage));
+        Command.AddCmd("pagedef",new Cmd(CmdPageDef));
+        Command.AddCmd("pagelist",new Cmd(CmdPageList));
     }
 
     private static float[] XYWHf(List<string> args,int start){
@@ -58,6 +61,24 @@ public static class CmdGui {
         if(args.Count==5 && (xywh=XYWHf(args,1))!=null){
             sh.panel.SetGrid(xywh);
         }else return sh.io.Error("使い方: grid x y 幅 高さ");
+        return 0;
+    }
+    private static int CmdPageDef(ComShInterpreter sh,List<string> args){
+        if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
+        if(args.Count==2) sh.panel.SetTab(args[1]); else return sh.io.Error("使い方: pagedef ページ名");
+        return 0;
+    }
+    private static int CmdPageList(ComShInterpreter sh,List<string> args){
+        if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
+        foreach(string name in sh.panel.tabnames) sh.io.PrintLn(name);
+        return 0;
+    }
+    private static int CmdPage(ComShInterpreter sh,List<string> args){
+        if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
+        int[] xywh;
+        if(args.Count==7 && (xywh=XYWH(sh.panel,args,1))!=null){
+            sh.panel.AddPage(xywh[0],xywh[1],xywh[2],xywh[3],args[5],args[6]);
+        }else return sh.io.Error("使い方: page x y 幅 高さ 変数名 初期値");
         return 0;
     }
     private static int CmdLabel(ComShInterpreter sh,List<string> args){

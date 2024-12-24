@@ -703,6 +703,18 @@ public static class ParseUtil {
         }
         return ret;
     }
+    public static float[] FloatArr2(string str,char dlmt,int max=int.MaxValue){
+        if(str==null||str.Length==0) return new float[0];
+        string[] sa=str.Split(dlmt);
+        int n=(sa.Length>max)?max:sa.Length;
+        if(n==4 && str[0]=='~') return Quat(sa);
+        float[] ret= new float[n];
+        for(int i=0; i<n; i++){
+            ret[i]=ParseFloat(sa[i]);
+            if(float.IsNaN(ret[i])){ error="数値が不正です"; return null;}
+        }
+        return ret;
+    }
     public static float[] Rgb(string str){
         if(str.IndexOf(',')>=0) return Rgb2(str);
         float[] ret=new float[3];

@@ -36,6 +36,7 @@ public static class Command {
 		cmdTbl.Add("log", new Cmd(CmdLog));
 		cmdTbl.Add("source", new Cmd(CmdSource));
 		cmdTbl.Add(".", new Cmd(CmdSource));
+        cmdTbl.Add("call",new Cmd(CmdCall));
         cmdTbl.Add("eval",new Cmd(CmdEval));
         cmdTbl.Add("timer",new Cmd(CmdTimer));
 		cmdTbl.Add("cb",new Cmd( CmdClipBd));
@@ -134,6 +135,7 @@ public static class Command {
         cmdTbl.Add("date", new Cmd(CmdDate));
         cmdTbl.Add("publish", new Cmd(CmdPublish));
         cmdTbl.Add("subscribe", new Cmd(CmdSubscribe));
+        cmdTbl.Add("subscribe.list", new Cmd(CmdSubscribeList));
         cmdTbl.Add("unsubscribe", new Cmd(CmdUnSubscribe));
         cmdTbl.Add("vars2str", new Cmd(CmdVars2Str));
         cmdTbl.Add("str2vars", new Cmd(CmdStr2Vars));
@@ -162,6 +164,7 @@ public static class Command {
         cmdTbl.Add("numformat", new Cmd(CmdNumFormat));
         cmdTbl.Add("tohex", new Cmd(CmdToHex));
         cmdTbl.Add("todec", new Cmd(CmdToDec));
+        cmdTbl.Add("nop", new Cmd(CmdNop));
 
         cmdTbl.Add("__res",new Cmd(Cmd__Resource));
         cmdTbl.Add("__files",new Cmd(Cmd__Files));
@@ -459,7 +462,6 @@ public static class Command {
         return s.Substring(i+1);
     }
     private static int CmdMyPoseList(ComShInterpreter sh,List<string> args){
-        var files=new List<string>();
         string[] fns=Directory.GetFiles(ComShInterpreter.myposeDir,"*.anm",SearchOption.AllDirectories);
         if(fns==null) return 0;
         int len=ComShInterpreter.myposeDir.Length;
@@ -469,8 +471,13 @@ public static class Command {
     private static int CmdMyTexList(ComShInterpreter sh,List<string> args){
         string path="";
         if(args.Count==2) path=args[1];
-        var files=new List<string>();
-        string[] fns=Directory.GetFiles(ComShInterpreter.textureDir+path,"*.png",SearchOption.AllDirectories);
+        path=UTIL.Suffix(Path.GetFullPath(ComShInterpreter.textureDir+path),"\\");
+        if(!path.StartsWith(ComShInterpreter.textureDir)) return 0;
+        if(!Directory.Exists(path)){
+            try{Directory.CreateDirectory(path);}
+            catch{return sh.io.Error("フォルダがありません");};
+        }
+        string[] fns=Directory.GetFiles(path,"*.png",SearchOption.AllDirectories);
         if(fns==null) return 0;
         int len=ComShInterpreter.textureDir.Length;
         for(int i=0; i<fns.Length; i++) sh.io.PrintLn(fns[i].Substring(len).Replace("\\","/"));
@@ -479,7 +486,6 @@ public static class Command {
     private static int CmdCubemapList(ComShInterpreter sh,List<string> args){
         string path="";
         if(args.Count==2) path=args[1];
-        var files=new List<string>();
         try{
             string[] fns=Directory.GetFiles(ComShInterpreter.textureDir+path,"*.asset_bg",SearchOption.AllDirectories);
             if(fns==null) return 0;
@@ -536,6 +542,7 @@ public static class Command {
             if(hs.Add(name)) result.Add(mh.name+"\t"+cate+"\t"+name);
         }
     }
+	private static int CmdNop(ComShInterpreter sh,List<string> args){ return 0; }
 	private static int CmdExit(ComShInterpreter sh,List<string> args){
         sh.exitq=true; 
         return CmdReturn(sh,args);
@@ -845,6 +852,18 @@ public static class Command {
         if(args.Count==1) return sh.io.Error("使い方: source スクリプトファイル名 [引数 ...]");
         return sh.ExecSource(args.GetRange(1,args.Count-1));
 	}
+    private static int CmdCall(ComShInterpreter sh,List<string> args){
+        if(args.Count==1) return sh.io.Error("使い方: call 関数名 [引数 ...]");
+        if(!sh.func.TryGetValue(args[1],out ComShInterpreter.ScriptStatus f)) return sh.io.Error("関数が未定義です");
+        return CmdCallSub(sh,args.GetRange(1,args.Count-1),f);
+    }
+    private static int CmdCallSub(ComShInterpreter sh,List<string> args,ComShInterpreter.ScriptStatus f){
+        f.isSource=true;
+        f.rewind();
+        int ret=sh.Exec(args,f);
+        f.isSource=false;
+        return ret;
+    }
     private static int CmdEval(ComShInterpreter sh,List<string> args){
         if(args.Count!=2) return sh.io.Error("使い方: eval コマンド文字列");
         var psr=EvalParser(sh,1);
@@ -2080,17 +2099,29 @@ public static class Command {
         }
     }
     private static Dictionary<string,LinkedList<PubSubEntry>> pubsubdic=new Dictionary<string,LinkedList<PubSubEntry>>();
+    private static int CmdSubscribeList(ComShInterpreter sh,List<string> args){
+        int n=pubsubdic.Keys.Count;
+        if(n>0){
+            var list=new string[n];
+            pubsubdic.Keys.CopyTo(list,0);  
+            Array.Sort(list);
+            for(int i=0; i<n; i++) sh.io.PrintJoinLn(sh.ofs,list[i],pubsubdic[list[i]].Count.ToString());
+        }
+        return 0;
+    }
     private static int CmdSubscribe(ComShInterpreter sh,List<string> args){
         if(args.Count!=3) return sh.io.Error("使い方: subscribe トピック名 コマンド");
         string key=args[1];
         if(!IsKvsNameValid(key)) return sh.io.Error("トピック名が不正です");
+
+        var pse=new PubSubEntry(sh);
+        if(pse.Parse(2)<0) return -1;
+
         LinkedList<PubSubEntry> lst;
         if(!pubsubdic.TryGetValue(key,out lst)){
             lst=new LinkedList<PubSubEntry>();
             pubsubdic[key]=lst;
         }
-        var pse=new PubSubEntry(sh);
-        if(pse.Parse(2)<0) return -1;
         lst.AddLast(pse);
         sh.io.Print(pse.id.ToString());
         return 0;

@@ -66,6 +66,7 @@ public static class CmdMaidMan {
         maidParamDic.Add("shape",new CmdParam<Maid>(MaidParamShape));
         maidParamDic.Add("shape.verlist",new CmdParam<Maid>(MaidParamShapeVerList));
         maidParamDic.Add("style",new CmdParam<Maid>(MaidParamStyle));
+        maidParamDic.Add("style2",new CmdParam<Maid>(MaidParamStyle2));
         maidParamDic.Add("face",new CmdParam<Maid>(MaidParamFace));
         maidParamDic.Add("blink",new CmdParam<Maid>(MaidParamBlink));
         maidParamDic.Add("facesave",new CmdParam<Maid>(MaidParamFaceSave));
@@ -1011,7 +1012,7 @@ public static class CmdMaidMan {
         }
         return 1;
     }
-    private static int MaidParamStyle(ComShInterpreter sh,Maid m,string val){
+    private static int MaidParamStyleSub(ComShInterpreter sh,Maid m,string val,bool tmpq){
         if(val==null){
             if(m.boMAN){
                 MaidProp mp=m.GetProp(MPN.Hara);
@@ -1034,10 +1035,16 @@ public static class CmdMaidMan {
             string lk=k.ToLower();
             int i; for(i=0; i<MaidUtil.mpnBody.Length; i++) if(lk==MaidUtil.mpnBody[i].ToString().ToLower()) break;
             if(i==MaidUtil.mpnBody.Length) return sh.io.Error("MPNが不正です");
-            MaidUtil.SetPropTemp(m,MaidUtil.mpnBody[i],(int)kvs[k]);
+            if(tmpq) MaidUtil.SetPropTemp(m,MaidUtil.mpnBody[i],(int)kvs[k]);
+            else  MaidUtil.SetProp(m,MaidUtil.mpnBody[i],(int)kvs[k]);
         }
         m.AllProcProp();
         return 1;
+    }
+    private static int MaidParamStyle(ComShInterpreter sh,Maid m,string val){ return MaidParamStyleSub(sh,m,val,true); }
+    private static int MaidParamStyle2(ComShInterpreter sh,Maid m,string val){
+        if(sh.IsSafeMode()) return sh.io.Error("この機能はセーフモードでは使用できません");
+        return MaidParamStyleSub(sh,m,val,false);
     }
     private static int MaidParamLookAt(ComShInterpreter sh,Maid m,string val){
         if(val==null){
@@ -2092,6 +2099,12 @@ public static class MaidUtil {
         mp.temp_value=value;
         mp.boDut=false;
         mp.boTempDut=true;
+    }
+    public static void SetProp(Maid m,MPN mpn,int value){
+        MaidProp mp=m.GetProp(mpn);
+        mp.value=value;
+        mp.boDut=true;
+        mp.boTempDut=false;
     }
     public static string GetCloth(Maid m,MPN mpn){
         MaidProp mp=m.GetProp(mpn);

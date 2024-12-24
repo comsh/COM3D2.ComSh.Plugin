@@ -71,7 +71,7 @@ public class ComShPanel {
         GUI.Label(titleRect,title,ws.title);
         if(GUI.Button(termRect,"Ｔ",ws.closebtn)){ ComShWM.ToggleTerm(); return; }
         if(GUI.Button(closeRect,"☓",ws.closebtn)){ ComShWM.ClosePanel(wid); return; }
-        draw.Invoke();
+        if(tabs[""]!=null) tabs[""].Invoke(0,0);
         GUI.DragWindow();
     }
 
@@ -81,28 +81,38 @@ public class ComShPanel {
         shell.panel=null;
     }
 
-    private static void nop(){}
-    public delegate void DrawElements();
-    public DrawElements draw=new DrawElements(nop);
+    public delegate void DrawElements(int left,int top);
+    private string currenttabname="";
+    public List<string> tabnames=new List<string>();
+    public Dictionary<string,DrawElements> tabs=new Dictionary<string,DrawElements>();
     private ComShParser psrOnClose=null;
 
     public ComShPanel(ComShInterpreter sh,int x,int y,int w,int h,string t,int fsize,int wid){
         title=t;
         shell=sh;
         windowrect.x=x; windowrect.y=y; windowrect.width=w; windowrect.height=h;
-        draw=new DrawElements(nop);
+        SetTab("");
         fontSize=fsize;
-        grid.x=0; grid.y=0; grid.width=1; grid.height=1;
         psrOnClose=null;
         sh.panel=this;
         this.wid=wid;
     }
+    public void SetTab(string name){
+        if(!tabs.ContainsKey(name)){
+            tabs.Add(name,null);
+            grids.Add(name,new Rect(0,0,1,1));
+            if(name!="") tabnames.Add(name);
+        }
+        currenttabname=name;
+    }
     public void SetOnClose(ComShParser p){ psrOnClose=p; }
-    public Rect grid=new Rect(0,0,1,1);
+    public Dictionary<string,Rect> grids=new Dictionary<string,Rect>();
     public void SetGrid(float[] xywh){
-        grid.x=xywh[0]; grid.y=xywh[1]; grid.width=xywh[2]; grid.height=xywh[3];
+        Rect r=new Rect(xywh[0],xywh[1],xywh[2],xywh[3]);
+        grids[currenttabname]=r;
     }
     public int[] Plot(float[] xywh){
+        Rect grid=grids[currenttabname];
         return new int[]{
             (int)(grid.x+xywh[0]*grid.width),
             (int)(grid.y+xywh[1]*grid.height),
@@ -111,8 +121,8 @@ public class ComShPanel {
         };
     }
     public void AddButton(int x,int y,int w,int h,string l,ComShParser p){
-        var r=new Rect(x,y+TITLEHEIGHT,w,h);
-        draw+=()=>{
+        var r=new Rect(x,y+((currenttabname=="")?TITLEHEIGHT:0),w,h);
+        tabs[currenttabname]+=(left,top)=>{
             if(GUI.Button(r,l,style.button)){
                 p.Reset();
                 shell.InterpretParser(p);
@@ -121,10 +131,10 @@ public class ComShPanel {
         };
     }
     public void AddRbutton(int x,int y,int w,int h,string l,ComShParser p,float dt,float ddt,float mindt){
-        var r=new Rect(x,y+TITLEHEIGHT,w,h);
+        var r=new Rect(x,y+((currenttabname=="")?TITLEHEIGHT:0),w,h);
         float delay=dt;
         long expire=0;
-        draw+=()=>{
+        tabs[currenttabname]+=(left,top)=>{
             if(GUI.RepeatButton(r,l,style.button)){
                 long now=DateTime.UtcNow.Ticks/TimeSpan.TicksPerMillisecond;
                 if(now>expire){
@@ -144,16 +154,16 @@ public class ComShPanel {
         };
     }
     public void AddToggle(int x,int y,int w,int h,string l,ComShParser p,string name,bool v0){
-        var r=new Rect(x,y+TITLEHEIGHT,w,h);
+        var r=new Rect(x,y+((currenttabname=="")?TITLEHEIGHT:0),w,h);
         shell.env[name]=v0?"1":"0";
         if(p==null){
-            draw+=()=>{
+            tabs[currenttabname]+=(left,top)=>{
                 bool chk=ParseUtil.ParseFloat(shell.env[name],0)==1f;
                 bool c=GUI.Toggle(r,chk,l,style.toggle);
                 if(c!=chk) shell.env[name]=c?"1":"0";
             };
         }else{
-            draw+=()=>{
+            tabs[currenttabname]+=(left,top)=>{
                 bool chk=ParseUtil.ParseFloat(shell.env[name],0)==1f;
                 bool c=GUI.Toggle(r,chk,l,style.toggle);
                 if(c!=chk){
@@ -166,15 +176,15 @@ public class ComShPanel {
         }
     }
     public void AddRadio(int x,int y,int w,int h,string l,ComShParser p,string name,string val){
-        var r=new Rect(x,y+TITLEHEIGHT,w,h);
+        var r=new Rect(x,y+((currenttabname=="")?TITLEHEIGHT:0),w,h);
         if(p==null){
-            draw+=()=>{
+            tabs[currenttabname]+=(left,top)=>{
                 bool chk=(shell.env[name]==val);
                 bool c=GUI.Toggle(r,chk,l,style.toggle);
                 if(c && !chk) shell.env[name]=val;
             };
         }else{
-            draw+=()=>{
+            tabs[currenttabname]+=(left,top)=>{
                 bool chk=(shell.env[name]==val);
                 bool c=GUI.Toggle(r,chk,l,style.toggle);
                 if(c && !chk){
@@ -187,10 +197,10 @@ public class ComShPanel {
         }
     }
     public void AddTextField(int x,int y,int w,int h,ComShParser p,string name,string v0,float delay){
-        var r=new Rect(x,y+TITLEHEIGHT,w,h);
+        var r=new Rect(x,y+((currenttabname=="")?TITLEHEIGHT:0),w,h);
         shell.env[name]=v0;
         if(p==null){
-            draw+=()=>{
+            tabs[currenttabname]+=(left,top)=>{
                 string txt=shell.env[name];
                 string t=GUI.TextField(r,txt,style.text);
                 if(t!=txt) shell.env[name]=t;
@@ -198,7 +208,7 @@ public class ComShPanel {
         }else{
             if(delay>0){
                 long expire=0;
-                draw+=()=>{
+                tabs[currenttabname]+=(left,top)=>{
                     string txt=shell.env[name];
                     string t=GUI.TextField(r,txt,style.text);
                     if(t!=txt){
@@ -215,7 +225,7 @@ public class ComShPanel {
                     }
                 };
             }else{
-                draw+=()=>{
+                tabs[currenttabname]+=(left,top)=>{
                     string txt=shell.env[name];
                     string t=GUI.TextField(r,txt,style.text);
                     if(t!=txt){
@@ -229,7 +239,7 @@ public class ComShPanel {
         }
     }
     public void AddCombo(int x,int y,int w,int h,ComShParser p,string name,string v0,string[] items,char dlmt){
-        int ty=y+TITLEHEIGHT;
+        int ty=y+((currenttabname=="")?TITLEHEIGHT:0);
         var r=new Rect(x,ty,w,h);
         var rb=new Rect(x+w,ty,h,h);
         const int maxh=200;
@@ -245,7 +255,7 @@ public class ComShPanel {
                 shell.exitq=false;
             }
         };
-        draw+=()=>{
+        tabs[currenttabname]+=(left,top)=>{
             string txt=ci.GetLabel(shell.env[name]);
             string t=GUI.TextField(r,txt,style.text);
             if(t!=txt){
@@ -257,14 +267,14 @@ public class ComShPanel {
                 }
             }
             if(GUI.Button(rb,"▼",style.comboBtn)){
-                ComboWin.SetItems(this,ci,onselect,x,ty+h,w,maxh);
+                ComboWin.SetItems(this,ci,onselect,left+(int)r.x,top+(int)(r.y+r.height),w,maxh);
                 ComboWin.Position(windowrect);
                 ComboWin.Toggle(scry);
             }
         };
     }
     public void AddCombo2(int x,int y,int w,int h,ComShParser p,string name,string v0,ComShParser lst,char dlmt){
-        int ty=y+TITLEHEIGHT;
+        int ty=y+((currenttabname=="")?TITLEHEIGHT:0);
         var r=new Rect(x,ty,w,h);
         var rb=new Rect(x+w,ty,h,h);
         const int maxh=200;
@@ -280,7 +290,7 @@ public class ComShPanel {
                 shell.exitq=false;
             }
         };
-        draw+=()=>{
+        tabs[currenttabname]+=(left,top)=>{
             string val=shell.env[name];
             if(prev!=val){ ci=MakeItems(shell,lst,dlmt,false,val); prev=val; }
             string txt=ci.GetLabel(shell.env[name]);
@@ -295,21 +305,21 @@ public class ComShPanel {
             }
             if(GUI.Button(rb,"▼",style.comboBtn)){
                 ci=MakeItems(shell,lst,dlmt,false,val);
-                ComboWin.SetItems(this,ci,onselect,x,ty+h,w,maxh);
+                ComboWin.SetItems(this,ci,onselect,left+(int)r.x,top+(int)(r.y+r.height),w,maxh);
                 ComboWin.Position(windowrect);
                 ComboWin.Toggle(scry);
             }
         };
     }
     public void AddSwitch(int x,int y,int w,int h,ComShParser p,string name,string v0,string[] items,char dlmt){
-        var r=new Rect(x,y+TITLEHEIGHT,w,h);
+        var r=new Rect(x,y+((currenttabname=="")?TITLEHEIGHT:0),w,h);
         var li=new ListBoxItems(items,dlmt,false);
         int idx=li.GetIdx(v0);
         if(idx<0) idx=0;
         li.Select(idx,false,false);
         string l=li.labels[idx];
         string prev=shell.env[name]=v0;
-        draw+=()=>{
+        tabs[currenttabname]+=(left,top)=>{
             var b=Event.current.button;
             if(GUI.Button(r,l,style.button)){
                 idx=(li.values.Length+li.lastIdx+(b==1?-1:1))%li.values.Length;
@@ -325,7 +335,7 @@ public class ComShPanel {
         };
     }
     public void AddSwitch2(int x,int y,int w,int h,ComShParser p,string name,string v0,string lstvar,char dlmt){
-        var r=new Rect(x,y+TITLEHEIGHT,w,h);
+        var r=new Rect(x,y+((currenttabname=="")?TITLEHEIGHT:0),w,h);
         string lstprev=shell.env[lstvar];
         var li=MakeItems(lstprev,dlmt,false);
         int idx=li.GetIdx(v0);
@@ -333,7 +343,7 @@ public class ComShPanel {
         li.Select(idx,false,false);
         string l=li.labels[idx];
         string prev=shell.env[name]=v0;
-        draw+=()=>{
+        tabs[currenttabname]+=(left,top)=>{
             string val=shell.env[name],lst=shell.env[lstvar];
             if(prev!=val || lstprev!=lst){
                 li=MakeItems(lst,dlmt,false,val);
@@ -354,13 +364,13 @@ public class ComShPanel {
         };
     }
     public void AddListBox(int x,int y,int w,int h,ComShParser p,string name,string v0,string[] items,int max,char dlmt){
-        int ty=y+TITLEHEIGHT;
+        int ty=y+((currenttabname=="")?TITLEHEIGHT:0);
         var li=new ListBoxItems(items,dlmt,max==0);
         var lb=new ListBox();
         string prev=shell.env[name]=v0;
         li.SetSelectedValue(v0);
         lb.SetItems(this,li,null,x,ty,w,h);
-        draw+=()=>{
+        tabs[currenttabname]+=(left,top)=>{
             int si=lb.Select();
             if(si!=-1){
                 shell.env[name]=li.GetSelectedValue();
@@ -373,14 +383,14 @@ public class ComShPanel {
         };
     }
     public void AddListBox2(int x,int y,int w,int h,ComShParser p,string name,string v0,string lstvar,int max,char dlmt){
-        int ty=y+TITLEHEIGHT;
+        int ty=y+((currenttabname=="")?TITLEHEIGHT:0);
         string prev=shell.env[name]=v0;
         string lstprev=shell.env[lstvar];
         var li=MakeItems(lstprev,dlmt,max==0);
         var lb=new ListBox();
         li.SetSelectedValue(v0);
         lb.SetItems(this,li,null,x,ty,w,h);
-        draw+=()=>{
+        tabs[currenttabname]+=(left,top)=>{
             string val=shell.env[name],lst=shell.env[lstvar];
             if(prev!=val || lstprev!=lst){
                 li=MakeItems(lst,dlmt,max==0,val); // 選択肢最新化
@@ -394,6 +404,27 @@ public class ComShPanel {
                     p.Reset();
                     shell.InterpretParser(p);
                     shell.exitq=false;
+                }
+            }
+        };
+    }
+
+
+    private int pageNest=0;
+    public void AddPage(int x,int y,int w,int h,string name,string v0){
+        var r=new Rect(x,y+((currenttabname=="")?TITLEHEIGHT:0),w,h);
+        var vr=new Rect(0,0,w-1,h-1);
+        shell.env[name]=v0;
+        tabs[currenttabname]+=(left,top)=>{
+            string p=shell.env[name];
+            if(p=="") return;
+            if(tabs.TryGetValue(p,out DrawElements draw)){
+                if(pageNest<8){
+                    pageNest++;
+                    GUI.BeginScrollView(r,Vector2.zero,vr);
+                    draw.Invoke(left+(int)r.x,top+(int)r.y);
+                    GUI.EndScrollView();
+                    pageNest--;
                 }
             }
         };
@@ -415,12 +446,12 @@ public class ComShPanel {
         return lb;
     }
     public void AddSlider(int x,int y,int w,int h,ComShParser p,string name,float v0,float min,float max,float delay){
-        var r=new Rect(x,y+TITLEHEIGHT,w,h);
+        var r=new Rect(x,y+((currenttabname=="")?TITLEHEIGHT:0),w,h);
         shell.env[name]=shell.fmt.FVal(v0);
         string old=shell.env[name];
         float val=v0;
         if(p==null){
-            draw+=()=>{
+            tabs[currenttabname]+=(left,top)=>{
                 string cur=shell.env[name];
                 if(old!=cur){ float.TryParse(cur,out val); old=cur; }
                 float v=GUI.HorizontalSlider(r,val,min,max);
@@ -429,7 +460,7 @@ public class ComShPanel {
         }else{
             if(delay>0){
                 long expire=0;
-                draw+=()=>{
+                tabs[currenttabname]+=(left,top)=>{
                     string cur=shell.env[name];
                     if(old!=cur){ float.TryParse(cur,out val); old=cur; }
                     float v=GUI.HorizontalSlider(r,val,min,max);
@@ -447,7 +478,7 @@ public class ComShPanel {
                     }
                 };
             }else{
-                draw+=()=>{
+                tabs[currenttabname]+=(left,top)=>{
                     string cur=shell.env[name];
                     if(old!=cur){ float.TryParse(cur,out val); old=cur; }
                     float v=GUI.HorizontalSlider(r,val,min,max);
@@ -462,12 +493,12 @@ public class ComShPanel {
         }
     }
     public void AddVSlider(int x,int y,int w,int h,ComShParser p,string name,float v0,float min,float max,float delay){
-        var r=new Rect(x,y+TITLEHEIGHT,w,h);
+        var r=new Rect(x,y+((currenttabname=="")?TITLEHEIGHT:0),w,h);
         shell.env[name]=shell.fmt.FVal(v0);
         string old=shell.env[name];
         float val=v0;
         if(p==null){
-            draw+=()=>{
+            tabs[currenttabname]+=(left,top)=>{
                 string cur=shell.env[name];
                 if(old!=cur){ float.TryParse(cur,out val); old=cur; }
                 float v=GUI.VerticalSlider(r,val,min,max);
@@ -476,7 +507,7 @@ public class ComShPanel {
         }else{
             if(delay>0){
                 long expire=0;
-                draw+=()=>{
+                tabs[currenttabname]+=(left,top)=>{
                     string cur=shell.env[name];
                     if(old!=cur){ float.TryParse(cur,out val); old=cur; }
                     float v=GUI.VerticalSlider(r,val,min,max);
@@ -494,7 +525,7 @@ public class ComShPanel {
                     }
                 };
             }else{
-                draw+=()=>{
+                tabs[currenttabname]+=(left,top)=>{
                     string cur=shell.env[name];
                     if(old!=cur){ float.TryParse(cur,out val); old=cur; }
                     float v=GUI.VerticalSlider(r,val,min,max);
@@ -509,12 +540,12 @@ public class ComShPanel {
         }
     }
     public void AddLabel(int x,int y,int w,int h,string l){
-        var r=new Rect(x,y+TITLEHEIGHT,w,h);
-        draw+=()=>{ GUI.Label(r,l,style.label); };
+        var r=new Rect(x,y+((currenttabname=="")?TITLEHEIGHT:0),w,h);
+        tabs[currenttabname]+=(left,top)=>{ GUI.Label(r,l,style.label); };
     }
     public void AddLabel2(int x,int y,int w,int h,string name){
-        var r=new Rect(x,y+TITLEHEIGHT,w,h);
-        draw+=()=>{ GUI.Label(r,shell.env[name],style.label); };
+        var r=new Rect(x,y+((currenttabname=="")?TITLEHEIGHT:0),w,h);
+        tabs[currenttabname]+=(left,top)=>{ GUI.Label(r,shell.env[name],style.label); };
     }
 }
 // コンボボックスのポップアップ
@@ -676,9 +707,10 @@ public class ListBox {
         if(!styleok){
             float h=panel.style.comboItem.CalcSize(ichimoji).y;
             float w=GUI.skin.verticalScrollbar.fixedWidth;
-            viewRect.width+=w+2;
-            groupRect.width=viewRect.width+2;
             contentRect.height=items.labels.Length*h;
+            if(isCombo) viewRect.width+=w+2;
+            else if(contentRect.height>viewRect.height) viewRect.width+=w;
+            groupRect.width=viewRect.width+2;
             if(isCombo) viewRect.height=Math.Min(contentRect.height,viewRect.height);
             groupRect.height=viewRect.height+2;
             styleok=true;
@@ -686,7 +718,7 @@ public class ListBox {
         if(isCombo) scr=GUI.BeginScrollView(viewRect,scr,contentRect,false,true);
         else{
             GUI.BeginGroup(groupRect,panel.style.listBox);
-            scr=GUI.BeginScrollView(viewRect,scr,contentRect,false,true);
+            scr=GUI.BeginScrollView(viewRect,scr,contentRect,false,false);
         }
         int si=GUI.SelectionGrid(contentRect,-1,items.labels,1,panel.style.comboItem);
         if(si!=-1){

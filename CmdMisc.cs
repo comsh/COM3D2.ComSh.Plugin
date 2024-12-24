@@ -233,11 +233,13 @@ public static class CmdMisc {
             if(curveDic.ContainsKey(name)) return sh.io.Error("その名前は既に使われています");
             ac=new AnimationCurve();
             for(int i=3; i<args.Count; i++){
-                float time,value,inTan,outTan;
+                float time,value,inTan=0,outTan=0;
                 string[] sa=args[i].Split(ParseUtil.comma);
-                if(sa.Length!=4) return sh.io.Error("キーフレームの書式が不正です"); 
-                if(!float.TryParse(sa[0],out time)||time<0||!float.TryParse(sa[1],out value)
-                 ||!float.TryParse(sa[2],out inTan)||!float.TryParse(sa[3],out outTan)) return sh.io.Error("数値の指定が不正です");
+                if(sa.Length!=2&&sa.Length!=4) return sh.io.Error("キーフレームの書式が不正です"); 
+                if(!float.TryParse(sa[0],out time)||time<0||!float.TryParse(sa[1],out value))
+                    return sh.io.Error("数値が不正です");
+                if(sa.Length==4 &&(!float.TryParse(sa[2],out inTan)||!float.TryParse(sa[3],out outTan)))
+                    return sh.io.Error("数値が不正です");
                 ac.AddKey(new Keyframe(time/1000,value,inTan,outTan));
             }
             if(ac.length<2) return sh.io.Error("キーフレーム定義は２つ以上必要です");
@@ -259,6 +261,14 @@ public static class CmdMisc {
         }
         if(args.Count==3){
             if(args[2]=="del"){ curveDic.Remove(sh.ns+args[1]); return 0; }
+            else if(args[2]=="linear"){LinearIp(ac); return 1;}
+            else if(args[2]=="spline"){CatmulRomIp(ac,false); return 1;}
+            else if(args[2]=="spline.loop"){
+                if(ac.keys[0].value!=ac.keys[ac.keys.Length-1].value)
+                    return sh.io.Error("先頭と末尾の値が異なります");
+                CatmulRomIp(ac,true);
+                return 1;
+            }
             return sh.io.Error("パラメータが不正です");
         }
         return CmdParamCurve(sh,ac,args[2],args[3]);
@@ -278,6 +288,38 @@ public static class CmdMisc {
         if(!float.TryParse(val,out float time)) return sh.io.Error("数値の指定が不正です");
         sh.io.PrintLn(sh.fmt.FVal(ac.Evaluate(time/1000)));
         return 0;
+    }
+    private static void LinearIp(AnimationCurve ac){
+        var ka=ac.keys; // コピーが返される
+        for(int i=1; i<ac.length; i++){
+            float dt=ka[i].time-ka[i-1].time;
+            float dv=ka[i].value-ka[i-1].value;
+            ka[i-1].outTangent=ka[i].inTangent=dv/dt;
+        }
+        ac.keys=ka;     // コピーなので書き戻しが必要
+    }
+    private static void CatmulRomIp(AnimationCurve ac,bool loopq){
+        var ka=ac.keys;
+        int tail=ac.length-1;
+        if(loopq){
+            float d;
+            if(tail-1!=1){
+                d=(ka[1].value-ka[tail-1].value)/(ka[1].time-ka[tail-1].time);
+                if(float.IsNaN(d)) d=0; // これは入力値がおかしいけどね
+            }else d=0;
+            ka[0].inTangent=ka[0].outTangent=ka[tail].inTangent=ka[tail].outTangent=d;
+        }else{
+            ka[0].inTangent=0;
+            ka[0].outTangent=(ka[1].value-ka[0].value)/(ka[1].time-ka[0].time);
+            ka[tail].inTangent=(ka[tail].value-ka[tail-1].value)/(ka[tail].time-ka[tail-1].time);
+            ka[tail].outTangent=0;
+        }
+        for(int i=1; i<ac.length-1; i++){
+            float d=ka[i+1].time-ka[i-1].time;
+            if(d<0.001) d=0; d=(ka[i+1].value-ka[i-1].value)/d;
+            ka[i].outTangent=ka[i].inTangent=d;
+        }
+        ac.keys=ka;
     }
 
     private static int CmdTmpFile(ComShInterpreter sh,List<string> args){
@@ -325,12 +367,23 @@ public static class CmdMisc {
         public int dim;
         public int count=0;
         public int max=0;
-        int ip=0;
-        float[][] buf;
+        public int ip=0;
+        public float[][] buf;
         public Q(int len,int d){
             dim=d;
             max=len;
             buf=new float[len][];
+        }
+        public Q Clone(){
+            var ret=new Q(max,dim);
+            ret.count=count;
+            ret.ip=ip;
+            for(int i=0; i<max; i++) if(buf[i]==null) ret.buf[i]=null; else{
+                var fa=new float[dim];
+                Array.Copy(buf[i],0,fa,0,dim);
+                ret.buf[i]=fa;
+            }
+            return ret;
         }
         public void EnQ(float[] val){
             float[] f=new float[dim];
@@ -409,6 +462,77 @@ public static class CmdMisc {
             }
             return l;
         }
+        private static string queuedir=ComShInterpreter.scriptFolder+@"queue\";
+        private int mkQueueDir(){
+            try{
+                if(!Directory.Exists(queuedir)) Directory.CreateDirectory(queuedir);
+            }catch{ return -1; }
+            return 0;
+        }
+        private static string queueformat="0.########";
+        public int Save(string fn){
+            string file=UTIL.GetFullPath(fn,queuedir);
+            if(file=="") return -1;
+            if(mkQueueDir()<0) return -2;
+            try{
+                using (var wr=new StreamWriter( file,false,System.Text.Encoding.UTF8)){
+                    for(int i=0; i<count; i++){
+                        int n=ip-count+i;
+                        if(n<0) n+=buf.Length;
+                        if(i>0) wr.Write("\n");
+                        wr.Write(buf[n][0].ToString(queueformat));
+                        for(int d=1; d<dim; d++){ wr.Write("\t"); wr.Write(buf[n][d].ToString(queueformat));}
+                    }
+                }
+            }catch(Exception e){ Debug.Log(e.ToString()); return -2; }
+            return 0;
+        }
+        public int Load(string fn){
+            string file=UTIL.GetFullPath(fn,queuedir);
+            if(file=="") return -1;
+            if(!File.Exists(file)) return -1;
+            try{ 
+                string[] lines=File.ReadAllLines(file,System.Text.Encoding.UTF8);
+                int n=lines.Length;
+                for(int i=lines.Length-1; i>=0; i--) if(lines[i]=="") n--; else break;
+
+                var tmp=this.Clone();   // エラーがあると中途半端に汚れるので一旦複製
+                for(int i=0; i<lines.Length; i++){
+                    float[] fa=ParseUtil.FloatArr2(lines[i],'\t',dim);
+                    if(fa==null||fa.Length<dim) return -3;
+                    tmp.EnQ(fa);
+                }
+                count=tmp.count;
+                ip=tmp.ip;
+                buf=tmp.buf;
+            }catch(Exception e){ Debug.Log(e.ToString()); return -2; }
+            return 0;
+        }
+        public static Q empty=new Q(0,0);
+        public static string error="";
+        public static Q FromFile(string fn){
+            error="";
+            string file=UTIL.GetFullPath(fn,queuedir);
+            if(file==""){ error="ファイル名が不正です"; return null; }
+            if(!File.Exists(file)){ error="ファイルが見つかりません"; return null; }
+            try{ 
+                string[] lines=File.ReadAllLines(file);
+                int n=lines.Length;
+                for(int i=lines.Length-1; i>=0; i--) if(lines[i]=="") n--; else break;
+                if(n==0) return empty;
+                float[] fa=ParseUtil.FloatArr2(lines[0],'\t');
+                int c=fa.Length;
+                if(c==0) return empty;
+                var ret=new Q(n,c);
+                ret.EnQ(fa);
+                for(int i=1; i<lines.Length; i++){
+                    fa=ParseUtil.FloatArr2(lines[i],'\t',c);
+                    if(fa==null||fa.Length<c){ error="数値が不正です"; return null; }
+                    ret.EnQ(fa);
+                }
+                return ret;
+            }catch(Exception e){ Debug.Log(e.ToString()); error="読み込みに失敗しました"; return null; }
+        }
     }
     public static Dictionary<string,Q> queDic=new Dictionary<string,Q>();
     private static int CmdQueue(ComShInterpreter sh,List<string> args){
@@ -425,9 +549,19 @@ public static class CmdMisc {
             if(!UTIL.ValidName(args[2])) return sh.io.Error("その名前は使用できません");
             string name=sh.ns+args[2];
             if(queDic.ContainsKey(name)) return sh.io.Error("その名前は既に使われています");
-            if(!float.TryParse(args[3],out float d) || d<1 || d>4) return sh.io.Error("次元が不正です");
-            if(!float.TryParse(args[4],out float n) || n<2 || n>100000) return sh.io.Error("要素数が不正です");
+            if(!float.TryParse(args[3],out float d) || d<1 || d>20) return sh.io.Error("次元が不正です");
+            if(!float.TryParse(args[4],out float n) || n<2 || n>1000000) return sh.io.Error("要素数が不正です");
             q=new Q(Mathf.RoundToInt(n),Mathf.RoundToInt(d));
+            queDic[name]=q;
+            return 0;
+        }else if(args[1]=="load"){
+            if(args.Count!=4) return sh.io.Error("使い方: queue load 識別名 ファイル名");
+            if(!UTIL.ValidName(args[2])) return sh.io.Error("その名前は使用できません");
+            string name=sh.ns+args[2];
+            if(queDic.ContainsKey(name)) return sh.io.Error("その名前は既に使われています");
+            q=Q.FromFile(args[3]);
+            if(q==null) return sh.io.Error(Q.error);
+            if(q.dim==0||q.max==0) return sh.io.Error("ファイル形式が不正です");
             queDic[name]=q;
             return 0;
         }else if(args[1]=="del"){
@@ -468,6 +602,15 @@ public static class CmdMisc {
             return 0;
         } else if(cmd=="clear"){
             q.Clear();
+            return 0;
+        } else if(cmd=="save"){
+            int ret=q.Save(val);
+            if(ret<0) return sh.io.Error("書き込みに失敗しました");
+            return 0;
+        } else if(cmd=="load"){
+            int ret=q.Load(val);
+            if(ret==-3) return sh.io.Error("数値が不正です");
+            else if(ret<0) return sh.io.Error("読み込みに失敗しました");
             return 0;
         } else if(cmd=="list"){
             if(q.count>0){
@@ -883,7 +1026,8 @@ public static class CmdMisc {
             int onoff=ParseUtil.OnOff(val);
             if(onoff<0) return sh.io.Error(ParseUtil.error);
             rp.boxProjection=(onoff==1);
-        } else if(cmd=="png"){ // 書いただけ。今のとこ機能しない
+
+        /* } else if(cmd=="png"){ // 書いてはみたけど機能しない
             if(val==null||val=="") return 0;
             string file="";
             if(val[0]=='*'){
@@ -891,7 +1035,39 @@ public static class CmdMisc {
                 file=tf.filename;
             }else file=UTIL.GetFullPath(UTIL.Suffix(val,".png"),ComShInterpreter.textureDir);
             if(file=="") return sh.io.Error("ファイル名が不正です");
-            return CmdMeshes.MeshParamPNGSub2(sh,rp.texture,file);
+
+            RenderTexture rt = new RenderTexture(rp.resolution, rp.resolution, 0,RenderTextureFormat.Default);
+            rt.dimension=UnityEngine.Rendering.TextureDimension.Cube;
+            rt.useMipMap=false;
+            rt.autoGenerateMips=false;
+            rt.mipMapBias=0;
+            rt.enableRandomWrite=true;
+            rt.Create();
+
+            var bkrefresh=rp.refreshMode;
+            var bkslice=rp.timeSlicingMode;
+            rp.refreshMode=UnityEngine.Rendering.ReflectionProbeRefreshMode.ViaScripting;
+            rp.timeSlicingMode=UnityEngine.Rendering.ReflectionProbeTimeSlicingMode.NoTimeSlicing;
+            int id=rp.RenderProbe(rt);
+
+            ComShBg.cron.AddJob("reflectionprobe/save/"+id.ToString(),0,(long)(1000*TimeSpan.TicksPerMillisecond),(t)=>{
+                if(!rp.IsFinishedRendering(id)) return 0;
+                try{
+                    Cubemap cube = new Cubemap(rt.height, TextureFormat.RGBA32, false);
+                    cube.name=rt.name;
+                    cube.wrapMode=rt.wrapMode;
+                    cube.anisoLevel=rt.anisoLevel;
+                    cube.filterMode=rt.filterMode;
+                    cube.mipMapBias=rt.mipMapBias;
+                    for(int i=0; i<6; i++) Graphics.CopyTexture(rt,i,cube,i);
+                    rt.Release();
+                    rp.refreshMode=bkrefresh;
+                    rp.timeSlicingMode=bkslice;
+                    CmdMeshes.MeshParamPNGSub2(sh,cube,file);
+                }catch(Exception e){Debug.Log(e.ToString());}
+                return -1;
+            });
+            return 1; */
         } else return sh.io.Error("パラメータが不正です");
         return 1;
     }

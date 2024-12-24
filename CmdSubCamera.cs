@@ -250,7 +250,7 @@ public static class CmdSubCamera {
         }
         SubCamera subcam=cam.transform.GetComponent<SubCamera>();
         if(subcam!=null) subcam.RemoveRt();
-        var rt=new RenderTexture(nw,nh,32);
+        var rt=new RenderTexture(nw,nh,24);
         rt.name=cam.name;
         rt.filterMode=FilterMode.Bilinear;
         rt.antiAliasing=QualitySettings.antiAliasing;
@@ -374,7 +374,7 @@ public static class CmdSubCamera {
         return 1;
     }
     public static int SubCamParamPostProcess(ComShInterpreter sh,Camera cam,string val){
-        var pea=cam.GetComponents<ComShPostProcess>();
+        var pea=cam.GetComponents<ComShPostProcess>();  // たぶんCommandBufferを使った方がいい
         if(val==null){
             if(pea!=null) for(int i=0; i<pea.Length; i++)
                 if(pea[i].mate!=null) sh.io.PrintLn($"{i}{sh.ofs}{pea[i].mate.name}");
@@ -443,7 +443,7 @@ public static class CmdSubCamera {
         if(err!="") return sh.io.Error(err);
         return 1;
     }
-    public class ComShPostProcess:MonoBehaviour {
+    public class ComShPostProcess:MonoBehaviour { // CommandBufferを使った方がいいとは思う
         public Material mate;
         public DepthTextureMode mode=DepthTextureMode.None;
         private DepthTextureMode mode0;
