@@ -912,7 +912,14 @@ public static class CmdMisc {
         rp=objtr.GetComponent<ReflectionProbe>();
         if(rp==null) return sh.io.Error("指定されたリフレクションプルーブは見つかりません");
         if(args.Count==2){
-            sh.io.Print($"position:{sh.fmt.FPos(rp.transform.position)}\nrotation:{sh.fmt.FEuler(rp.transform.rotation.eulerAngles)}");
+            sh.io.PrintLn2("resolution:",rp.resolution.ToString());
+            sh.io.PrintLn2("update:",refreshmode2str(rp));
+            sh.io.PrintLn2("size:",sh.fmt.FPos(rp.size));
+            sh.io.PrintLn2("range:",sh.fmt.FXY(rp.nearClipPlane,rp.farClipPlane));
+            sh.io.PrintLn2("shadowrange:",sh.fmt.FInt(rp.shadowDistance));
+            sh.io.PrintLn2("mask:",rp.cullingMask.ToString("X8"));
+            sh.io.PrintLn2("power:",sh.fmt.FInt(rp.intensity));
+            sh.io.PrintLn2("priority:",rp.importance.ToString());
             return 0;
         }
         int ret=0;
@@ -920,19 +927,21 @@ public static class CmdMisc {
         if((args.Count&1)>0) return CmdParamReflectionProbe(sh,rp,args[args.Count-1],null);
         return 0;
     }
+    private static string refreshmode2str(ReflectionProbe rp){
+        switch(rp.refreshMode){
+        case UnityEngine.Rendering.ReflectionProbeRefreshMode.OnAwake:
+        case UnityEngine.Rendering.ReflectionProbeRefreshMode.ViaScripting:
+            return "0";
+        case UnityEngine.Rendering.ReflectionProbeRefreshMode.EveryFrame:
+            return (rp.timeSlicingMode==UnityEngine.Rendering.ReflectionProbeTimeSlicingMode.AllFacesAtOnce)?"1":"2";
+        }
+        return "";
+    }
     private static int CmdParamReflectionProbe(ComShInterpreter sh,ReflectionProbe rp,string cmd,string val){
         if(val=="") return 0;
         if(cmd=="update"){
             if(val==null){
-                switch(rp.refreshMode){
-                case UnityEngine.Rendering.ReflectionProbeRefreshMode.OnAwake:
-                case UnityEngine.Rendering.ReflectionProbeRefreshMode.ViaScripting:
-                    sh.io.Print("0");
-                    return 0;
-                case UnityEngine.Rendering.ReflectionProbeRefreshMode.EveryFrame:
-                    sh.io.Print((rp.timeSlicingMode==UnityEngine.Rendering.ReflectionProbeTimeSlicingMode.AllFacesAtOnce)?"1":"2");
-                    return 0;
-                }
+                sh.io.Print(refreshmode2str(rp));
                 return 0;
             }
             if(!float.TryParse(val,out float f)||f<0) return sh.io.Error("数値が不正です");
