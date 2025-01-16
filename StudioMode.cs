@@ -225,6 +225,7 @@ public static class StudioMode {
     private static void OnLoadDlgOkClick(){
         // cronで暗転明けを待ってからコマンドを実行
         ComShBg.cron.AddJob("studio/onload",0,0,(long t)=>{
+            if(pwm==null) return -1;
             if(pwm.SaveAndLoadManager.LoadReplaceMaidPanel.gameObject.activeInHierarchy
                 || GameMain.Instance.MainCamera.IsFadeOut()) return 0;
             ComShWM.terminal.shell.InterpretBg(command);

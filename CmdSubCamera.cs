@@ -10,6 +10,7 @@ public static class CmdSubCamera {
 
         subcamParamDic.Add("del",new CmdParam<Camera>(SubCamParamDel));
         subcamParamDic.Add("fov",new CmdParam<Camera>(SubCamParamFov));
+        subcamParamDic.Add("projectionmode",new CmdParam<Camera>(SubCamParamProjectionMode));
         subcamParamDic.Add("aspect",new CmdParam<Camera>(SubCamParamAspect));
         subcamParamDic.Add("w2s",new CmdParam<Camera>(SubCamParamW2S));
         subcamParamDic.Add("s2w",new CmdParam<Camera>(SubCamParamS2W));
@@ -153,6 +154,32 @@ public static class CmdSubCamera {
         }
         if(!float.TryParse(val,out float fov)||fov<=0||fov>=180) return sh.io.Error("視野角は1～179度で指定してください");
         cam.fieldOfView=fov;
+        return 1;
+    }
+    public static int SubCamParamProjectionMode(ComShInterpreter sh,Camera cam,string val){
+        if(val==null){
+            if(cam.orthographic)
+                sh.io.Print("o").Print(sh.fmt.FVal(cam.orthographicSize));
+            else
+                sh.io.Print("p").Print(sh.fmt.FInt(cam.fieldOfView));
+            return 0;
+        }
+        if(val=="") return sh.io.Error("値が不正です");
+        char c=val[0];
+        string num=val.Substring(1);
+        if(c=='o'||c=='O'){
+            cam.orthographic=true;
+            if(num!=""){
+                if(!float.TryParse(num,out float f)||f<=0) return sh.io.Error("数値が不正です");
+                cam.orthographicSize=f;
+            }
+        }else if(c=='p'||c=='P'){
+            cam.orthographic=false;
+            if(num!=""){
+                if(!float.TryParse(num,out float f)||f<=0||f>179) return sh.io.Error("数値が不正です");
+                cam.fieldOfView=f;
+            }
+        }else return sh.io.Error("値が不正です");
         return 1;
     }
     private static int SubCamParamAspect(ComShInterpreter sh,Camera cam,string val){
@@ -373,8 +400,9 @@ public static class CmdSubCamera {
         if(err!="") return sh.io.Error(err);
         return 1;
     }
+
     public static int SubCamParamPostProcess(ComShInterpreter sh,Camera cam,string val){
-        var pea=cam.GetComponents<ComShPostProcess>();  // たぶんCommandBufferを使った方がいい
+        var pea=cam.GetComponents<ComShPostProcess>();  // CommandBufferを使った方がいい
         if(val==null){
             if(pea!=null) for(int i=0; i<pea.Length; i++)
                 if(pea[i].mate!=null) sh.io.PrintLn($"{i}{sh.ofs}{pea[i].mate.name}");
@@ -443,7 +471,8 @@ public static class CmdSubCamera {
         if(err!="") return sh.io.Error(err);
         return 1;
     }
-    public class ComShPostProcess:MonoBehaviour { // CommandBufferを使った方がいいとは思う
+    // CommandBufferを使う方がいいけどMaterialの管理がメンドイので
+    public class ComShPostProcess:MonoBehaviour {
         public Material mate;
         public DepthTextureMode mode=DepthTextureMode.None;
         private DepthTextureMode mode0;

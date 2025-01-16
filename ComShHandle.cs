@@ -23,8 +23,13 @@ public class ComShHandle:GizmoRender {
         if(type==0) transform.rotation=Quaternion.identity;
         else if(type==1) transform.rotation=target.parent.rotation;
         else transform.rotation=target.rotation;
- 
+
+        // 継承元OnRenderObject()の不具合回避
+        float origscale=this.offsetScale;
+        // -0.071=Mathf.Tan(0.5*35*Mathf.Deg2Rad)/Mathf.Tan(0.5*35)
+        this.offsetScale*=Mathf.Tan(0.5f*Camera.main.fieldOfView*Mathf.Deg2Rad)/Mathf.Tan(0.5f*Camera.main.fieldOfView)/-0.071f;
         base.OnRenderObject();
+        this.offsetScale=origscale;
 
         if(target.position!=transform.position) target.position=transform.position;
         if(target.localScale!=transform.localScale) target.localScale=transform.localScale;

@@ -480,7 +480,7 @@ public static class CmdLights {
             if(hdl!=null) ComShHandle.DelHandle(hdl);
             return 1;
         }
-        float scale=1;
+        float scale=0.75f;
         if(lr[1]!="" && (!float.TryParse(lr[1],out scale)||scale<0.1)) return sh.io.Error("値が不正です");
         if(hdl==null){ hdl=ComShHandle.AddHandle(tr); hdl.Visible=true;}
         if(ComShHandle.SetHandleType(hdl,sw)<0)

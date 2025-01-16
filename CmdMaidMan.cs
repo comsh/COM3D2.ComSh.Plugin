@@ -39,6 +39,7 @@ public static class CmdMaidMan {
         maidParamDic.Add("scale.y",new CmdParam<Maid>(MaidParamScaleY));
         maidParamDic.Add("scale.z",new CmdParam<Maid>(MaidParamScaleZ));
         maidParamDic.Add("motion",new CmdParam<Maid>(MaidParamMotion));
+        maidParamDic.Add("motion.pause",new CmdParam<Maid>(MaidParamMotionPause));
         maidParamDic.Add("motion.frame",new CmdParam<Maid>(MaidParamMotionFrame));
         maidParamDic.Add("motion.time",new CmdParam<Maid>(MaidParamMotionTime));
         maidParamDic.Add("motion.timep",new CmdParam<Maid>(MaidParamMotionTimep));
@@ -115,7 +116,7 @@ public static class CmdMaidMan {
     private static string[] manParams={
         "position","rotation","scale","pos","rot",
         "motion","shape","iid","list","motion.time","motion.speed","motion.layer","motion.length",
-        "motion.weight","motion.timep","motion.timel","motion.timelp","motion.frame",
+        "motion.weight","motion.timep","motion.timel","motion.timelp","motion.frame","motion.pause",
         "attach","detach","lookat","ik","cloth","style","shape.verlist",
         "wpos","wrot","lpos","lrot","opos","orot","lquat","wquat","wposrot","lposrot",
 
@@ -677,6 +678,17 @@ public static class CmdMaidMan {
             }
         return 0;
     }
+    private static int MaidParamMotionPause(ComShInterpreter sh,Maid m,string val){
+        var anm=m.body0.m_Animation;
+        if(val==null){
+            foreach(AnimationState st in anm){sh.io.Print(st.enabled?"0":"1"); break;}
+            return 0;
+        }
+        bool pauseq;
+        if(val=="1") pauseq=true; else if(val=="0") pauseq=false; else return sh.io.Error("値が不正です");
+        foreach(AnimationState st in anm) st.enabled=!pauseq;
+        return 1;
+    }
 
     public class MotionName{
         public List<ClipList> list=new List<ClipList>(8);
@@ -833,7 +845,12 @@ public static class CmdMaidMan {
         return 1;
     }
     private static int MaidParamPresetSave(ComShInterpreter sh,Maid m,string val){
-        if(val==null) return sh.io.Error("ファイル名を指定してください");
+        CharacterMgr cm=GameMain.Instance.CharacterMgr;
+        if(val==null){
+		    string[] files = Directory.GetFiles(cm.PresetDirectory, "*.preset");
+            if(files!=null) for(int i=0; i<files.Length; i++) sh.io.PrintLn(Path.GetFileNameWithoutExtension(files[i])); 
+            return 0;
+        }
         string[] sa=val.Split(ParseUtil.comma);
         CharacterMgr.PresetType type=CharacterMgr.PresetType.All;
         if(sa.Length==2){
@@ -843,7 +860,6 @@ public static class CmdMaidMan {
             case "2": type=CharacterMgr.PresetType.All; break;
             }
         }
-        CharacterMgr cm=GameMain.Instance.CharacterMgr;
         byte[] bin=cm.PresetSaveNotWriteFile(m,type);
         try{
             File.WriteAllBytes(cm.PresetDirectory+"\\"+UTIL.Suffix(sa[0],".preset"),bin);
@@ -1796,7 +1812,7 @@ public static class CmdMaidMan {
             if(hdl!=null) ComShHandle.DelHandle(hdl);
             return 1;
         }
-        float scale=1;
+        float scale=0.75f;
         if(lr[1]!="" && (!float.TryParse(lr[1],out scale)||scale<0.1)) return sh.io.Error("値が不正です");
         if(hdl==null){ hdl=ComShHandle.AddHandle(m); hdl.Visible=true;}
         if(ComShHandle.SetHandleType(hdl,sw)<0)
@@ -1902,7 +1918,27 @@ public static class CmdMaidMan {
         const string usage="スロット名.ボーン名{+|-}の形で指定してください";
         if(val==null||val=="") return sh.io.Error(usage);
 
+        try{
+            if(skinTrField==null)
+                skinTrField=typeof(TBodySkin).GetField("listTrs",BindingFlags.Instance | BindingFlags.NonPublic);
+            if(skinTrSclField==null)
+                skinTrSclField=typeof(TBodySkin).GetField("listTrsScr",BindingFlags.Instance | BindingFlags.NonPublic);
+        }catch{ return sh.io.Error("失敗しました"); }
+
         string[] va=val.Split(ParseUtil.comma);
+        if(va.Length==1 && va[0].IndexOf('.')<0){
+            if(!m.body0.IsSlotNo(va[0])) return sh.io.Error("スロット名が不正です");
+            var skin=m.body0.GetSlot(m.body0.GetSlotNo(va[0]));
+            if(skin==null) return sh.io.Error("スロット名が不正です");
+            List<Transform> lstTr,lstScl;
+            try{
+                lstTr=(List<Transform>)skinTrField.GetValue(skin);
+                lstScl=(List<Transform>)skinTrField.GetValue(skin);
+                if(lstTr==null||lstScl==null) return sh.io.Error("失敗しました");
+            }catch{ return sh.io.Error("失敗しました"); }
+            for(int idx=0; idx<lstTr.Count; idx+=2) sh.io.PrintLn(lstTr[idx].name);
+            return 0;
+        }
         for(int vi=0; vi<va.Length; vi++){
             string v=va[vi];
 
@@ -1917,10 +1953,6 @@ public static class CmdMaidMan {
     
             List<Transform> lstTr,lstScl;
             try{
-                if(skinTrField==null)
-                    skinTrField=typeof(TBodySkin).GetField("listTrs",BindingFlags.Instance | BindingFlags.NonPublic);
-                if(skinTrSclField==null)
-                    skinTrSclField=typeof(TBodySkin).GetField("listTrsScr",BindingFlags.Instance | BindingFlags.NonPublic);
                 lstTr=(List<Transform>)skinTrField.GetValue(skin);
                 lstScl=(List<Transform>)skinTrField.GetValue(skin);
                 if(lstTr==null||lstScl==null) return sh.io.Error("失敗しました");
@@ -1936,7 +1968,7 @@ public static class CmdMaidMan {
                 || (cbone=CMT.SearchObjName(skin.obj_tr,bname,false))==null) return sh.io.Error("ボーンがありません");
                 lstTr.Add(cbone);
                 lstTr.Add(bone);
-                if(bname=="Mune_L"||bname=="Mune_R"||bname.Contains("chnko")){
+                if(bname=="Mune_L"||bname=="Mune_R"||bname.Contains("chinko")){
                     lstScl.Add(cbone);
                     lstScl.Add(bone);
                 }

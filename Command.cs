@@ -1678,7 +1678,8 @@ public static class Command {
         const string usage="使い方1: quat 回転軸 角度\n"
                           +"使い方2: quat オイラー角\n"
                           +"使い方3: quat 回転前ベクトル 回転後ベクトル\n"
-                          +"使い方4: quat 中心点 始点 終点";
+                          +"使い方4: quat 中心点 始点 終点\n"
+                          +"使い方5: quat 向き1 向き2 補間率";
         if(args.Count==2){
             float[] eu=ParseUtil.Xyz(args[1]);
             if(eu==null) return sh.io.Error(ParseUtil.error);
@@ -1688,7 +1689,7 @@ public static class Command {
                 float[] vec=ParseUtil.Xyz(args[1]);
                 if(vec==null) return sh.io.Error(ParseUtil.error);
                 float deg=ParseUtil.ParseFloat(args[2]);
-                if(float.IsNaN(deg)) return sh.io.Error("数値の指定が不正です");
+                if(float.IsNaN(deg)) return sh.io.Error("数値が不正です");
                 float rad=deg/2*Mathf.Deg2Rad;
                 float s=Mathf.Sin(rad),c=Mathf.Cos(rad);
                 sh.io.PrintJoinLn(",",sh.fmt.FVal(vec[0]*s),sh.fmt.FVal(vec[1]*s),sh.fmt.FVal(vec[2]*s),sh.fmt.FVal(c));
@@ -1700,11 +1701,19 @@ public static class Command {
                 sh.io.Print(sh.fmt.FQuat(Quaternion.FromToRotation(new Vector3(v0[0],v0[1],v0[2]),new Vector3(v1[0],v1[1],v1[2]))));
             }
         }else if(args.Count==4){
-            float[] p0=ParseUtil.Xyz(args[1]); if(p0==null) return sh.io.Error(ParseUtil.error);
-            float[] p1=ParseUtil.Xyz(args[1]); if(p1==null) return sh.io.Error(ParseUtil.error);
-            float[] p2=ParseUtil.Xyz(args[1]); if(p2==null) return sh.io.Error(ParseUtil.error);
-            Vector3 v1=new Vector3(p1[0]-p0[0],p1[1]-p0[1],p1[2]-p0[2]),v2=new Vector3(p2[0]-p0[0],p2[1]-p0[1],p2[2]-p0[2]);
-            sh.io.Print(sh.fmt.FQuat(Quaternion.FromToRotation(v1,v2)));
+            if(args[3].IndexOf(',')<0){
+                float[] q0=ParseUtil.Quat(args[1]); if(q0==null) return sh.io.Error(ParseUtil.error);
+                float[] q1=ParseUtil.Quat(args[2]); if(q1==null) return sh.io.Error(ParseUtil.error);
+                if(!float.TryParse(args[3],out float t)||t<0||t>1) return sh.io.Error("数値が不正です");
+                sh.io.Print(sh.fmt.FQuat(Quaternion.Slerp(
+                    new Quaternion(q0[0],q0[1],q0[2],q0[3]),new Quaternion(q1[0],q1[1],q1[2],q1[3]),t)));
+            }else{
+                float[] p0=ParseUtil.Xyz(args[1]); if(p0==null) return sh.io.Error(ParseUtil.error);
+                float[] p1=ParseUtil.Xyz(args[2]); if(p1==null) return sh.io.Error(ParseUtil.error);
+                float[] p2=ParseUtil.Xyz(args[3]); if(p2==null) return sh.io.Error(ParseUtil.error);
+                Vector3 v1=new Vector3(p1[0]-p0[0],p1[1]-p0[1],p1[2]-p0[2]),v2=new Vector3(p2[0]-p0[0],p2[1]-p0[1],p2[2]-p0[2]);
+                sh.io.Print(sh.fmt.FQuat(Quaternion.FromToRotation(v1,v2)));
+            }
         }else return sh.io.Error(usage);
         return 0;
     }
@@ -3366,8 +3375,9 @@ public static class UTIL {
         return full;
     }
     public static int CheckFileName(string fname){
-        if(fname.IndexOfAny(Path.GetInvalidFileNameChars())>=0) return -1;
-        if(dosdev.Match(Path.GetFileName(fname)).Success) return -1;
+        string fn=Path.GetFileName(fname);
+        if(fn==""||fn.IndexOfAny(Path.GetInvalidFileNameChars())>=0) return -1;
+        if(dosdev.Match(fn).Success) return -1;
         return 0;
     }
     public static byte[] ReadAll(string fname){

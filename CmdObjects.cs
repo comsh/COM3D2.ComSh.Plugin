@@ -270,6 +270,11 @@ public static class CmdObjects {
     private static ParseUtil.ColonDesc colonDesc;
     public static int CmdObjectSub(ComShInterpreter sh,ParseUtil.ColonDesc cd,List<string> args,int startpos){
         colonDesc=cd;
+        if(cd.id=="//" && cd.num==2 && cd.meshno<0){
+            var scene=UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            foreach(var root in scene.GetRootGameObjects()){ sh.io.Print(root.name); Debug.Log(root.name); }
+            return 0;
+        }
         Transform tr=ObjUtil.FindObj(sh,cd);
         if(tr==null) return sh.io.Error("オブジェクトが存在しません");
         if(args.Count==startpos){
@@ -521,7 +526,7 @@ public static class CmdObjects {
             if(hdl!=null) ComShHandle.DelHandle(hdl);
             return 1;
         }
-        float scale=1;
+        float scale=0.75f;
         if(lr[1]!="" && (!float.TryParse(lr[1],out scale)||scale<0.1)) return sh.io.Error("値が不正です");
         if(hdl==null){ hdl=ComShHandle.AddHandle(tr); hdl.Visible=true;}
         if(ComShHandle.SetHandleType(hdl,sw)<0)
@@ -1024,6 +1029,8 @@ public static class CmdObjects {
                 sh.io.PrintJoin(sh.ofs,iid.ToString(),ca[i].GetType().FullName,ca[i].transform.name);
                 if(ca[i] is UnityEngine.MonoBehaviour)
                     sh.io.Print(sh.ofs+(((MonoBehaviour)ca[i]).enabled?"on":"off"));
+                else if(ca[i] is UnityEngine.Behaviour)
+                    sh.io.Print(sh.ofs+(((Behaviour)ca[i]).enabled?"on":"off"));
                 else if(ca[i] is UnityEngine.Renderer)
                     sh.io.Print(sh.ofs+(((Renderer)ca[i]).enabled?"on":"off"));
                 else if(ca[i] is UnityEngine.Collider)
@@ -1042,11 +1049,13 @@ public static class CmdObjects {
             if(ca[i].GetInstanceID()!=tgt) continue;
             if(sa[1]=="on"){
                 if(ca[i] is UnityEngine.MonoBehaviour) ((MonoBehaviour)ca[i]).enabled=true;
+                else if(ca[i] is UnityEngine.Behaviour) ((Behaviour)ca[i]).enabled=true;
                 else if(ca[i] is UnityEngine.Renderer) ((Renderer)ca[i]).enabled=true;
                 else if(ca[i] is UnityEngine.Collider) ((Collider)ca[i]).enabled=true;
                 else if(ca[i] is UnityEngine.Cloth) ((Cloth)ca[i]).enabled=true;
             }else if(sa[1]=="off"){
                 if(ca[i] is UnityEngine.MonoBehaviour) ((MonoBehaviour)ca[i]).enabled=false;
+                else if(ca[i] is UnityEngine.Behaviour) ((Behaviour)ca[i]).enabled=false;
                 else if(ca[i] is UnityEngine.Renderer) ((Renderer)ca[i]).enabled=false;
                 else if(ca[i] is UnityEngine.Collider) ((Collider)ca[i]).enabled=false;
                 else if(ca[i] is UnityEngine.Cloth) ((Cloth)ca[i]).enabled=false;
@@ -1414,8 +1423,9 @@ public static class CmdObjects {
         if(normal==Vector3.zero) return Quaternion.identity;
         Vector3 p;
         Quaternion q;
-        var lp=tr.localPosition;
-        int fwno=UTIL.MaxIdx(lp.z,lp.x,lp.y);
+
+        Vector3 lp=tr.InverseTransformPoint((tr.parent!=null)?tr.parent.position:Vector3.zero)*-1;
+        int fwno=UTIL.MaxIdx(Mathf.Abs(lp.z),Mathf.Abs(lp.x),Mathf.Abs(lp.y));
         if(fwno==0){
             p=RotWaypoint(new Vector3[]{tr.right,tr.up,tr.forward},normal,fn,tn);
         }else if(fwno==1){
@@ -1430,7 +1440,7 @@ public static class CmdObjects {
         Vector3 a=ax[UTIL.MaxIdx(
             Mathf.Abs(Vector3.Dot(normal,ax[0])),
             Mathf.Abs(Vector3.Dot(normal,ax[1])),
-            Mathf.Abs(Vector3.Dot(normal,ax[2]))*0.5f
+            Mathf.Abs(Vector3.Dot(normal,ax[2]))
         )];
         Vector3 vf=Vector3.Dot(from,a)*a, vt=Vector3.Dot(to,a)*a;
         return (to-vt+vf).normalized;
@@ -1947,11 +1957,10 @@ public static class CmdObjects {
                 break;
             case "swinglimit":
                 fa=ParseUtil.FloatArr(lr[1]);
-                if(fa==null||fa.Length!=3) return sh.io.Error("数値が不正です");
+                if(fa==null||fa.Length!=2) return sh.io.Error("数値が不正です");
                 jl=jt.swing1Limit;
-                jl.limit=fa[0]; jl.bounciness=fa[2];
+                jl.limit=fa[0]; jl.bounciness=fa[1];
                 jt.swing1Limit=jl;
-                jl.limit=fa[1];
                 jt.swing2Limit=jl;
                 break;
             case "swingspring":
@@ -2537,14 +2546,11 @@ public static class ObjUtil {
     public static Transform FindObj(ComShInterpreter sh,string name){
         if(name=="") return null;
         Transform tr=null;
-
         if(name[0]=='/'){
             if(name.Length>1 && name[1]=='/'){
                 string nm=name.Substring(2);
-                var scene=UnityEngine.SceneManagement.SceneManager.GetActiveScene();
-                if(nm.Length==0){
-                    foreach(var root in scene.GetRootGameObjects()) Debug.Log(root.name);
-                }else{
+                if(nm.Length!=0){
+                    var scene=UnityEngine.SceneManagement.SceneManager.GetActiveScene();
                     var lr=ParseUtil.LeftAndRight(nm,'/');
                     foreach(var root in scene.GetRootGameObjects()) if(root.name==lr[0]){
                         tr=root.transform;

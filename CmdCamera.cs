@@ -23,6 +23,7 @@ public static class CmdCamera {
         cameraParamDic.Add("rot.y",new CmdParam<CameraMain>(CameraParamRotY));
         cameraParamDic.Add("rot.z",new CmdParam<CameraMain>(CameraParamRotZ));
         cameraParamDic.Add("type",new CmdParam<CameraMain>(CameraParamType));
+        cameraParamDic.Add("projectionmode",new CmdParam<CameraMain>(CameraParamProjectionMode));
         cameraParamDic.Add("ui",new CmdParam<CameraMain>(CameraParamUI));
         cameraParamDic.Add("describe",new CmdParam<CameraMain>(CameraParamDesc));
         cameraParamDic.Add("w2s",new CmdParam<CameraMain>(CameraParamW2S));
@@ -197,6 +198,9 @@ public static class CmdCamera {
         if(!float.TryParse(val,out float f)||f<0||f>1) return sh.io.Error("数値が不正です");
         GameMain.Instance.CMSystem.BloomValue=(int)(f*100);
         return 1;
+    }
+    private static int CameraParamProjectionMode(ComShInterpreter sh,CameraMain mc,string val){
+        return CmdSubCamera.SubCamParamProjectionMode(sh,mc.camera,val);
     }
     private static int CameraParamDisplay(ComShInterpreter sh,CameraMain mc,string val){
         if(val==null){
