@@ -18,8 +18,7 @@ public class ObjInfo : MonoBehaviour{
             if(this.data.originalMesh!=null) foreach(var m in this.data.originalMesh)
                 if(m.own) UnityEngine.Object.Destroy(m.mesh);
             if(this.data.workMesh!=null) foreach(var m in this.data.workMesh) UnityEngine.Object.Destroy(m.mesh);
-            if (this.data.originalMate != null) for (int i = 0; i < this.data.originalMate.Count; i++)
-                if(this.data.originalMateOwn[i]) UnityEngine.Object.Destroy(this.data.originalMate[i]);
+            if (this.data.originalMate != null) for (int i = 0; i < this.data.originalMate.Count; i++) UnityEngine.Object.Destroy(this.data.originalMate[i]);
             if (this.data.workMate!=null) foreach(var mate in this.data.workMate) UnityEngine.Object.Destroy(mate);
             if(this.data.trash!=null) for(int i=0; i<this.data.trash.Length; i++) UnityEngine.Object.Destroy(this.data.trash[i]);
         }
@@ -144,15 +143,14 @@ public class ObjInfoData {
     public MeshList originalMesh;
     public MeshList workMesh;
     public List<Material> originalMate;
-    public List<bool> originalMateOwn;
     public List<Material> workMate;
     public UnityEngine.Object[] trash;
 
+    private static Material emptymate=new Material(Shader.Find("Standard"));
     public void Backup(){
         if(originalMesh!=null) return;
         originalMesh=new MeshList();
         originalMate=new List<Material>();
-        originalMateOwn=new List<bool>();
         int meshno = 0;
         foreach(var b in bones){
             if(!b.gameObject.activeInHierarchy) continue;
@@ -169,8 +167,8 @@ public class ObjInfoData {
 
                 Material[] mate=smr.sharedMaterials;
                 int j;
-                for(j=0; j<mate.Length; j++) originalMate.Add(mate[j]);
-                for(; j<n; j++) originalMate.Add(new Material(Shader.Find("Standard"))); // 一応
+                for(j=0; j<mate.Length; j++) originalMate.Add(new Material(mate[j]));
+                for(; j<n; j++) originalMate.Add(emptymate);
             }else if(ReferenceEquals(r.GetType(),typeof(MeshRenderer))) {
                 MeshFilter mf=r.transform.GetComponent<MeshFilter>();
                 if(mf==null) continue;
@@ -182,18 +180,17 @@ public class ObjInfoData {
 
                 Material[] mate=r.sharedMaterials;
                 int j;
-                for(j=0; j<mate.Length; j++) originalMate.Add(mate[j]);
-                for(; j<n; j++) originalMate.Add(new Material(Shader.Find("Standard"))); // 一応
+                for(j=0; j<mate.Length; j++) originalMate.Add(new Material(mate[j]));
+                for(; j<n; j++) originalMate.Add(emptymate);
             }
         }
-        for(int i=0; i<originalMate.Count; i++) originalMateOwn.Add(false);
         originalMesh.submeshCount=meshno;
         return;
     }
 
     public void CloneMesh(){
         if(workMesh!=null) return;
-        workMesh=new MeshList();
+        workMesh=new MeshList(originalMesh!=null?originalMesh.Count:8);
         int meshno = 0;
         foreach(var b in bones){
             if(!b.gameObject.activeInHierarchy) continue;
@@ -266,8 +263,8 @@ public class ObjInfoData {
         }
     }
     public void CloneMaterial(){
-        if(workMate!=null) return;
-        workMate=new List<Material>();
+        if(workMate==null) workMate=new List<Material>(originalMate!=null?originalMate.Count:8);
+        workMate.Clear();
         foreach(var b in bones){
             if(!b.gameObject.activeInHierarchy) continue;
             var r=b.GetComponent<Renderer>();
@@ -276,41 +273,24 @@ public class ObjInfoData {
                 var smr = (SkinnedMeshRenderer)r;
                 if(smr==null) continue;
                 int n=smr.sharedMesh.subMeshCount;
-                Material[] mate=smr.sharedMaterials;
+                Material[] mate=smr.materials;
                 n=(n>mate.Length)?mate.Length:n;    // 1サブメッシュ1マテリアルのみ対応
-                var mate2=new Material[n];
-                for(int j=0; j<n; j++){
-                    var mi=UnityEngine.Object.Instantiate(mate[j]);
-                    mate2[j]=mi;
-                    workMate.Add(mi);
-                }
-                smr.sharedMaterials=mate2;
+                for(int j=0; j<n; j++) workMate.Add(mate[j]);
             }else if(ReferenceEquals(r.GetType(), typeof(MeshRenderer))) {
                 MeshFilter mf=r.transform.GetComponent<MeshFilter>();
                 if(mf==null) continue;
                 int n=mf.sharedMesh.subMeshCount;
-                Material[] mate=r.sharedMaterials;
+                Material[] mate=r.materials;
                 n=(n>mate.Length)?mate.Length:n;    // 1サブメッシュ1マテリアルのみ対応
-                var mate2=new Material[n];
-                for(int j=0; j<n; j++){
-                    var mi=UnityEngine.Object.Instantiate(mate[j]);
-                    mate2[j]=mi;
-                    workMate.Add(mi);
-                }
-                r.sharedMaterials=mate2;
+                for(int j=0; j<n; j++) workMate.Add(mate[j]);
             }
         }
         return;
     }
-    public void OwnMaterial(){
-        for(int i=0; i<originalMate.Count; i++) originalMateOwn[i]=true;
-    }
-    public void OwnMaterial(int submeshno){ originalMateOwn[submeshno]=true; }
     public void CommitMaterial(int submeshno){
         if(workMate==null) return;
-        if(originalMateOwn[submeshno]) UnityEngine.Object.Destroy(originalMate[submeshno]);
-        originalMate[submeshno]=UnityEngine.Object.Instantiate(workMate[submeshno]);
-        originalMateOwn[submeshno]=true;
+        UnityEngine.Object.Destroy(originalMate[submeshno]);
+        originalMate[submeshno]=new Material(workMate[submeshno]);
     }
 
     // メッシュのリスト。管理用につきメッシュ単位

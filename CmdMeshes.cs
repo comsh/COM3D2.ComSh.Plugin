@@ -499,7 +499,6 @@ public static class CmdMeshes {
         }
 
         sm.mi.EditMaterial();
-
         string err=SetShaderProps(sm.mi.material[sm.submeshno],val);
         if(err!="") return sh.io.Error(err);
         return 1;
@@ -1659,7 +1658,7 @@ public static class CmdMeshes {
             var me=oid.originalMesh[midx];
             var r=me.rend;
 
-            Material newMaterial=UnityEngine.Object.Instantiate(oid.originalMate[submeshno]);
+            Material newMaterial=new Material(oid.originalMate[submeshno]);
             UnityEngine.Object.Destroy(oid.workMate[submeshno]);
             oid.workMate[submeshno]=newMaterial;
 
