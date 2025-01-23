@@ -545,6 +545,7 @@ public static class CmdObjects {
         return 0;
     }
 
+#if false
     #pragma warning disable CS0618 // 型またはメンバーが旧型式です
     private struct OldParticle {
         public ParticleAnimator anim;
@@ -718,6 +719,7 @@ public static class CmdObjects {
         return 0;
     }
     #pragma warning restore CS0618
+#endif
 
     private struct NewParticle {
         public ParticleSystem sys;
@@ -747,7 +749,11 @@ public static class CmdObjects {
     }
     private static int ObjParamParticle(ComShInterpreter sh,Transform tr,string val){
         var pa=tr.gameObject.GetComponentsInChildren<ParticleSystem>();
+#if false
         if(pa==null||pa.Length==0) return ObjParamOldParticle(sh,tr,val);
+#else
+        if(pa==null||pa.Length==0) return sh.io.Error("旧型パーティクルは未対応です");
+#endif
         NewParticle[] par=new NewParticle[pa.Length];
         for(int i=0; i<pa.Length; i++){
             par[i].sys=pa[i];
@@ -969,10 +975,14 @@ public static class CmdObjects {
                     }
                 }else{
                     if(sa[0]=="hemisphere") shape.shapeType=ParticleSystemShapeType.Hemisphere;
-                    else if(sa[0]=="hemisphereshell") shape.shapeType=ParticleSystemShapeType.HemisphereShell;
-                    else if(sa[0]=="sphere") shape.shapeType=ParticleSystemShapeType.Sphere;
-                    else if(sa[0]=="sphereshell") shape.shapeType=ParticleSystemShapeType.SphereShell;
-                    else return sh.io.Error("shapeの指定が不正です");
+                    else if(sa[0]=="hemisphereshell"){
+                        shape.shapeType=ParticleSystemShapeType.Hemisphere;
+                        shape.radiusThickness=0.02f;
+                    }else if(sa[0]=="sphere") shape.shapeType=ParticleSystemShapeType.Sphere;
+                    else if(sa[0]=="sphereshell"){
+                        shape.shapeType=ParticleSystemShapeType.Sphere;
+                        shape.radiusThickness=0.02f;
+                    } else return sh.io.Error("shapeの指定が不正です");
                     if(!float.TryParse(sa[1],out f)||f<0) return sh.io.Error("数値の指定が不正です");
                     shape.radius=f;
                     shape.arc=360.0f;
@@ -995,7 +1005,8 @@ public static class CmdObjects {
                     if(!float.TryParse(sa[1],out f)||f<0) return sh.io.Error("数値の指定が不正です");
                     shape.radius=f;
                     shape.arc=360.0f;
-                    shape.shapeType=ParticleSystemShapeType.ConeShell;
+                    shape.shapeType=ParticleSystemShapeType.Cone;
+                    shape.radiusThickness=0.02f;
                     shape.arcMode=ParticleSystemShapeMultiModeValue.Random;
                     shape.radiusMode=ParticleSystemShapeMultiModeValue.Random;
                     shape.randomDirectionAmount=0;
@@ -1583,7 +1594,6 @@ public static class CmdObjects {
                     mco=smr.transform.gameObject.AddComponent<MeshCollider>();
                 }
                 mco.convex=true;
-                mco.inflateMesh=true;
                 mco.sharedMesh=mesh;
                 mco.sharedMaterial=GetDefaultPM();
             }
@@ -2351,10 +2361,11 @@ public static class CmdObjects {
             cl.bendingStiffness=1f;
             cl.stretchingStiffness=1f;
             cl.useGravity=true;
+            cl.useTethers=true;
             cl.damping=1;
             cl.friction=1;
             cl.useVirtualParticles=1;
-            cl.useContinuousCollision=1;
+            cl.enableContinuousCollision=true;
             cl.collisionMassScale=0;
             cl.sleepThreshold=0.1f;
             cl.worldAccelerationScale=0.5f;
@@ -2697,7 +2708,7 @@ public static class ObjUtil {
                 dummyMaid.body0.maid=dummyMaid;
                 dummyMaid.body0.m_hitFloorPlane=null;
                 dummyMaid.body0.boMAN=dummyMaid.boMAN=false;
-                dummyMaid.body0.goSlot=new List<TBodySkin>(1);
+                dummyMaid.body0.goSlot=new TBody.Slot();
                 dummyMaid.body0.goSlot.Add(new TBodySkin(dummyMaid.body0,"body",0,false));
             }
             trash=dummyMaid.body0.goSlot[0].listDEL;
@@ -2839,7 +2850,8 @@ public static class ObjUtil {
                 if(!string.IsNullOrEmpty(file) && GameUty.IsExistFile(file)){
                     TBodySkin tbs=dummyMaid.body0.goSlot[0];
                     var m=new TMorph(tbs);
-                    GameObject o=ImportCM.LoadSkinMesh_R(file,m,"body",tbs,0);
+                    int modelver=0;
+                    GameObject o=ImportCM.LoadSkinMesh_R(file,m,"body",tbs,0,ref modelver);
                     if(o!=null){
                         if(m.MorphCount>0){
                             m.InitGameObject(o);
