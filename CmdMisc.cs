@@ -889,6 +889,7 @@ public static class CmdMisc {
             go.transform.localRotation=Quaternion.identity;
             ObjUtil.objDic[name]=go.transform;
             rp=go.AddComponent<ReflectionProbe>();
+            rp.hdr=false;
             rp.resolution=res;
             rp.mode=UnityEngine.Rendering.ReflectionProbeMode.Realtime;
             rp.refreshMode=UnityEngine.Rendering.ReflectionProbeRefreshMode.EveryFrame;
@@ -1035,8 +1036,7 @@ public static class CmdMisc {
             int onoff=ParseUtil.OnOff(val);
             if(onoff<0) return sh.io.Error(ParseUtil.error);
             rp.boxProjection=(onoff==1);
-
-        /* } else if(cmd=="png"){ // 書いてはみたけど機能しない
+        }else if(cmd=="png"){
             if(val==null||val=="") return 0;
             string file="";
             if(val[0]=='*'){
@@ -1045,38 +1045,11 @@ public static class CmdMisc {
             }else file=UTIL.GetFullPath(UTIL.Suffix(val,".png"),ComShInterpreter.textureDir);
             if(file=="") return sh.io.Error("ファイル名が不正です");
 
-            RenderTexture rt = new RenderTexture(rp.resolution, rp.resolution, 0,RenderTextureFormat.Default);
-            rt.dimension=UnityEngine.Rendering.TextureDimension.Cube;
-            rt.useMipMap=false;
-            rt.autoGenerateMips=false;
-            rt.mipMapBias=0;
-            rt.enableRandomWrite=true;
-            rt.Create();
-
-            var bkrefresh=rp.refreshMode;
-            var bkslice=rp.timeSlicingMode;
-            rp.refreshMode=UnityEngine.Rendering.ReflectionProbeRefreshMode.ViaScripting;
-            rp.timeSlicingMode=UnityEngine.Rendering.ReflectionProbeTimeSlicingMode.NoTimeSlicing;
-            int id=rp.RenderProbe(rt);
-
-            ComShBg.cron.AddJob("reflectionprobe/save/"+id.ToString(),0,(long)(1000*TimeSpan.TicksPerMillisecond),(t)=>{
-                if(!rp.IsFinishedRendering(id)) return 0;
-                try{
-                    Cubemap cube = new Cubemap(rt.height, TextureFormat.RGBA32, false);
-                    cube.name=rt.name;
-                    cube.wrapMode=rt.wrapMode;
-                    cube.anisoLevel=rt.anisoLevel;
-                    cube.filterMode=rt.filterMode;
-                    cube.mipMapBias=rt.mipMapBias;
-                    for(int i=0; i<6; i++) Graphics.CopyTexture(rt,i,cube,i);
-                    rt.Release();
-                    rp.refreshMode=bkrefresh;
-                    rp.timeSlicingMode=bkslice;
-                    CmdMeshes.MeshParamPNGSub2(sh,cube,file);
-                }catch(Exception e){Debug.Log(e.ToString());}
-                return -1;
-            });
-            return 1; */
+            try{
+                var t2d=TextureUtil.RtCubeToT2D((RenderTexture)rp.texture);
+                CmdMeshes.MeshParamPNGSub2(sh,t2d,file);
+            }catch(Exception e){ Debug.Log(e.ToString()); return sh.io.Error("失敗しました"); }
+            return 1;
         } else return sh.io.Error("パラメータが不正です");
         return 1;
     }

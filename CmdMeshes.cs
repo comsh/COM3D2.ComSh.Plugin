@@ -761,7 +761,7 @@ public static class CmdMeshes {
     private static string SetTex(string prop,string name,int mode,int wrap,Material mate,Material orig,int cube){
         Camera cam;
         ReflectionProbe rp;
-        var origtex=(orig==null)?null:orig.GetTexture(prop);
+        var origtex=(orig==null||!orig.HasProperty(prop))?null:orig.GetTexture(prop);
         if(name==""){
             var old=mate.GetTexture(prop);
             if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
@@ -1272,8 +1272,7 @@ public static class CmdMeshes {
         if(ReferenceEquals(tex.GetType(),typeof(RenderTexture))){
             RenderTexture rt=(RenderTexture)tex;
             if(rt.dimension==UnityEngine.Rendering.TextureDimension.Cube){
-                // TODO代わりに書いただけ。Rt2Cube()は機能しない
-                t2d=TextureUtil.CubeToT2D(TextureUtil.Rt2Cube(rt));
+                t2d=TextureUtil.RtCubeToT2D(rt);
             }else{
                 if(TextureUtil.Rt2Png(rt,fname)<0) return sh.io.Error("書き込みに失敗しました");
             }
@@ -1777,16 +1776,6 @@ public static class TextureUtil {
         Graphics.ConvertTexture(src,ret);
         return ret;
     }
-    public static Cubemap Rt2Cube(RenderTexture rt){
-        int h=rt.height;
-        var ret=new Cubemap(h,TextureFormat.ARGB32,false);
-        ret.name=rt.name;
-        ret.wrapMode=rt.wrapMode;
-        ret.anisoLevel=rt.anisoLevel;
-        ret.filterMode=rt.filterMode;
-        Graphics.ConvertTexture(rt,ret); // ここどうやっても無理なんだが
-        return ret;
-    }
     public static Cubemap T2DToCube(Texture2D t2d,int mode){
         int d=t2d.height;
         Cubemap cube=new Cubemap(d,t2d.format,false);
@@ -1797,6 +1786,14 @@ public static class TextureUtil {
         }
         cube.Apply();
         return cube;
+    }
+    public static Texture2D RtCubeToT2D(RenderTexture cube){
+        int d=cube.height;
+        Texture2D t2d=new Texture2D(d*6,d,TextureFormat.RGBA32,false);
+        for(int i=0; i<6; i++){
+            Graphics.CopyTexture(cube,i,0,0,0,cube.width,cube.height,t2d,0,0,i*cube.width,0);
+        }
+        return t2d;
     }
     public static Texture2D CubeToT2D(Cubemap cube){
         int d=cube.height;

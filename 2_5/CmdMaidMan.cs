@@ -63,6 +63,7 @@ public static class CmdMaidMan {
         maidParamDic.Add("mekureF",new CmdParam<Maid>(MaidParamMekureF));
         maidParamDic.Add("mekureB",new CmdParam<Maid>(MaidParamMekureB));
         maidParamDic.Add("zurashi",new CmdParam<Maid>(MaidParamZurashi));
+        maidParamDic.Add("hadake",new CmdParam<Maid>(MaidParamHadake));
         maidParamDic.Add("undress",new CmdParam<Maid>(MaidParamUndress));
         maidParamDic.Add("shape",new CmdParam<Maid>(MaidParamShape));
         maidParamDic.Add("shape.verlist",new CmdParam<Maid>(MaidParamShapeVerList));
@@ -117,7 +118,7 @@ public static class CmdMaidMan {
         "position","rotation","scale","pos","rot",
         "motion","shape","iid","list","motion.time","motion.speed","motion.layer","motion.length",
         "motion.weight","motion.timep","motion.timel","motion.timelp","motion.frame","motion.pause",
-        "attach","detach","lookat","ik","style","shape.verlist","faceset",
+        "attach","detach","lookat","ik","style","shape.verlist","face","faceset",
         "wpos","wrot","lpos","lrot","opos","orot","lquat","wquat","wposrot","lposrot",
 
         "position.x","position.y","position.z",
@@ -402,24 +403,34 @@ public static class CmdMaidMan {
                     if(manbip!=af.gender) array=af.ChgGender();
                     m.SetAutoTwistAll(true);
                 }else{
-                    array=UTIL.AReadAll(name);
-                    af=new AnmFile(array);
-                    if(manbip!=af.gender) array=af.ChgGender();
+                    if(name.StartsWith("crc_")){
+                        array=UTIL.AReadAll(name);
+                        af=new AnmFile(array);
+                        if(manbip==1) array=af.ChgGender();
+                    }else{
+                        string name2;
+                        if(m.IsCrcBody && GameUty.IsExistFile((name2="crc_"+name),GameUty.FileSystem)){
+                            id="crc_"+id;
+                            array=UTIL.AReadAll(name2);
+                        }else{
+                            array=UTIL.AReadAll(name);
+                            af=new AnmFile(array);
+                            if(manbip!=af.gender) array=af.ChgGender();
+                        }
+                    }
                 }
             }
         }catch{ return null; }
         if(array==null||array.Length==0) return null;
         if(clip.type==0 && q==false){ // ベースのモーションなら胸モーション有効/無効の判断
-            if(!m.boMAN){
+            if(!m.boMAN && af!=null){
                 int iid=m.GetInstanceID();
                 int yrq=5;
                 if(muneMotionYureq.ContainsKey(iid)) yrq=muneMotionYureq[iid];
                 int l=yrq>>2,r=yrq&3;
                 bool lq=(l==2||(l==1&&af.useMuneL==0)),rq=(r==2||(r==1&&af.useMuneR==0));
-                m.body0.MuneYureL(lq?1f:0f);
-                m.body0.jbMuneL.enabled=lq;
-                m.body0.MuneYureR(rq?1f:0f);
-                m.body0.jbMuneR.enabled=rq;
+                m.body0.SetMuneYureLWithEnable(lq);
+                m.body0.SetMuneYureRWithEnable(rq);
             }
         }
         return CrossFade(m,id,array,clip,q,tailq);
@@ -909,6 +920,23 @@ public static class CmdMaidMan {
         m.body0.FixVisibleFlag();
         m.AllProcProp();
         return 1;
+    }
+    private static int MaidParamHadake(ComShInterpreter sh,Maid m,string val){
+        if(!m.IsCrcBody) return 0;
+        if(val==null){
+            string ret;
+            if(MaidUtil.IsMekureZurashi(m,MaidUtil.HADAKE,MPN.wear,MPN.onepiece)) ret="on";
+            else ret="off";
+            sh.io.PrintLn(ret);
+            return 0;
+        }
+        string fb=val.ToLower();
+        if(fb=="on") MaidUtil.MekureZurashi(m,1,MaidUtil.HADAKE,MPN.wear,MPN.onepiece);
+        else if(fb=="off"){
+            MaidUtil.MekureZurashi(m,0,MaidUtil.HADAKE,MPN.wear,MPN.onepiece);
+        }else return sh.io.Error("f|b|off で指定してください");
+        return 1;
+
     }
     private static int MaidParamMekure(ComShInterpreter sh,Maid m,string val){
         if(val==null){
@@ -1520,10 +1548,8 @@ public static class CmdMaidMan {
         if(l<0||r<0) return sh.io.Error("値の形式が不正です");
         muneMotionYureq[iid]=l*4+r;
         bool lq=l>1, rq=r>1;
-        m.body0.MuneYureL(lq?1f:0f);
-        m.body0.jbMuneL.enabled=lq;
-        m.body0.MuneYureR(rq?1f:0f);
-        m.body0.jbMuneR.enabled=rq;
+        m.body0.SetMuneYureLWithEnable(lq);
+        m.body0.SetMuneYureRWithEnable(rq);
         return 1;
     }
 
@@ -1631,6 +1657,131 @@ public static class CmdMaidMan {
         return 1;
     }
     private static int MaidParamMuneParam(ComShInterpreter sh,Maid m,string val){
+        if(m.IsCrcBody) return MaidParamMuneParam_dmb(sh,m,val);
+        else return MaidParamMuneParam_jb(sh,m,val);
+    }
+    private static T GetDblValue<T>(DynamicMuneBone dbl,string field){
+        FieldInfo fi=typeof(DynamicMuneBone).GetField(field,BindingFlags.Instance | BindingFlags.NonPublic);
+        if(fi==null) throw new Exception();
+        return (T)fi.GetValue(dbl);
+    }
+    private static void SetDblValue<T>(DynamicMuneBone dbl,DynamicMuneBone dbr,string field,T val){
+        FieldInfo fi=typeof(DynamicMuneBone).GetField(field,BindingFlags.Instance | BindingFlags.NonPublic);
+        if(fi==null) throw new Exception();
+        fi.SetValue(dbl,val);
+        fi.SetValue(dbr,val);
+    }
+    private static (float,float) GetDblFloatPair(DynamicMuneBone dbl,string field){
+        Type pairtype=typeof(DynamicMuneBone).GetNestedType("MathLerpPair",BindingFlags.NonPublic);
+        if(pairtype==null) throw new Exception();
+        FieldInfo p=typeof(DynamicMuneBone).GetField(field,BindingFlags.Instance|BindingFlags.NonPublic);
+        if(p==null) throw new Exception();
+        object o=p.GetValue(dbl);
+        if(o==null) throw new Exception();
+        float t0,t1;
+        p=pairtype.GetField("t0Value",BindingFlags.Instance|BindingFlags.Public);
+        if(p==null) throw new Exception();
+        t0=(float)p.GetValue(o);
+        p=pairtype.GetField("t1Value",BindingFlags.Instance|BindingFlags.Public);
+        if(p==null) throw new Exception();
+        t1=(float)p.GetValue(o);
+        return (t0,t1);
+    }
+    private static void SetDblFloatPair(DynamicMuneBone dbl,DynamicMuneBone dbr,string field,float t0,float t1){
+        Type pairtype=typeof(DynamicMuneBone).GetNestedType("MathLerpPair",BindingFlags.NonPublic);
+        if(pairtype==null) throw new Exception();
+        FieldInfo p=typeof(DynamicMuneBone).GetField(field,BindingFlags.Instance|BindingFlags.NonPublic);
+        if(p==null) throw new Exception();
+        object o=p.GetValue(dbl);
+        if(o==null) throw new Exception();
+        FieldInfo p2=pairtype.GetField("t0Value",BindingFlags.Instance|BindingFlags.Public);
+        if(p2==null) throw new Exception();
+        p2.SetValue(o,t0);
+        p2=pairtype.GetField("t1Value",BindingFlags.Instance|BindingFlags.Public);
+        if(p==null) throw new Exception();
+        p2.SetValue(o,t1);
+        p.SetValue(dbl,o);
+        p.SetValue(dbr,o);
+    }
+    private static int MaidParamMuneParam_dmb(ComShInterpreter sh,Maid m,string val){
+        var dbl=m.body0.dbMuneL;
+        if(val==null){
+            try{
+                float gravityy0=GetDblValue<float>(dbl,"GravityYMin");
+                float gravityyl=GetDblValue<float>(dbl,"GravityYLandScape");
+                float gravityyf=GetDblValue<float>(dbl,"GravityYFaceUpDown");
+                float distance=GetDblValue<float>(dbl,"TargetDistance");
+                float maxangle=GetDblValue<float>(dbl,"RimmitAngle");
+                float supinex=GetDblValue<float>(dbl,"GravityXSupine");
+                float supinexscl=GetDblValue<float>(dbl,"GravityXScalingSupine");
+                float prone=GetDblValue<float>(dbl,"GravityXScalingProne");
+                (float stiff0,float stiff1)=GetDblFloatPair(dbl,m.body0.boVisible_NIP?"StiffnessLerp":"StiffnessBraLerp");
+                (float mass0,float mass1)=GetDblFloatPair(dbl,"MassLerp");
+                (float damp0,float damp1)=GetDblFloatPair(dbl,"DampingLerp");
+                sh.io.PrintLn2("gravity:",sh.fmt.FPos(gravityy0,gravityyl,gravityyf));
+                sh.io.PrintLn2("distance:",sh.fmt.FVal(distance));
+                sh.io.PrintLn2("damping:",sh.fmt.FXY(damp0,damp1));
+                sh.io.PrintLn2("stiffness:",sh.fmt.FXY(stiff0,stiff1));
+                sh.io.PrintLn2("mass:",sh.fmt.FXY(mass0,mass1));
+                sh.io.PrintLn2("supine:",sh.fmt.FXY(supinex,supinexscl));
+                sh.io.PrintLn2("prone:",sh.fmt.FVal(prone));
+                sh.io.PrintLn2("maxangle:",sh.fmt.FVal(maxangle));
+            }catch{ return sh.io.Error("失敗しました"); }
+            return 0;
+        }
+        var dbr=m.body0.dbMuneR;
+        var sa=val.Split(ParseUtil.lf);
+        float f;
+        float[] fa;
+        try{ for(int i=0; i<sa.Length; i++){
+            string[] lr=ParseUtil.LeftAndRight(sa[i],'=');
+            if(lr[0]==""||lr[1]=="") return sh.io.Error("書式が不正です");
+            switch(lr[0]){
+            case "gravity":
+                fa=ParseUtil.Xyz(lr[1]);
+                if(fa==null||fa[0]<0||fa[1]<0||fa[2]<0) sh.io.Error("数値が不正です");
+                SetDblValue(dbl,dbr,"GravityYMin",fa[0]);
+                SetDblValue(dbl,dbr,"GravityYLandScape",fa[1]);
+                SetDblValue(dbl,dbr,"GravityYFaceUpDown",fa[2]);
+                break;
+            case "distance":
+                if(!float.TryParse(lr[1],out f)) return sh.io.Error("数値が不正です");
+                SetDblValue(dbl,dbr,"TargetDistance",f);
+                break;
+            case "damping":
+                fa=ParseUtil.Xy(lr[1]);
+                if(fa==null||fa[0]<0||fa[1]<0) sh.io.Error("数値が不正です");
+                SetDblFloatPair(dbl,dbr,"DampingLerp",fa[0],fa[1]);
+                break;
+            case "stiffness":
+                fa=ParseUtil.Xy(lr[1]);
+                if(fa==null||fa[0]<0||fa[1]<0) sh.io.Error("数値が不正です");
+                SetDblFloatPair(dbl,dbr,m.body0.boVisible_NIP?"StiffnessLerp":"StiffnessBraLerp",fa[0],fa[1]);
+                break;
+            case "mass":
+                fa=ParseUtil.Xy(lr[1]);
+                if(fa==null||fa[0]<0||fa[1]<0) sh.io.Error("数値が不正です");
+                SetDblFloatPair(dbl,dbr,"MassLerp",fa[0],fa[1]);
+                break;
+            case "supine":
+                fa=ParseUtil.Xy(lr[1]);
+                if(fa==null||fa[0]<0||fa[1]<0) sh.io.Error("数値が不正です");
+                SetDblValue(dbl,dbr,"GravityXSupine",fa[0]);
+                SetDblValue(dbl,dbr,"GravityXScalingSupine",fa[1]);
+                break;
+            case "prone":
+                if(!float.TryParse(lr[1],out f)) return sh.io.Error("数値が不正です");
+                SetDblValue(dbl,dbr,"GravityXScalingProne",f);
+                break;
+            case "maxangle":
+                if(!float.TryParse(lr[1],out f)) return sh.io.Error("数値が不正です");
+                SetDblValue(dbl,dbr,"RimmitAngle",f);
+                break;
+            }
+        } }catch{return sh.io.Error("失敗しました");}
+        return 1;
+    }
+    private static int MaidParamMuneParam_jb(ComShInterpreter sh,Maid m,string val){
         var jbl=m.body0.jbMuneL;
         if(val==null){
             sh.io.PrintJoin(",",
@@ -2192,6 +2343,7 @@ public static class MaidUtil {
     public const string MEKUREF="めくれスカート";
     public const string MEKUREB="めくれスカート後ろ";
     public const string ZURASI="パンツずらし";
+    public const string HADAKE="はだけ";
     public static void MekureZurashi(Maid m,int sw,string name,MPN mpn1,MPN mpn2){
         if(sw==1){
             m.ItemChangeTemp(mpn1.ToString(),name);

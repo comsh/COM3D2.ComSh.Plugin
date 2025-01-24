@@ -1046,12 +1046,8 @@ public static class CmdMisc {
             }else file=UTIL.GetFullPath(UTIL.Suffix(val,".png"),ComShInterpreter.textureDir);
             if(file=="") return sh.io.Error("ファイル名が不正です");
 
-            var cubemap=(RenderTexture)rp.texture;
-            var t2d=new Texture2D(cubemap.width*6,cubemap.height,TextureFormat.RGBA32,false);
             try{
-                for(int i=0; i<6; i++){
-                    Graphics.CopyTexture(cubemap,i,0,0,0,cubemap.width,cubemap.height,t2d,0,0,i*cubemap.width,0);
-                }
+                var t2d=TextureUtil.RtCubeToT2D((RenderTexture)rp.texture);
                 CmdMeshes.MeshParamPNGSub2(sh,t2d,file);
             }catch(Exception e){ Debug.Log(e.ToString()); return sh.io.Error("失敗しました"); }
             return 1;
