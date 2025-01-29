@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections;
+using System.Collections.Generic;
 
 namespace COM3D2.ComSh.Plugin {
 
@@ -87,9 +88,8 @@ public class VarDic : Dictionary<string,ReferredVal> {
         return true;
     }
     public bool SetBind(string key,ReferredVal.GetValue g,ReferredVal.GetValue s){
-        string rkey=" "+key;
-        if(!this.TryGetValue(key,out ReferredVal rv)) this.Add(key,new ReferredVal(rkey,g,s)); 
-        else rv.AddBind(rkey,g,s);
+        if(!this.TryGetValue(key,out ReferredVal rv)) this.Add(key,new ReferredVal("",g,s)); 
+        else rv.AddBind(g,s);
         return true;
     }
 }
@@ -138,9 +138,37 @@ public class ReferredVal {
         }
     }
     public void SetRef(string key,object d){ val=key; dic=d; getter=null; setter=null; }
-    public void SetBind(string key,GetValue g,GetValue s){ val=key; dic=null; getter=g; setter=s; }
-    public void AddBind(string key,GetValue g,GetValue s){ val=key; dic=null; getter+=g; setter+=s; }
+    public void AddBind(GetValue g,GetValue s){getter+=g; setter+=s; }
     public override string ToString(){ return Get(); }
+}
+
+public class Value {
+    public string _str=null;
+    public char type='s';
+    public char dirty='0';
+    private float _num=float.NaN;
+    private object[] _arr=null;
+    private Hashtable _hash=null;
+    public Value(string s){str=s;}
+    public string str {
+        get { return _str; }
+        set { _str=value; type='s'; }
+    }
+    public float num {
+        get {
+            if(float.IsNaN(_num)) _num=(float.TryParse(str,out float f))?f:float.NaN;
+            return _num;
+        }
+        set { _num=value; type='f'; }
+    }
+    public object[] array {
+        get { return _arr; }
+        set { _arr=value; type='a'; }
+    }
+    public Hashtable hash {
+        get { return _hash; }
+        set { _hash=value; type='h'; }
+    }
 }
 
 }

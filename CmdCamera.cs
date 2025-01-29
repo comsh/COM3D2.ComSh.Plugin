@@ -453,16 +453,50 @@ public static class CmdCamera {
         if(val==null) return 0;
         int onoff=ParseUtil.OnOff(val);
         if(onoff<0) return sh.io.Error(ParseUtil.error);
-        if(onoff==0) UIAlpha(0);
-        else UIAlpha(1f);
+        if(onoff==0){
+            UIAlpha(0);
+            MaidClickEnable(false);
+        }else{
+            UIAlpha(1f);
+            MaidClickEnable(true);
+        }
         return 1;
+    }
+
+    private static long maidonclickscenetime=0;
+    private static Dictionary<Maid,Action<Maid>> maidonclickdic=new Dictionary<Maid,Action<Maid>>();
+    private static void MaidClickEnable(bool b){
+        if(ComShWM.lastSceneChangeTime>maidonclickscenetime){
+            maidonclickdic.Clear();
+            maidonclickscenetime=ComShWM.lastSceneChangeTime;
+        }
+        var cm=GameMain.Instance.CharacterMgr;
+        for(int i=0; i<cm.GetMaidCount(); i++){
+            Maid m=cm.GetMaid(i);
+            if(m==null||m.body0==null) continue;
+            if(!b){
+                if(m.onMouseUpEvent!=null) maidonclickdic[m]=m.onMouseUpEvent;
+                m.onMouseUpEvent=null;
+            }else{
+                if(m.onMouseUpEvent==null&&maidonclickdic.ContainsKey(m))
+                    m.onMouseUpEvent=maidonclickdic[m];
+            }
+            CapsuleCollider[] ca=m.transform.GetComponentsInChildren<CapsuleCollider>(true);
+            for(int j=0; j<ca.Length; j++) ca[j].enabled=b;
+        }
     }
     private static void UIAlpha(float a){
         foreach(UIRoot r in UIRoot.list){
             var c=r.GetComponentInChildren<Camera>();
             if(c==null || !c.enabled || c.GetComponent<UICamera>()==null) continue;
             var p=r.GetComponent<UIPanel>();
-            if(p.name.ToLower().IndexOf("fix",System.StringComparison.Ordinal)<0) p.alpha=a;
+            if(a==0){
+                if(p.name.ToLower().IndexOf("fix",System.StringComparison.Ordinal)<0) p.alpha=0;
+                p.enabled=false;
+            }else{
+                p.enabled=true;
+                if(p.name.ToLower().IndexOf("fix",System.StringComparison.Ordinal)<0) p.alpha=a;
+            }
         }
     }
     private static float lastDistance=2f;

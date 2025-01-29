@@ -99,6 +99,7 @@ public static class CmdMaidMan {
         maidParamDic.Add("clothyure",new CmdParam<Maid>(MaidParamClothYure));
         maidParamDic.Add("shape.rename",new CmdParam<Maid>(MaidParamShapeRename));
         maidParamDic.Add("clothfollow",new CmdParam<Maid>(MaidParamClothFollow));
+        maidParamDic.Add("component",new CmdParam<Maid>(MaidParamComponent));
 
         maidParamDic.Add("l2w",new CmdParam<Maid>(MaidParamL2W));
         maidParamDic.Add("w2l",new CmdParam<Maid>(MaidParamW2L));
@@ -117,19 +118,13 @@ public static class CmdMaidMan {
         "position","rotation","scale","pos","rot",
         "motion","shape","iid","list","motion.time","motion.speed","motion.layer","motion.length",
         "motion.weight","motion.timep","motion.timel","motion.timelp","motion.frame","motion.pause",
-        "attach","detach","lookat","ik","cloth","style","shape.verlist",
+        "attach","detach","lookat","ik","cloth","style","shape.verlist","component",
         "wpos","wrot","lpos","lrot","opos","orot","lquat","wquat","wposrot","lposrot",
-
-        "position.x","position.y","position.z",
-        "pos.x","pos.y","pos.z",
-        "lpos.x","lpos.y","lpos.z",
-        "wpos.x","wpos.y","wpos.z",
-        "rotation.x","rotation.y","rotation.z",
-        "rot.x","rot.y","rot.z",
-        "lrot.x","lrot.y","lrot.z",
-        "wrot.x","wrot.y","wrot.z",
-        "scale.x","scale.y","scale.z",
-        "prot","pquat",
+        "position.x","position.y","position.z", "pos.x","pos.y","pos.z",
+        "lpos.x","lpos.y","lpos.z", "wpos.x","wpos.y","wpos.z",
+        "rotation.x","rotation.y","rotation.z", "rot.x","rot.y","rot.z",
+        "lrot.x","lrot.y","lrot.z", "wrot.x","wrot.y","wrot.z",
+        "scale.x","scale.y","scale.z", "prot","pquat",
         "ap","ap.wpos","handle","describe","select","later","evenlater","bbox",
         "l2w","w2l"
     };
@@ -886,6 +881,7 @@ public static class CmdMaidMan {
             return 0;
         }
         if(val=="") return 1;
+
         string[] menus=val.Split(ParseUtil.comma);
         for(int i=0; i<menus.Length; i++){
             string fname=UTIL.Suffix(menus[i],".menu");
@@ -893,8 +889,9 @@ public static class CmdMaidMan {
             if(mh==null) return sh.io.Error("menuファイルの読込に失敗しました");
             if(m.boMAN){
                 if(mh.cate=="body"||mh.cate=="head"){
-                    if(fname.StartsWith("m"+mh.cate,Ordinal))
-                        if(StudioMode.ManHeadBodyStudio(m,fname)==0) m.SetProp(mh.cate,fname,0);
+                    StudioMode.ManHeadBodyStudio(m,fname);
+                    int hash=fname.ToLower().GetHashCode();
+                    if(m.GetProp(mh.cate).nFileNameRID!=hash) m.SetProp(mh.cate,fname,hash);
                 }else if(mh.cate=="def"){
                     if(fname.StartsWith("_i_man_",Ordinal)) Menu.ProcScript(m,fname);
                 }
@@ -964,6 +961,8 @@ public static class CmdMaidMan {
             return 0;
         }
         if(val=="1"||val=="0") m.body0.SetChinkoVisible(val=="1");
+        else if(val=="on"||val=="off") m.body0.SetChinkoVisible(val=="on");
+        else return sh.io.Error("値が不正です");
         return 1;
     }
     private static int MaidParamShape(ComShInterpreter sh,Maid m,string val){
@@ -1661,7 +1660,7 @@ public static class CmdMaidMan {
         var ls=new List<string>(64);
         CharacterMgr cm=GameMain.Instance.CharacterMgr;
         if(cm.TryGetCacheObject(m.body0.goSlot[0].m_strModelFileName,out GameObject go)){
-            string bname=m.boMAN?"ManBip":"Bip01";
+            string bname=(m.boMAN&&!m.IsCrcBody)?"ManBip":"Bip01";
             Transform bip=go.transform.Find(bname);
             if(bip==null) return 0;
             UTIL.TraverseTr(bip,(Transform tr,int d)=>{
@@ -1874,7 +1873,7 @@ public static class CmdMaidMan {
         Transform pftr=ObjUtil.GetPhotoPrefabTr(sh);
         if(pftr==null) return null;
         Transform ptr=null;
-        string bip=(m.boMAN?"ManBip":"Bip01");
+        string bip=((m.boMAN&&!m.IsCrcBody)?"ManBip":"Bip01");
         if(handq){
             if(leftq) ptr=CMT.SearchObjName(m.body0.UpperArmL,bip+" L Hand");
             else ptr=CMT.SearchObjName(m.body0.UpperArmR,bip+" R Hand");
@@ -1986,6 +1985,9 @@ public static class CmdMaidMan {
             }
         }
         return 1;
+    }
+    private static int MaidParamComponent(ComShInterpreter sh,Maid m,string val){
+        return CmdObjects.ObjParamComponent(sh,m.transform,val);
     }
 }
 
@@ -2448,6 +2450,7 @@ public static class MaidUtil {
     public static Dictionary<int,string[]> ikObj=new Dictionary<int,string[]>();
 
     public class MenuHeader{
+        public int version;
         public string name;
         public string cate;
     }
@@ -2460,7 +2463,8 @@ public static class MaidUtil {
             using(BinaryReader br=new BinaryReader(new MemoryStream(buffer))){
                 string hdr=br.ReadString();
                 if(hdr!="CM3D2_MENU") return null;
-                br.ReadInt32(); br.ReadString();
+                mh.version=br.ReadInt32();
+                br.ReadString();
                 mh.name=br.ReadString();
                 mh.cate=br.ReadString();
             }

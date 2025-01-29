@@ -445,6 +445,13 @@ public static class CmdMeshes {
         sm.mi.material[sm.submeshno].shader=shader;
 
         if(mate!=null){
+            var m=new Material(sm.mi.material[sm.submeshno]);
+            sm.mi.material[sm.submeshno].CopyPropertiesFromMaterial(mate);
+            sm.mi.material[sm.submeshno].CopyPropertiesFromMaterial(m);
+            GameObject.Destroy(m);
+            GameObject.Destroy(mate);
+        }
+        if(mate!=null){
             sm.mi.material[sm.submeshno].shaderKeywords=(string[])mate.shaderKeywords.Clone();
             GameObject.Destroy(mate);
         }
@@ -1276,7 +1283,7 @@ public static class CmdMeshes {
         }else if(ReferenceEquals(tex.GetType(),typeof(Texture2D))){
             t2d=TextureUtil.CloneBitmap(tex);
         }else if(ReferenceEquals(tex.GetType(),typeof(Cubemap))){
-            t2d=TextureUtil.CubeToT2D(TextureUtil.CloneCubemap((Cubemap)tex));
+            t2d=TextureUtil.BlitCubemap((Cubemap)tex);
         }else return sh.io.Error("未対応の形式です");
         if(t2d==null) return sh.io.Error("失敗しました");
 
@@ -1762,7 +1769,7 @@ public static class TextureUtil {
         ret.anisoLevel=src.anisoLevel;
         ret.filterMode=src.filterMode;
         ret.mipMapBias=src.mipMapBias;
-        Graphics.ConvertTexture(src,ret);
+        for(int i=0; i<6; i++) Graphics.ConvertTexture(src,i,ret,i);
         return ret;
     }
     public static Cubemap T2DToCube(Texture2D t2d,int mode){
@@ -1770,34 +1777,58 @@ public static class TextureUtil {
         Cubemap cube=new Cubemap(d,t2d.format,false);
         for(int i=0; i<6; i++){
             Color[] ca=t2d.GetPixels(i*d,0,d,d,0);
-            if(mode==0) cube.SetPixels(upsidedown(ca,d),(CubemapFace)i,0);
-            else{ Array.Reverse(ca); cube.SetPixels(ca,(CubemapFace)i,0); }
+            if(mode==0) cube.SetPixels(ca,(CubemapFace)i,0);
+            else{ cube.SetPixels(upsidedown(ca,d),(CubemapFace)i,0); }
         }
         cube.Apply();
         return cube;
-    }
-    public static Texture2D RtCubeToT2D(RenderTexture cube){
-        int d=cube.height;
-        Texture2D t2d=new Texture2D(d*6,d,TextureFormat.RGBA32,false);
-        for(int i=0; i<6; i++){
-            Graphics.CopyTexture(cube,i,0,0,0,cube.width,cube.height,t2d,0,0,i*cube.width,0);
-        }
-        return t2d;
-    }
-    public static Texture2D CubeToT2D(Cubemap cube){
-        int d=cube.height;
-        Texture2D t2d=new Texture2D(d*6,d,TextureFormat.RGBA32,false);
-        for(int i=0; i<6; i++){
-            Color[] ca=cube.GetPixels((CubemapFace)i,0);
-            t2d.SetPixels(i*d,0,d,d,upsidedown(ca,d),0);
-        }
-        t2d.Apply();
-        return t2d;
     }
     private static Color[] upsidedown(Color[] ca,int sz) {
         for(int y=0; y<sz/2; y++) for(int x=0; x<sz; x++)
             { Color c=ca[y*sz+x]; ca[y*sz+x]=ca[(sz-1-y)*sz+x]; ca[(sz-1-y)*sz+x]=c; }
         return ca;
+    }
+
+    public static Texture2D RtCubeToT2D(RenderTexture cube){
+        int d=cube.height;
+        Texture2D t2d=BlitCubemap(cube);
+        return t2d;
+    }
+    public static Texture2D BlitCubemap(Cubemap cube){
+        int d=cube.height;
+        Texture2D result=new Texture2D(d*6,d,TextureFormat.RGBA32,false);
+        Texture2D faceT2D=new Texture2D(d,d,cube.format,cube.mipmapCount>0);
+        RenderTexture tempRT=RenderTexture.GetTemporary(d,d,0,RenderTextureFormat.ARGB32);
+        var bak=RenderTexture.active;
+        for(int i=0; i<6; i++){
+            Graphics.CopyTexture(cube,i,0,0,0,d,d,faceT2D,0,0,0,0);
+            Graphics.Blit(faceT2D,tempRT);
+            RenderTexture.active = tempRT;
+            result.ReadPixels(new Rect(0,0,d,d),i*d,0);
+        }
+        RenderTexture.active=bak;
+        result.Apply();
+        RenderTexture.ReleaseTemporary(tempRT);
+        GameObject.Destroy(faceT2D);
+        return result;
+    }
+    public static Texture2D BlitCubemap(RenderTexture rt){
+        int d=rt.height;
+        Texture2D result=new Texture2D(d*6,d,TextureFormat.RGBA32,false);
+        RenderTexture faceRT=RenderTexture.GetTemporary(d,d,0,rt.format);
+        RenderTexture tempRT=RenderTexture.GetTemporary(d,d,0,RenderTextureFormat.ARGB32);
+        var bak=RenderTexture.active;
+        for(int i=0; i<6; i++){
+            Graphics.CopyTexture(rt,i,0,0,0,d,d,faceRT,0,0,0,0);
+            Graphics.Blit(faceRT,tempRT);
+            RenderTexture.active = tempRT;
+            result.ReadPixels(new Rect(0,0,d,d),i*d,0);
+        }
+        RenderTexture.active=bak;
+        result.Apply();
+        RenderTexture.ReleaseTemporary(tempRT);
+        RenderTexture.ReleaseTemporary(faceRT);
+        return result;
     }
 }
 }

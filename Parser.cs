@@ -47,7 +47,6 @@ public class ComShParser {
 
     public string error;                // パース時にエラーがあればエラーメッセージが入る
     public char prevEoL;                // 直前に取り出した行の行末記号(;/|)
-    public bool envChanged=false;
     public Statement currentStatement=Statement.zero;
 
     public int lineno=0;
@@ -64,7 +63,7 @@ public class ComShParser {
     public void Reset(char eol){Reset();prevEoL=eol;}
     public void Reset(){
         error=null;
-        prevEoL=';'; envChanged=false;
+        prevEoL=';';
         sno=-1;
         currentStatement=Statement.zero;
     }
@@ -74,7 +73,6 @@ public class ComShParser {
     public List<string> Next(VarDic lv, Dictionary<string,string> sv){
         if(++sno>=sta.Count) return null;
         lvars=lv; svars=sv;
-        envChanged=false;
         prevEoL=currentStatement.eol;
         currentStatement=sta[sno];
         return SingleLine(currentStatement);
@@ -269,7 +267,6 @@ public class ComShParser {
         if(sta[sno].append) Variables.Append(key,val,lvars,svars);
         else Variables.Set(key,val,lvars,svars);
         lvars.output="";
-        if(ComShInterpreter.IsEnvChanged(key)) envChanged=true;
     }
     // 変数代入文の処理　
     private bool Keyval(Token tok){
@@ -295,11 +292,9 @@ public class ComShParser {
         if(key==null) return false;
         if(append){
             Variables.Append(key,value,lvars,svars);
-            if(ComShInterpreter.IsEnvChanged(tok.assign.key)) envChanged=true;
             return true;
         }else{
             Variables.Set(key,value,lvars,svars);
-            if(ComShInterpreter.IsEnvChanged(tok.assign.key)) envChanged=true;
             return true;
         }
     }

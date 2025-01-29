@@ -25,7 +25,9 @@ public partial class ComShInterpreter {
     public IO io;
     public delegate void Output(string msg,int code);
     public ComShPanel panel=null;
-    public string ofs=" ";
+    public string ofs {
+        get { return Variables.Value(env,"OFS"," "); }
+    }
     public string ns="";
     public int lastcmp=1;
 
@@ -36,11 +38,11 @@ public partial class ComShInterpreter {
 
 	public ComShInterpreter(Output op=null, VarDic parentEnv=null,Dictionary<string,ScriptStatus> parentFunc=null,string ns="") {
         env=(parentEnv!=null)?new VarDic(parentEnv):new VarDic();
+        InitSpecialVars(env);
         env.output=string.Empty;
         func=(parentFunc!=null)?new Dictionary<string,ScriptStatus>(parentFunc):new Dictionary<string,ScriptStatus>(10);
         io=new IO(this,op);
         this.ns=ns;
-        OnEnvChanged();
         Command.Init();
 	}
 	public int Interpret(string line) {
@@ -55,25 +57,19 @@ public partial class ComShInterpreter {
         if(r==0) return io.OK(); // 空行
         return 1;
     }
-    public bool envChanged;
     public ComShParser currentParser;
     public int InterpretParser(){ return InterpretParser(this.parser); }
     public int InterpretParser(ComShParser parser,bool canSleep=false){
         var parser_bak=currentParser;
         currentParser=parser;
         List<string> tokens;
-        envChanged=false;
         while((tokens=parser.Next(env,(runningScript!=null)?runningScript.svars:null))!=null){
-            envChanged=envChanged||parser.envChanged;
             if (tokens.Count==0) continue;
-            if(envChanged){ OnEnvChanged(); envChanged=false; }
             int ret=InterpretTokens(tokens,parser.prevEoL,parser.currentStatement.eol,canSleep);
             if(ret<0) return ret;
             if(exitq) return io.OK(io.exitStatus);
             if(parser.currentStatement.eol=='>') parser.Redirect();
-            if(envChanged){ OnEnvChanged(); envChanged=false; }
         }
-        if(envChanged){ OnEnvChanged(); envChanged=false; }
         currentParser=parser_bak;
         return io.OK();
     }
@@ -154,14 +150,31 @@ public partial class ComShInterpreter {
         if(interactiveq) ComShProperties.Update(env);
     }
 
-    public void OnEnvChanged(){
-        ofs=Variables.Value(env,"OFS"," ");
-        fmt.Update(env);
-        UpdateObjBase(env);
-        UpdateLightBase(env);
+    public void InitSpecialVars(VarDic env){
+        ReferredVal.GetValue s=new ReferredVal.GetValue((string v0,out string v1)=>{
+            v1=v0; fmt.Update(env); return 0;
+        });
+        env.SetBind("_format_0to1",null,s);
+        env.SetBind("_format_intlike",null,s);
+        env.SetBind("_format_normal",null,s);
+        env.SetBind("_obj_root",null,new ReferredVal.GetValue((string v0,out string v1)=>{
+            v1=v0; UpdateObjBase(env); return 0;
+        }));
+        env.SetBind("_light_root",null,new ReferredVal.GetValue((string v0,out string v1)=>{
+            v1=v0; UpdateLightBase(env); return 0;
+        }));
     }
-    public static bool IsEnvChanged(string name){
-        return (name.Length>0 && (name[0]=='_' || char.IsUpper(name[0])));
+    public static bool IsSpecialVar(string name){
+        switch(name){
+        case "_format_0to1":
+        case "_format_intlike":
+        case "_format_normal":
+        case "_obj_root":
+        case "_light_root":
+            return true;
+        default:
+            return false;
+        }
     }
 
     private int Source(string scriptName) { // 今はもう_comshrc専用

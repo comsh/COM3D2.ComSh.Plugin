@@ -100,6 +100,7 @@ public static class CmdMaidMan {
         maidParamDic.Add("clothyure",new CmdParam<Maid>(MaidParamClothYure));
         maidParamDic.Add("shape.rename",new CmdParam<Maid>(MaidParamShapeRename));
         maidParamDic.Add("clothfollow",new CmdParam<Maid>(MaidParamClothFollow));
+        maidParamDic.Add("component",new CmdParam<Maid>(MaidParamComponent));
 
         maidParamDic.Add("l2w",new CmdParam<Maid>(MaidParamL2W));
         maidParamDic.Add("w2l",new CmdParam<Maid>(MaidParamW2L));
@@ -111,6 +112,7 @@ public static class CmdMaidMan {
 
         for(int i=0; i<manParams.Length; i++) manParamDic.Add(manParams[i],maidParamDic[manParams[i]]);
         manParamDic.Add("chinko",new CmdParam<Maid>(MaidParamChinko));
+        manParamDic.Add("body",new CmdParam<Maid>(MaidParamBody));
     }
     private static Dictionary<string,CmdParam<Maid>> maidParamDic=new Dictionary<string,CmdParam<Maid>>();
     private static Dictionary<string,CmdParam<Maid>> manParamDic=new Dictionary<string,CmdParam<Maid>>();
@@ -118,19 +120,13 @@ public static class CmdMaidMan {
         "position","rotation","scale","pos","rot",
         "motion","shape","iid","list","motion.time","motion.speed","motion.layer","motion.length",
         "motion.weight","motion.timep","motion.timel","motion.timelp","motion.frame","motion.pause",
-        "attach","detach","lookat","ik","style","shape.verlist","face","faceset",
-        "wpos","wrot","lpos","lrot","opos","orot","lquat","wquat","wposrot","lposrot",
-
-        "position.x","position.y","position.z",
-        "pos.x","pos.y","pos.z",
-        "lpos.x","lpos.y","lpos.z",
-        "wpos.x","wpos.y","wpos.z",
-        "rotation.x","rotation.y","rotation.z",
-        "rot.x","rot.y","rot.z",
-        "lrot.x","lrot.y","lrot.z",
-        "wrot.x","wrot.y","wrot.z",
-        "scale.x","scale.y","scale.z",
-        "prot","pquat",
+        "attach","detach","lookat","ik","cloth","style","shape.verlist","face","faceset",
+        "wpos","wrot","lpos","lrot","opos","orot","lquat","wquat","wposrot","lposrot","component",
+        "position.x","position.y","position.z", "pos.x","pos.y","pos.z",
+        "lpos.x","lpos.y","lpos.z", "wpos.x","wpos.y","wpos.z",
+        "rotation.x","rotation.y","rotation.z", "rot.x","rot.y","rot.z",
+        "lrot.x","lrot.y","lrot.z", "wrot.x","wrot.y","wrot.z",
+        "scale.x","scale.y","scale.z", "prot","pquat",
         "ap","ap.wpos","handle","describe","select","later","evenlater","bbox",
         "l2w","w2l"
     };
@@ -210,6 +206,7 @@ public static class CmdMaidMan {
         if(args.Count==prmstart){
             sh.io.Print($"iid:{m.GetInstanceID().ToString()}\n");
             sh.io.Print($"guid:{m.status.guid}\n");
+            sh.io.Print($"creditguid:{m.status.saveDataGuidGP03}\n");
             sh.io.Print($"name:{m.status.fullNameJpStyle.Trim()}\n");
             sh.io.Print($"height:{m.status.body.height.ToString()}\n");
             sh.io.PrintJoinLn(sh.ofs,"bwh:"+m.status.body.bust.ToString(),m.status.body.waist.ToString(),m.status.body.hip.ToString());
@@ -271,6 +268,7 @@ public static class CmdMaidMan {
         if(args.Count==prmstart){
             sh.io.Print($"iid:{m.GetInstanceID().ToString()}\n");
             sh.io.Print($"guid:{m.status.guid}\n");
+            sh.io.Print($"creditguid:{m.status.saveDataGuidGP03}\n");
             UTIL.PrintTrInfo(sh,m.transform);
             return 0;
         }
@@ -899,16 +897,38 @@ public static class CmdMaidMan {
         }
         if(val=="") return 1;
         string[] menus=val.Split(ParseUtil.comma);
+        Maid current=m;
         for(int i=0; i<menus.Length; i++){
             string fname=UTIL.Suffix(menus[i],".menu");
             var mh=MaidUtil.ReadMenuHeader(fname);
             if(mh==null) return sh.io.Error("menuファイルの読込に失敗しました");
             if(m.boMAN){
                 if(mh.cate=="body"||mh.cate=="head"){
-                    if(fname.StartsWith("m"+mh.cate,Ordinal))
-                        if(StudioMode.ManHeadBodyStudio(m,fname)==0) m.SetProp(mh.cate,fname,0);
+                    if(m.pairMan!=null && m.IsCrcBody!=(mh.version>=2100&&fname.StartsWith("crc_",Ordinal))){
+                        int ret=StudioMode.ManBodyChange(m,out current);
+                        if(ret<0||current==null) return sh.io.Error("失敗しました");
+                        if(ret==0){
+                            CharacterMgr cm=GameMain.Instance.CharacterMgr;
+                            current=cm.SwapNewManBody(m.ActiveSlotNo,!m.IsCrcBody);
+                            if(current.IsCrcBody&&current.IsNewManIsRealMan) current.SwapNewRealManProp(true);
+                        }
+                    }
+                    StudioMode.ManHeadBodyStudio(current,fname);
+                    int hash=fname.ToLower().GetHashCode();
+                    if(current.GetProp(mh.cate).nFileNameRID!=hash) current.SetProp(mh.cate,fname,hash);
                 }else if(mh.cate=="def"){
-                    if(fname.StartsWith("_i_man_",Ordinal)) Menu.ProcScript(m,fname);
+                    if(fname.StartsWith("_i_man_",Ordinal)){
+                        if(m.pairMan!=null && m.IsCrcBody!=(mh.version>=2100&&fname.StartsWith("crc_",Ordinal))){
+                            int ret=StudioMode.ManBodyChange(m,out current);
+                            if(ret<0||current==null) return sh.io.Error("失敗しました");
+                            if(ret==0){
+                                CharacterMgr cm=GameMain.Instance.CharacterMgr;
+                                current=cm.SwapNewManBody(m.ActiveSlotNo,!m.IsCrcBody);
+                                if(current.IsCrcBody&&current.IsNewManIsRealMan) current.SwapNewRealManProp(true);
+                            }
+                        }
+                        Menu.ProcScript(current,fname);
+                    }
                 }
             }else{
                 if(mh.cate=="body"||(mh.cate=="head" && fname.StartsWith("mhead",Ordinal))) continue;
@@ -916,9 +936,36 @@ public static class CmdMaidMan {
                 if(mh.cate=="eye_hi") m.SetProp(MPN.eye_hi_r,fname,0,tmpq);
             }
         }
-        m.body0.FixMaskFlag();
-        m.body0.FixVisibleFlag();
-        m.AllProcProp();
+        current.body0.FixMaskFlag();
+        current.body0.FixVisibleFlag();
+        current.AllProcProp();
+        return 1;
+    }
+    private static int MaidParamBody(ComShInterpreter sh,Maid m,string val){
+        if(val==null){
+            var pair=m.pairMan;
+            sh.io.Print(m.status.guid).PrintLn(m.IsCrcBody?" crc":" old");
+            if(pair!=null) sh.io.Print(pair.status.guid).Print(pair.IsCrcBody?" crc":" old");
+            return 0;
+        }
+        CharacterMgr cm=GameMain.Instance.CharacterMgr;
+        if(val=="crc"||val=="1"){
+            if(!m.IsCrcBody){
+                int ret=StudioMode.ManBodyChange(m,out Maid current);
+                if(ret<0||current==null) return sh.io.Error("失敗しました");
+                if(ret==0){
+                    cm.SwapNewManBody(m.ActiveSlotNo,true);
+                    var m2=cm.SwapNewManBody(m.ActiveSlotNo,true);
+                    if(m2.IsNewManIsRealMan) m2.SwapNewRealManProp(true);
+                }
+            }
+        }else if(val=="old"||val=="0"){
+            if(m.IsCrcBody){
+                int ret=StudioMode.ManBodyChange(m,out Maid current);
+                if(ret<0||current==null) return sh.io.Error("失敗しました");
+                if(ret==0) cm.SwapNewManBody(m.ActiveSlotNo,false);
+            }
+        }else return sh.io.Error("値が不正です");
         return 1;
     }
     private static int MaidParamHadake(ComShInterpreter sh,Maid m,string val){
@@ -993,6 +1040,8 @@ public static class CmdMaidMan {
             return 0;
         }
         if(val=="1"||val=="0") m.body0.SetChinkoVisible(val=="1");
+        else if(val=="on"||val=="off") m.body0.SetChinkoVisible(val=="on");
+        else return sh.io.Error("値が不正です");
         return 1;
     }
     private static int MaidParamShape(ComShInterpreter sh,Maid m,string val){
@@ -1061,13 +1110,7 @@ public static class CmdMaidMan {
     }
     private static int MaidParamStyleSub(ComShInterpreter sh,Maid m,string val,bool tmpq){
         if(val==null){
-            if(m.boMAN){
-                MaidProp mp=m.GetProp(MPN.Hara);
-                if(mp!=null){
-                    int v=(mp.boTempDut||mp.boTempExecuted)?mp.temp_value:mp.value;
-                    sh.io.PrintLn2(MPN.Hara.ToString()+":",sh.fmt.F0to1(v));
-                }
-            }else for(int i=0; i<MaidUtil.mpnBody.Length; i++){
+            for(int i=0; i<MaidUtil.mpnBody.Length; i++){
                 MaidProp mp=m.GetProp(MaidUtil.mpnBody[i]);
                 if(mp!=null){
                     int v=(mp.boTempDut||mp.boTempExecuted)?mp.temp_value:mp.value;
@@ -1820,7 +1863,7 @@ public static class CmdMaidMan {
         var ls=new List<string>(64);
         CharacterMgr cm=GameMain.Instance.CharacterMgr;
         if(cm.TryGetCacheObject(m.body0.goSlot[0].m_strModelFileName,out GameObject go)){
-            string bname=m.boMAN?"ManBip":"Bip01";
+            string bname=m.body0.trBip.name;
             Transform bip=go.transform.Find(bname);
             if(bip==null) return 0;
             UTIL.TraverseTr(bip,(Transform tr,int d)=>{
@@ -2034,7 +2077,7 @@ public static class CmdMaidMan {
         Transform pftr=ObjUtil.GetPhotoPrefabTr(sh);
         if(pftr==null) return null;
         Transform ptr=null;
-        string bip=(m.boMAN?"ManBip":"Bip01");
+        string bip=m.body0.trBip.name;
         if(handq){
             if(leftq) ptr=CMT.SearchObjName(m.body0.UpperArmL,bip+" L Hand");
             else ptr=CMT.SearchObjName(m.body0.UpperArmR,bip+" R Hand");
@@ -2146,6 +2189,9 @@ public static class CmdMaidMan {
             }
         }
         return 1;
+    }
+    private static int MaidParamComponent(ComShInterpreter sh,Maid m,string val){
+        return CmdObjects.ObjParamComponent(sh,m.transform,val);
     }
 }
 
@@ -2305,13 +2351,31 @@ public static class MaidUtil {
         return name;
     }
     public static MPN[] mpnBody={       // 身体系MPN
-        MPN.KubiScl,MPN.UdeScl,
-        MPN.EyeScl,MPN.EyeSclX,MPN.EyeSclY,MPN.EyePosX,MPN.EyePosY,
+        MPN.KubiScl,MPN.UdeScl,MPN.EyeScl,MPN.EyeSclX,MPN.EyeSclY,MPN.EyePosX,MPN.EyePosY,
         MPN.EyeClose,MPN.EyeBallPosX,MPN.EyeBallPosY,MPN.EyeBallSclX,MPN.EyeBallSclY,
         MPN.EarNone,MPN.EarElf,MPN.EarRot,MPN.EarScl,MPN.NosePos,MPN.NoseScl,
         MPN.FaceShape,MPN.FaceShapeSlim,MPN.MayuShapeIn,MPN.MayuShapeOut,MPN.MayuX,MPN.MayuY,MPN.MayuRot,
         MPN.HeadX,MPN.HeadY,MPN.DouPer,MPN.sintyou,MPN.koshi,MPN.kata,MPN.west,MPN.Hara,
-        MPN.MuneUpDown,MPN.MuneYori,MPN.MuneYawaraka,MPN.MayuThick,MPN.MayuLong,MPN.Yorime
+        MPN.MayuThick,MPN.MayuLong,MPN.Yorime,
+        MPN.MuneL,MPN.MuneS,MPN.MuneM,MPN.MuneTare,MPN.MuneUpDown,MPN.MuneYori,MPN.MuneYawaraka,
+        MPN.MunePosX, MPN.MunePosY, MPN.MuneThick, MPN.MuneLong, MPN.MuneDir,
+        MPN.DouThick1X, MPN.DouThick1Y, MPN.DouThick2X, MPN.DouThick2Y, MPN.DouThick3X, MPN.DouThick3Y,
+        MPN.ShoulderThick, MPN.UpperArmThickX, MPN.UpperArmThickY, MPN.LowerArmThickX, MPN.LowerArmThickY,
+        MPN.ElbowThickX, MPN.ElbowThickY, MPN.NeckThickX, MPN.NeckThickY, MPN.HandSize, MPN.DouThick4X, MPN.DouThick4Y,
+        MPN.DouThick5X, MPN.DouThick5Y, MPN.WaistPos, MPN.HipSize, MPN.HipRot, MPN.ThighThickX, MPN.ThighThickY,
+        MPN.KneeThickX, MPN.KneeThickY, MPN.CalfThickX, MPN.CalfThickY, MPN.AnkleThickX, MPN.AnkleThickY,
+        MPN.FootSize, MPN.UpperArmLowerThickX, MPN.UpperArmLowerThickY, MPN.WristThickX, MPN.WristThickY,
+        MPN.ClavicleThick, MPN.ShoulderTension, MPN.ThighLowerThickX, MPN.ThighLowerThickY, MPN.ThighShin,
+        MPN.HaraN, MPN.ChikubiH, MPN.ChikubiK1, MPN.ChikubiK2, MPN.ChikubiK2_MuneS, MPN.ChikubiR, MPN.ChikubiW,
+        MPN.Nyurin1, MPN.Nyurin2, MPN.Nyurin3, MPN.Nyurin4, MPN.Nyurin5, MPN.Nyurin6, MPN.Nyurin7, MPN.Nyurin8,
+        MPN.MabutaUpIn, MPN.MabutaUpIn2, MPN.MabutaUpMiddle, MPN.MabutaUpOut, MPN.MabutaUpOut2,
+        MPN.MabutaLowIn, MPN.MabutaLowUpMiddle, MPN.MabutaLowUpOut, MPN.Eyedel, MPN.Itome, 
+        MPN.Ha1, MPN.Ha2, MPN.Ha3, MPN.Ha4, MPN.Ha5, MPN.Ha6,
+        MPN.FutaePosX, MPN.FutaePosY, MPN.FutaeRot, MPN.HitomiHiPosX, MPN.HitomiHiPosY, MPN.HitomiHiSclY,
+        MPN.HitomiShapeUp, MPN.HitomiShapeLow, MPN.HitomiShapeIn,MPN.HitomiShapeOutUp, MPN.HitomiShapeOutLow, MPN.HitomiRot,
+        MPN.HohoShape, MPN.LipThick, MPN.WearSuso, MPN.KuikomiPants, MPN.KuikomiStkg,
+        MPN.MuscleSkin, MPN.Hanasuji, MPN.Washibana, MPN.ChikubiWearTotsu, 
+
     };
     public static MPN[] mpnClothing={   // 衣装系MPN。動的に変える事がなさそうなのは省く
         MPN.acctatoo,MPN.folder_eye,MPN.eye,MPN.eye_hi,MPN.eye_hi_r,
@@ -2610,6 +2674,7 @@ public static class MaidUtil {
     public static Dictionary<int,string[]> ikObj=new Dictionary<int,string[]>();
 
     public class MenuHeader{
+        public int version;
         public string name;
         public string cate;
     }
@@ -2622,7 +2687,8 @@ public static class MaidUtil {
             using(BinaryReader br=new BinaryReader(new MemoryStream(buffer))){
                 string hdr=br.ReadString();
                 if(hdr!="CM3D2_MENU") return null;
-                br.ReadInt32(); br.ReadString();
+                mh.version=br.ReadInt32();
+                br.ReadString();
                 mh.name=br.ReadString();
                 mh.cate=br.ReadString();
             }

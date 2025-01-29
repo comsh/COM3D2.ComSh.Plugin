@@ -17,11 +17,13 @@ namespace COM3D2.ComSh.Plugin {
 		public void OnGUI() { ComShWM.OnGUI(); }
         public void OnApplicationQuit(){ DataFiles.Clean(); }
 	    private void OnSceneLoaded(Scene scene, LoadSceneMode mode){
+            ComShWM.lastSceneChangeTime=DateTime.UtcNow.Ticks;
             StudioMode.SceneChg(SceneManager.GetActiveScene().name);
         }
 	}
 
 	public static class ComShWM {
+        public static long lastSceneChangeTime;
         public static ComShTerminal terminal;
         public static ComShMenu menu;
 

@@ -9,7 +9,7 @@ public static class StudioMode {
     public static PhotoWindowManager pwm; 
 
     public static void SceneChg(string name){
-        if(name!="ScenePhotoMode"){pwm=null; return;}
+        if(name!="ScenePhotoMode"){ pwm=null; return;}
         pwm=GameObject.FindObjectOfType<PhotoWindowManager>();
         InitOnLoad();
     }
@@ -119,6 +119,74 @@ public static class StudioMode {
             return 1;
         }
         return 0;
+    }
+    public static int ManBodyChange(Maid man,out Maid pairman){
+        pairman=null;
+        var pl=GetWindow<PlacementWindow>(PhotoWindowManager.WindowType.Placement);
+        if(pl==null) return 0;
+        var paneltype=typeof(PlacementWindow).GetNestedType("PlateData",BindingFlags.NonPublic);
+        if(paneltype==null) return -1;
+        var fi_panelmaid=paneltype.GetField("maid",BindingFlags.Instance|BindingFlags.Public);
+        if(fi_panelmaid==null) return -1;
+        var maidslottype=typeof(PlacementWindow).GetNestedType("MaidSlotData",BindingFlags.NonPublic);
+        if(maidslottype==null) return -1;
+        var fi_slotmaid=maidslottype.GetField("maid",BindingFlags.Instance|BindingFlags.Public);
+        if(fi_slotmaid==null) return -1;
+        var fi_maidlist=typeof(PlacementWindow).GetField("maid_data_list_",BindingFlags.Instance|BindingFlags.NonPublic);
+        if(fi_maidlist==null) return -1;
+        var fi_activelist=typeof(PlacementWindow).GetField("active_maid_list_",BindingFlags.Instance|BindingFlags.NonPublic);
+        if(fi_activelist==null) return -1;
+        var fi_transdic=typeof(PlacementWindow).GetField("transtarget_maid_dic_",BindingFlags.Instance|BindingFlags.NonPublic);
+        if(fi_transdic==null) return -1;
+        var mi_select=typeof(PlacementWindow).GetMethod("SetSelectMaid",BindingFlags.Instance|BindingFlags.NonPublic);
+        if(mi_select==null) return -1;
+        var mi_activate=typeof(PlacementWindow).GetMethod("ActiveMaid",BindingFlags.Instance|BindingFlags.NonPublic);
+        if(mi_activate==null) return -1;
+
+        if(man.pairMan==null) return -1;
+
+        CharacterMgr cm=GameMain.Instance.CharacterMgr;
+
+        var selected=pl.mgr.select_maid;
+        mi_select.Invoke(pl,new object[]{man});
+
+        /*pl.mgr.OnMaidRemoveEventPrev(man);
+        cm.CharaVisible(man.ActiveSlotNo,false,true);
+        pl.mgr.OnMaidRemoveEvent(man);*/
+        pl.DeActiveMaid(man,false);
+
+        // body入れ替え
+        cm.SetActiveMan(man,man.ActiveSlotNo);
+        pairman=cm.SwapNewManBody(man.ActiveSlotNo,!man.IsCrcBody);
+        if(pairman.IsCrcBody&&pairman.IsNewManIsRealMan) pairman.SwapNewRealManProp(true);
+
+        // UIが持ってるmanを差し換え
+        var list=(System.Collections.IList)fi_maidlist.GetValue(pl);
+        for(int i=0; i<list.Count; i++){
+            var m=(Maid)fi_panelmaid.GetValue(list[i]);
+            if(m==man){ fi_panelmaid.SetValue(list[i],pairman); break;}
+        }
+        list=(System.Collections.IList)fi_activelist.GetValue(pl);
+        for(int i=0; i<list.Count; i++){
+            var m=(Maid)fi_slotmaid.GetValue(list[i]);
+            if(m==man){ fi_slotmaid.SetValue(list[i],pairman); break;}
+        }
+        var dic=(Dictionary<Maid,PhotoTransTargetObject>)fi_transdic.GetValue(pl);
+        if(dic.ContainsKey(man)) dic.Remove(man);
+
+        // 新bodyで再配置
+        cm.SetActiveMan(pairman,pairman.ActiveSlotNo);
+        pairman.Visible=true;
+        if(pairman.boAllProcPropBUSY){
+            pairman.boAllProcPropBUSY=false;
+            pairman.AllProcProp();
+        }
+
+        pl.mgr.OnMaidAddEvent(pairman,false);
+
+        if(selected==man) selected=pairman;
+        mi_select.Invoke(pl,new object[]{selected});
+        return 1;
     }
 
     private static void OnPeOffOkClick(){

@@ -166,6 +166,7 @@ public static class Command {
         cmdTbl.Add("todec", new Cmd(CmdToDec));
         cmdTbl.Add("nop", new Cmd(CmdNop));
 
+        cmdTbl.Add("__uibutton", new Cmd(CmdUIButton));
         cmdTbl.Add("__res",new Cmd(Cmd__Resource));
         cmdTbl.Add("__files",new Cmd(Cmd__Files));
 
@@ -1984,19 +1985,17 @@ public static class Command {
     }
     private static int CmdUnset(ComShInterpreter sh,List<string> args){
         if(args.Count==1) sh.io.Error("使い方: unset 変数名1 [変数名2 ...]");
-        bool changed=false;
         for(int i=1; i<args.Count; i++){
             if(args[i].Length==0) continue;
+            if(ComShInterpreter.IsSpecialVar(args[i])){ sh.env[args[i]]=""; continue;}
             if(args[i][0]=='/') Variables.g.Remove(args[i]);
             else if(args[i][0]=='.') {
                 if(sh.runningScript!=null) sh.runningScript.svars.Remove(args[i]);
             }else {
                 sh.env.Remove(args[i]);
                 sh.env.Remove(" "+args[i]); // staticで作った匿名変数
-                changed=true;
             }
         }
-        if(changed) sh.envChanged=true;
         return 0;
     }
     private static int CmdSed(ComShInterpreter sh,List<string> args){
@@ -2236,7 +2235,7 @@ public static class Command {
         const string usage="使い方: bind 変数 オブジェクト 属性 [副属性]";
         if(args.Count!=4&&args.Count!=5) return sh.io.Error(usage);
         string key=args[1];
-        if(!ParseUtil.IsLVarName(key)||ParseUtil.IsVar1Name(key))
+        if(!ParseUtil.IsLVarName(key)||ParseUtil.IsVar1Name(key)||ComShInterpreter.IsSpecialVar(key))
             return sh.io.Error("変数名が不正です");
         if(sh.env.IsRef(key)) sh.env.Remove(" "+key); // 上書きする場合は匿名変数の実体は消す
         var cd=new ParseUtil.ColonDesc(args[2]);
@@ -2968,6 +2967,22 @@ public static class Command {
         if(args.Count!=2) return sh.io.Error("使い方: todec 16進数値");
         if(!ulong.TryParse(args[1],System.Globalization.NumberStyles.HexNumber,null,out ulong n)) return sh.io.Error("数値が不正です");
         sh.io.Print(n.ToString());
+        return 0;
+    }
+    private static int CmdUIButton(ComShInterpreter sh,List<string> args){
+        var btns=GameObject.FindObjectsOfType<UIButton>();
+        if(btns==null||btns.Length==0) return 0;
+        for(int b=0; b<btns.Length; b++){
+            Transform cur=btns[b].transform;
+            if(cur==null) return 0;
+            var names=new List<string>();
+            names.Add(cur.name);
+            var p=cur;
+            while(p.parent!=null){ p=p.parent; names.Add(p.name); }
+            sh.io.Print(names[names.Count-1]);
+            for(int i=names.Count-2; i>=0; i--) sh.io.Print('/').Print(names[i]);
+            sh.io.PrintLn("");
+        }
         return 0;
     }
 

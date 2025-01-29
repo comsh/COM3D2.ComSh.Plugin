@@ -270,9 +270,9 @@ public static class CmdObjects {
     private static ParseUtil.ColonDesc colonDesc;
     public static int CmdObjectSub(ComShInterpreter sh,ParseUtil.ColonDesc cd,List<string> args,int startpos){
         colonDesc=cd;
-        if(cd.id=="//" && cd.num==2 && cd.meshno<0){
+        if(cd.id=="//" && cd.num==0 && cd.meshno<0){
             var scene=UnityEngine.SceneManagement.SceneManager.GetActiveScene();
-            foreach(var root in scene.GetRootGameObjects()){ sh.io.Print(root.name); Debug.Log(root.name); }
+            foreach(var root in scene.GetRootGameObjects()){ sh.io.PrintLn(root.name); Debug.Log(root.name); }
             return 0;
         }
         Transform tr=ObjUtil.FindObj(sh,cd);
@@ -1031,7 +1031,7 @@ public static class CmdObjects {
         if(oi!=null) sh.io.PrintLn(oi.source);
         return 0;
     }
-    private static int ObjParamComponent(ComShInterpreter sh,Transform tr,string val){
+    public static int ObjParamComponent(ComShInterpreter sh,Transform tr,string val){
         Component[] ca=tr.GetComponentsInChildren<Component>(true);
         if(val==null){
             for(int i=0; i<ca.Length; i++) if(ca[i]!=null){
@@ -2582,6 +2582,14 @@ public static class ObjUtil {
             if(tr==null){ objDic.Remove(sa[0]); return null; }
         }
         if(tr!=null) return (sa[1]=="")?tr:tr.Find(sa[1]);
+
+        if(sa[0]!="" && sa[0][0]=='%'){
+            if(!int.TryParse(name.Substring(1),out int iid)) return null;
+            var o=Resources.InstanceIDToObject(iid);
+            if(o.GetType()==typeof(GameObject)) tr=((GameObject)o).transform;
+            else if(o.GetType()==typeof(Transform)) tr=(Transform)o;
+            if(tr!=null) return (sa[1]=="")?tr:tr.Find(sa[1]);
+        }
 
         if(sh==null) return null;
         tr=GetPhotoPrefabTr(sh);
