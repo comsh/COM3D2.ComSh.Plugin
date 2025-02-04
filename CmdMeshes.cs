@@ -51,6 +51,9 @@ public static class CmdMeshes {
         meshParamDic.Add("video.timep",new CmdParam<SingleMesh>(MeshParamVideoTimep));
         meshParamDic.Add("video.length",new CmdParam<SingleMesh>(MeshParamVideoLength));
         meshParamDic.Add("video.speed",new CmdParam<SingleMesh>(MeshParamVideoSpeed));
+        meshParamDic.Add("mateload",new CmdParam<SingleMesh>(MeshParamMaterialLoad));
+        meshParamDic.Add("matecp",new CmdParam<SingleMesh>(MeshParamMaterialCopy));
+        meshParamDic.Add("texcp",new CmdParam<SingleMesh>(MeshParamTextureCopy));
     }
     private static Dictionary<string,CmdParam<SingleMesh>> meshParamDic=new Dictionary<string,CmdParam<SingleMesh>>();
 
@@ -1525,6 +1528,83 @@ public static class CmdMeshes {
         int midx=sm.mi.mesh.FindMeshIdx(sm.submeshno);
         Renderer rend=sm.mi.mesh[midx].rend;
         return Video.VideoSpeed(sh,rend.transform,val);
+    }
+    public static int MeshParamMaterialLoad(ComShInterpreter sh,SingleMesh sm,string val){
+        if(val==null){
+            for(int i=0; i<sm.mi.material.Count; i++)
+                sh.io.PrintLn($"{sm.mi.material[i].name}{sh.ofs}{sm.mi.material[i].shader.name}");
+            return 0;
+        }
+
+        sm.mi.EditMaterial();
+        try{
+            if(UTIL.AFileExists(val)!=null){
+                Material mate=sm.mi.material[sm.submeshno];
+                ImportCM.LoadMaterial(val,null,mate);
+            }
+        }catch{ return sh.io.Error("ファイルの読み込みに失敗しました"); }
+
+        return 1;
+    }
+    public static int MeshParamMaterialCopy(ComShInterpreter sh,SingleMesh sm,string val){
+        if(val==null) return sh.io.Error("コピー元を指定してください");
+
+        var tgtcd=new ParseUtil.ColonDesc(val);
+        if(tgtcd.meshno<0) return sh.io.Error("書式が不正です");
+
+        Transform fromtr=ObjUtil.FindObj(sh,tgtcd);
+        if(fromtr==null) return sh.io.Error("オブジェクトが見つかりません");
+        Transform tr0=ObjUtil.FindObjRoot(sh,tgtcd);
+        if(tr0==null)  return sh.io.Error("オブジェクトが見つかりません");
+        var frommi=new CmdMeshes.MeshInfo(fromtr,tr0);
+        if(frommi==null) return sh.io.Error("マテリアルが見つかりません");
+        if(frommi.material.Count<=tgtcd.meshno) return sh.io.Error("マテリアル番号が不正です");
+
+        var frommate=frommi.material[tgtcd.meshno];
+        var tomate=sm.mi.material[sm.submeshno];
+        sm.mi.EditMaterial();
+        tomate.shader=frommate.shader;
+        tomate.CopyPropertiesFromMaterial(frommate);
+        return 1;
+    }
+    public static int MeshParamTextureCopy(ComShInterpreter sh,SingleMesh sm,string val){
+        if(val==null) return sh.io.Error("コピー元を指定してください");
+
+        string fromprop="_MainTex",toprop="_MainTex",tgtnm=val;
+        if(val!="" && val[0]=='_'){
+            var lr=ParseUtil.LeftAndRight2(val,':');
+            if(lr[1]=="") return sh.io.Error("書式が不正です");
+            if(lr[0]!="") toprop=lr[0];
+            tgtnm=lr[1];
+        }
+
+        var idx=tgtnm.LastIndexOf('#');
+        if(idx<0) return sh.io.Error("書式が不正です");
+        idx=tgtnm.IndexOf('.',idx);
+        if(idx>=0){
+            fromprop=tgtnm.Substring(idx+1);
+            tgtnm=tgtnm.Substring(0,idx);
+        }
+
+        var tgtcd=new ParseUtil.ColonDesc(tgtnm);
+        if(tgtcd.meshno<0) return sh.io.Error("書式が不正です");
+
+        Transform fromtr=ObjUtil.FindObj(sh,tgtcd);
+        if(fromtr==null) return sh.io.Error("オブジェクトが見つかりません");
+        Transform tr0=ObjUtil.FindObjRoot(sh,tgtcd);
+        if(tr0==null)  return sh.io.Error("オブジェクトが見つかりません");
+        var frommi=new CmdMeshes.MeshInfo(fromtr,tr0);
+        if(frommi==null) return sh.io.Error("マテリアルが見つかりません");
+        if(frommi.material.Count<=tgtcd.meshno) return sh.io.Error("マテリアル番号が不正です");
+
+        sm.mi.EditMaterial();
+        var frommate=frommi.material[tgtcd.meshno];
+        var tomate=sm.mi.material[sm.submeshno];
+        if(!frommate.HasProperty(fromprop)||!tomate.HasProperty(toprop))
+            return sh.io.Error("指定されたプロパティは現在のシェーダでは無効です");
+        var tex=frommate.GetTexture(fromprop);
+        tomate.SetTexture(toprop,tex);
+        return 1;
     }
 
     private class VerLoopChange {

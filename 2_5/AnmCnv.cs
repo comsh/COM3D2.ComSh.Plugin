@@ -2,29 +2,38 @@
 using System.Collections.Generic;
 using System.IO;
 using static System.StringComparison;
+using UnityEngine;
 
-// AnmCommon,AnmCnvのメモリ使わない版。ケチってる分拡張性なし
-// 現状情報取得と性別変換のみ
 namespace COM3D2.ComSh.Plugin {
     public class AnmFile {
         public int format;
         public int gender;  // maid:0/man:1
         public byte useMuneL;
         public byte useMuneR;
-        public byte[] buf;
-        public AnmFile(byte[] buf){     // arcの読込の都合上、入力はbyte[]固定
-            this.buf=buf;
-            using (var r=new BinaryReader(new MemoryStream(buf))){ Inspect(r); }
-            if(format==1001){
-                useMuneL=buf[buf.Length-2];
-                useMuneR=buf[buf.Length-1];
-            }
+        public float minTime;
+        public float maxTime;
+        public bool nolposq;
+        public List<AnmBoneEntry> bones;
+        public AnmFile(string fn,bool nolpos=true){
+            nolposq=nolpos;
+            bones=new List<AnmBoneEntry>();
+            using (var fs=File.OpenRead(fn))
+            using (var r=new BinaryReader(fs)) { Read(r); }
         }
-        private void Inspect(BinaryReader r){
-            _=r.ReadBytes(11);
+        public AnmFile(byte[] buf,bool nolpos=true){
+            nolposq=nolpos;
+            bones=new List<AnmBoneEntry>();
+            using (var ms=new MemoryStream(buf))
+            using (var r=new BinaryReader(ms)) { Read(r); }
+        }
+        public bool IsEmpty(){ return (bones==null||bones.Count==0||gender<0||maxTime<=minTime); }
+        private void Read(BinaryReader r){
+            r.ReadBytes(11);
             format=r.ReadInt32();
             int m=(format==1001)?3:0;
             gender=-1;
+            minTime=Single.MaxValue;
+            maxTime=Single.MinValue;
             while (r.Read()==1){
                 var be=new AnmBoneEntry(r);
                 if(gender<0){
@@ -37,165 +46,96 @@ namespace COM3D2.ComSh.Plugin {
                     else if(be.boneName.EndsWith("Mune_R",Ordinal)) mune=1;
                 }
                 int t;
-                while ((t=r.PeekChar())>=0) {
-                    if (t==1) break;
-                    else if (t>=100){
-                        var fl=new AnmFrameList(r);
-                        if(fl.fcnt==0) continue;
-                        var f0=new AnmFrame(r);
-                        for(int i=1; i<fl.fcnt-1; i++) _=new AnmFrame(r);
-                        var fn=new AnmFrame(r);
-                        if(mune>0){
-                            if(fl.fcnt>2||(fl.fcnt==2 && f0.value!=fn.value)) m|=mune;
-                        }
-                    } else break;
+                bool hasAnim=false;
+                while((t=r.PeekChar())>=100&&t<=106){
+                    var cv=be.addcurve(r);
+                    if(cv==null) continue;
+                    int n=cv.length;
+                    if(n==0) continue;
+                    hasAnim=true;
+                    if(n>2 || cv[0].value!=cv[n-1].value) m|=mune;
+                    if(cv[0].time>maxTime) maxTime=cv[0].time;
+                    if(cv[0].time<minTime) minTime=cv[0].time;
+                    if(cv[n-1].time>maxTime) maxTime=cv[n-1].time;
+                    if(cv[n-1].time<minTime) minTime=cv[n-1].time;
                 }
-                if(gender>=0 && m==3) break;
+                if(hasAnim) bones.Add(be);
             }
-            if(format!=1001){ useMuneL=(byte)(m>>1); useMuneR=(byte)(m&1); }
+            if(format==1001){ useMuneL=r.ReadByte(); useMuneR=r.ReadByte();}
+            else{ useMuneL=(byte)(m>>1); useMuneR=(byte)(m&1); }
         }
-        public byte[] ChgGender(){  // 例外飛ぶよ
-            gender^=1;
-            string tmpname=Path.GetTempFileName();
-            using (var r=new BinaryReader(new MemoryStream(buf)))
-            using (var w=new BinaryWriter(File.OpenWrite(tmpname))){
-                Filter(r,w,true);
-            }
-            buf=File.ReadAllBytes(tmpname); 
-            File.Delete(tmpname);
-            return buf;
-        }
-        private void Filter(BinaryReader r,BinaryWriter w,bool gencnv=false){
-            byte[] hdr = r.ReadBytes(15);
-            w.Write(hdr);
-            while (r.Read()==1){
-                int ftype=0;
-                var be=new AnmBoneEntry(r);
-                if(gencnv){
-                    string name = be.boneName;
-                    foreach(string[] rep in f2m) name=name.Replace(rep[gender^1],rep[gender]);
-                    be.rename(name);
-                }
-                be.write(w);
-                int t;
-                float minTime=Single.MaxValue;
-                float maxTime=Single.MinValue;
-                while ((t=r.PeekChar())>=0) {
-                    if (t==1) break;
-                    else if (t>=100){
-                        var fl=new AnmFrameList(r);
-                        fl.write(w);
-                        ftype=fl.type;
-                        for(int i=0; i<fl.fcnt; i++){
-                            var f=new AnmFrame(r);
-                            if(f.time>maxTime) maxTime=f.time;
-                            if(f.time<minTime) minTime=f.time;
-                            f.write(w);
-                        }
-                    }else break;
-                }
-                if(gencnv && gender==0 && be.boneName.EndsWith("Spine",Ordinal)){ // man -> maid
-                    // Spineの後に、Spineの最小～最大時間にあわせて、Spine0aを作る
-                    AnmBoneEntry be0a = new AnmBoneEntry("Bip01/Bip01 Spine/Bip01 Spine0a");
-                    be0a.write(w);
-                    bool rq=format==1001||(ftype>=100&&ftype<=103);
-                    bool mq=format==1001||(ftype>=104&&ftype<=106);
-                    if(rq){
-                        for (int i = 100; i<103; i++){ // qx,qy,qz
-                            (new AnmFrameList((byte)i){fcnt=2}).write(w);
-                            (new AnmFrame(minTime){value=0}).write(w);
-                            (new AnmFrame(maxTime){value=0}).write(w);
-                        }
-                        // qw
-                        (new AnmFrameList((byte)103){fcnt=2}).write(w);
-                        (new AnmFrame(minTime){value=1}).write(w);
-                        (new AnmFrame(maxTime){value=1}).write(w);
-                    }
-                    if(mq){
-                        for (int i = 104; i<=106; i++){ // qx,qy,qz
-                            (new AnmFrameList((byte)i){fcnt=2}).write(w);
-                            (new AnmFrame(minTime){value=0}).write(w);
-                            (new AnmFrame(maxTime){value=0}).write(w);
-                        }
-                    }
+        public void ChgGender(){
+            int inspos=-1,idx0a=-1;
+            int oldgender=gender,newgender=gender^1;
+            for(int i=0; i<bones.Count; i++){
+                var ab=bones[i];
+                string name=ab.boneName;
+                for(int repi=0; repi<f2m.Length; repi++)
+                    name=name.Replace(f2m[repi][oldgender],f2m[repi][newgender]);
+                ab.rename(name);
+                if(newgender==0){
+                    if(name.EndsWith("Spine",Ordinal)) inspos=i;
+                    else if(name.EndsWith("Spine0a",Ordinal)) idx0a=i;
                 }
             }
-            if(format==1001){ w.Write(useMuneL); w.Write(useMuneR); }
+            if(inspos>=0 && idx0a<0){
+                AnmBoneEntry be0a = new AnmBoneEntry("Bip01/Bip01 Spine/Bip01 Spine0a");
+                for (int j=100; j<103; j++) be0a.addcurve(j,minTime,0,maxTime,0);
+                be0a.addcurve(103,minTime,1,maxTime,1);
+                if(inspos+1<bones.Count) bones.Insert(inspos+1,be0a); else bones.Add(be0a);
+            }
+            gender=newgender;
         }
         private static string[][] f2m = {      // Spineの構成が男女で違う
             new string[]{"Bip01 Spine0a/Bip01 Spine1","ManBip Spine1"},
             new string[]{"Spine1a","Spine2"},
             new string[]{"Bip01","ManBip"},
+            // 足の指もManBipでは少ないんだけどそっちは放置する
         };
-        // 足の指も男性は少ないんだけどそっちは放置する
+        private static string[] propnames={
+            "m_LocalRotation.x","m_LocalRotation.y","m_LocalRotation.z","m_LocalRotation.w",
+            "m_LocalPosition.x","m_LocalPosition.y","m_LocalPosition.z"
+        };
+        public AnimationClip ToClip(){
+            var clip=new AnimationClip();
+            clip.legacy=true;
+            for(int i=0; i<bones.Count; i++){
+                var ab=bones[i];
+                int n=(nolposq && ab.boneName!="Bip01" && ab.boneName!="ManBip")?4:7;
+                for (int j=0; j<n; j++){
+                    var curve=ab.curveList[j];
+                    if(curve!=null) clip.SetCurve(ab.boneName,typeof(Transform),propnames[j],curve);
+                }
+            }
+            return clip;
+        }
     }
-
-    // 以下はAnmToolsから流用。かなり機能を削ってるのでメソッド内スカスカで意味不明かも
 
 	public class AnmBoneEntry {
 		public string boneName = "";    // ボーン名(完全)
+        public AnimationCurve[] curveList=new AnimationCurve[7];
 
-		public AnmBoneEntry() { }
-		public AnmBoneEntry(string name) { rename(name); }
-		public AnmBoneEntry(BinaryReader r) { read(r); }
+		public AnmBoneEntry(string name){rename(name);}
+		public AnmBoneEntry(BinaryReader r){read(r);}
 
-		public void rename(string name) {
-			boneName=name;
+		public void rename(string name){boneName=name;}
+		public void read(BinaryReader r){ rename(r.ReadString()); }
+        public AnimationCurve addcurve(BinaryReader r){
+			int type=r.ReadByte();
+            if(type<100||type>106) return null;
+			int fcnt=r.ReadInt32();
+            var curve=new AnimationCurve();
+            for(int i=0; i<fcnt; i++)
+                curve.AddKey(new Keyframe(r.ReadSingle(),r.ReadSingle(),r.ReadSingle(),r.ReadSingle()));
+            curveList[type-100]=curve;
+            return curve;
 		}
-		public void read(BinaryReader r) {
-			// ボーン名は文字列長(LEB128)＋文字列という形式だが、ReadString()なら１発
-			rename(r.ReadString());
-		}
-		public void write(BinaryWriter w) {
-			w.Write((byte)1);
-			w.Write(boneName);	// 書き出しもWrite(string)なら１発
-			return;
+        public AnimationCurve addcurve(int type,float t0,float v0,float t1,float v1){
+            var curve=new AnimationCurve();
+            curve.AddKey(new Keyframe(t0,v0,0,0));
+            curve.AddKey(new Keyframe(t1,v1,0,0));
+            curveList[type-100]=curve;
+            return curve;
         }
-	}
-	public class AnmFrameList : List<AnmFrame> {
-		public byte type = 0;   // 100-106 4元数＋移動xyzの7種類
-        public int fcnt = 0;
-
-		public AnmFrameList():base(64) {}
-		public AnmFrameList(byte type):base(64) { this.type=type; }
-		public AnmFrameList(BinaryReader r):base(64) { read(r); }
-
-		public void read(BinaryReader r) {
-			type=r.ReadByte();
-			fcnt = r.ReadInt32();
-		}
-		public void write(BinaryWriter w) {
-			w.Write(type);
-			w.Write(fcnt);
-		}
-	}
-	public class AnmFrame {     // キーフレーム。UnityのKeyframe(WeightedMode.None)
-		public float time = 0;      // フレーム時刻(1/1000ms)
-		public float value = 0;		// パラメータ値(意味はAnmFrameListのtypeによる)
-		public float tan1 = 0;		// 補間用。１つ前の値との間の３次曲線の接線
-		public float tan2 = 0;      // 補間用。次の値との間の３次曲線の接線
-
-		public AnmFrame() {}
-		public AnmFrame(float time) { this.time=time; }
-		public AnmFrame(AnmFrame f) {
-			time=f.time;
-			value=f.value;
-			tan1=f.tan1;
-			tan2=f.tan2;
-		}
-		public AnmFrame(BinaryReader r) { read(r); }
-
-		public void read(BinaryReader r) {
-			time=r.ReadSingle();
-			value=r.ReadSingle();
-			tan1=r.ReadSingle();
-			tan2=r.ReadSingle();
-		}
-		public void write(BinaryWriter w) {
-			w.Write(time);
-			w.Write(value);
-			w.Write(tan1);
-			w.Write(tan2);
-		}
 	}
 }

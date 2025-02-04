@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using UnityEngine;
 using static System.StringComparison;
 using System.Text;
+using System.Reflection;
 
 namespace COM3D2.ComSh.Plugin {
 
@@ -3395,6 +3396,27 @@ public static class UTIL {
         if(dosdev.Match(fn).Success) return -1;
         return 0;
     }
+    private static List<AFileSystemBase> afilesystems;
+    private static List<AFileSystemBase> GetFileSystems(){
+        if(afilesystems==null){
+            afilesystems=new List<AFileSystemBase>(5){
+                GameUty.FileSystemMod,
+                GameUty.FileSystem,
+                GameUty.FileSystemOld,
+            };
+            var fi_kces=typeof(GameUty).GetField("m_KcesExportFileSystem",BindingFlags.Static|BindingFlags.NonPublic);
+            if(fi_kces!=null){
+                var fs=(AFileSystemBase)fi_kces.GetValue(null);
+                if(fs!=null) afilesystems.Add(fs);
+            }
+            var fi_crc=typeof(GameUty).GetField("m_CrcFileSystem",BindingFlags.Static|BindingFlags.NonPublic);
+            if(fi_crc!=null){
+                var fs=(AFileSystemBase)fi_crc.GetValue(null);
+                if(fs!=null) afilesystems.Add(fs);
+            }
+        }
+        return afilesystems;
+    }
     public static byte[] ReadAll(string fname){
         byte[] array=null;
         try{
@@ -3405,13 +3427,14 @@ public static class UTIL {
     public static byte[] AReadAll(string fname){
         byte[] array=null;
         try{
-            if(GameUty.IsExistFile(fname,GameUty.FileSystem)){
-                using(AFileBase af=GameUty.FileOpen(fname)){ array=af.ReadAll(); }
-            }else if(GameUty.IsExistFile(fname,GameUty.FileSystemOld)){
-                using(AFileBase af=GameUty.FileOpen(fname,GameUty.FileSystemOld)){ array=af.ReadAll(); }
-            }
+            var fs=AFileExists(fname);
+            if(fs!=null) using(AFileBase af=GameUty.FileOpen(fname,fs)){ array=af.ReadAll(); }
         }catch{}
         return array;
+    }
+    public static AFileSystemBase AFileExists(string fname){
+        try{ foreach(var fs in GetFileSystems()) if(fs!=null && fs.IsExistentFile(fname)) return fs; }catch{}
+        return null;
     }
     public static void PrintTrInfo(ComShInterpreter sh,Transform tr,bool worldonly=false){
         if(worldonly){

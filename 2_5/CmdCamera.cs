@@ -189,8 +189,6 @@ public static class CmdCamera {
         return CmdSubCamera.SubCamParamPostProcessProp(sh,mc.camera,val);
     }
     private static int CameraParamBloom(ComShInterpreter sh,CameraMain mc,string val){
-        var blm=mc.GetComponent<Bloom>();
-        if(blm==null) return 0;
         if(val==null){
             sh.io.Print(sh.fmt.FVal(GameMain.Instance.CMSystem.BloomValue/100));
             return 0;

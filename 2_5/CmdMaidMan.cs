@@ -365,12 +365,12 @@ public static class CmdMaidMan {
     private static int MaidParamW2L(ComShInterpreter sh,Maid m,string val){
         return _CmdParamW2L(sh,m.transform,val);
     }
-    private static AnimationState SingleMotion(Maid m,MotionName.Clip clip,bool q,bool tailq){
+    private static int SingleMotion(Maid m,MotionName.Clip clip,bool q,bool tailq,bool nolposq){
         string name=clip.name;
         string filename,id;
         if(clip.tmpq==1){
             var tf=DataFiles.GetTempFile(name);
-            if(tf==null) return null;
+            if(tf==null) return -1;
             filename=tf.filename;
             id=tf.original;
         }else{
@@ -384,42 +384,47 @@ public static class CmdMaidMan {
         }else{
             id=UTIL.Suffix(id,".anm");
         }
-        byte[] array;
         AnmFile af=null;
         int manbip=m.body0.trBip.name=="ManBip"?1:0;
         try{
-            if(clip.tmpq==1){
+            if(clip.tmpq==1){   // temp file
                 if(File.Exists(filename)){
-                    array=File.ReadAllBytes(filename); 
-                    af=new AnmFile(array);
-                    if(manbip!=af.gender) array=af.ChgGender();
-                }else array=null;
+                    af=new AnmFile(filename,nolposq);
+                    if(manbip!=af.gender) af.ChgGender();
+                }else af=null;
             }else{
-                if(File.Exists(filename)){
-                    array=File.ReadAllBytes(filename); 
-                    af=new AnmFile(array);
-                    if(manbip!=af.gender) array=af.ChgGender();
+                if(File.Exists(filename)){ // mypose
+                    af=new AnmFile(filename,nolposq);
+                    if(manbip!=af.gender) af.ChgGender();
                     m.SetAutoTwistAll(true);
                 }else{
                     if(name.StartsWith("crc_")){
-                        array=UTIL.AReadAll(name);
-                        af=new AnmFile(array);
-                        if(manbip==1) array=af.ChgGender();
+                        var buf=UTIL.AReadAll(name);
+                        if(buf!=null){
+                            af=new AnmFile(buf,nolposq);
+                            if(manbip==1) af.ChgGender();
+                        }
+                        buf=null;
                     }else{
                         string name2;
                         if(m.IsCrcBody && GameUty.IsExistFile((name2="crc_"+name),GameUty.FileSystem)){
                             id="crc_"+id;
-                            array=UTIL.AReadAll(name2);
+                            var buf=UTIL.AReadAll(name2);
+                            if(buf!=null) af=new AnmFile(buf,nolposq);
+                            buf=null;
                         }else{
-                            array=UTIL.AReadAll(name);
-                            af=new AnmFile(array);
-                            if(manbip!=af.gender) array=af.ChgGender();
+                            var buf=UTIL.AReadAll(name);
+                            if(buf!=null){
+                                af=new AnmFile(buf,nolposq);
+                                if(manbip!=af.gender) af.ChgGender();
+                            }
+                            buf=null;
                         }
                     }
                 }
             }
-        }catch{ return null; }
-        if(array==null||array.Length==0) return null;
+        }catch(Exception e){ Debug.Log(e.ToString()); return -1; }
+        if(af==null||af.IsEmpty()) return -1;
         if(clip.type==0 && q==false){ // ベースのモーションなら胸モーション有効/無効の判断
             if(!m.boMAN && af!=null){
                 int iid=m.GetInstanceID();
@@ -431,11 +436,15 @@ public static class CmdMaidMan {
                 m.body0.SetMuneYureRWithEnable(rq);
             }
         }
-        return CrossFade(m,id,array,clip,q,tailq);
+        return CrossFade(m,id,af.ToClip(),clip,q,tailq);
     }
-    private static AnimationState CrossFade(Maid m,string id,byte[] array,MotionName.Clip clip,bool q,bool tailq){
+
+    private static FieldInfo fi_anist;
+    private static int CrossFade(Maid m,string id,AnimationClip ac,MotionName.Clip clip,bool q,bool tailq){
         Animation anim=m.body0.m_Animation;
-        AnimationState st=m.body0.LoadAnime(id,array,clip.type=='&',false);
+        ac.name=id;
+        anim.AddClip(ac,id);
+        AnimationState st=anim[id];
         st.blendMode=(clip.type=='&')?AnimationBlendMode.Additive:AnimationBlendMode.Blend;
         st.layer=clip.layer;
         st.speed=clip.speed;
@@ -446,7 +455,14 @@ public static class CmdMaidMan {
         if(q) anim.CrossFadeQueued(id,clip.fade,QueueMode.CompleteOthers);
         else anim.CrossFade(id,clip.fade);
         st.weight=clip.weight;
-        return st;
+        if(st.layer==0){
+            if(fi_anist==null){
+                fi_anist=typeof(TBody).GetField("anist",BindingFlags.Instance|BindingFlags.NonPublic);
+                if(fi_anist==null) return -1;
+            }
+            fi_anist.SetValue(m.body0,st);
+        }
+        return 0;
     }
     private static WrapMode Int2Wrap(int lp){
         if(lp==0) return WrapMode.Once;
@@ -489,8 +505,8 @@ public static class CmdMaidMan {
             bool q=cl.type!=0;
             for(int j=0; j<cl.list.Count; j++){
                 MotionName.Clip clip=cl.list[j];
-                AnimationState st=SingleMotion(m,clip,q,i==ml.list.Count-1);
-                if(st==null) return sh.io.Error("指定されたモーションが見つかりません");
+                int ret=SingleMotion(m,clip,q,i==ml.list.Count-1,sh.env["_use_anm_lpos"]!="1");
+                if(ret<0) return sh.io.Error("指定されたモーションが見つかりません");
                 updated=true;
             }
         }
@@ -823,6 +839,7 @@ public static class CmdMaidMan {
     }
     private static int MaidParamPreset(ComShInterpreter sh,Maid m,string val){
         if(sh.IsSafeMode()) return sh.io.Error("この機能はセーフモードでは使用できません");
+        if(m.IsCrcBody) return sh.io.Error("crcボディでは使用できません");
         CharacterMgr cm=GameMain.Instance.CharacterMgr;
         if(val==null){
 		    string[] files = Directory.GetFiles(cm.PresetDirectory, "*.preset");
@@ -855,6 +872,7 @@ public static class CmdMaidMan {
         return 1;
     }
     private static int MaidParamPresetSave(ComShInterpreter sh,Maid m,string val){
+        if(m.IsCrcBody) return sh.io.Error("crcボディでは使用できません");
         CharacterMgr cm=GameMain.Instance.CharacterMgr;
         if(val==null){
 		    string[] files = Directory.GetFiles(cm.PresetDirectory, "*.preset");
@@ -1059,9 +1077,13 @@ public static class CmdMaidMan {
         if(kvs==null) return sh.io.Error(ParseUtil.error);
         for(int i=0; i<slot.Count; i++) if((skin=slot[i])!=m.body0.Face && skin.morph!=null){
             bool dirty=false;
-            foreach(string dk in kvs.Keys) if(skin.morph.hash.ContainsKey(dk)){
-                skin.morph.SetBlendValues((int)skin.morph.hash[dk],kvs[dk]);
-                dirty=true;
+            foreach(string dk in kvs.Keys){
+                var lr=ParseUtil.LeftAndRight2(dk,'.');
+                if(lr[0]!="" && skin.Category.ToLower()!=lr[0]) continue;
+                if(skin.morph.hash.ContainsKey(lr[1])){
+                    skin.morph.SetBlendValues((int)skin.morph.hash[lr[1]],kvs[dk]);
+                    dirty=true;
+                }
             }
             if(dirty) skin.morph.FixBlendValues();
         }

@@ -95,7 +95,8 @@
     <Reference Include="UnityEngine.VideoModule">
       <HintPath>..\..\..\..\prog\KISS\COM3D2_5\COM3D2x64_Data\Managed\UnityEngine.VideoModule.dll</HintPath>
     </Reference>
-    <Reference Include="UnityInjector">
+    <Reference Include="UnityInjector, Version=1.0.4.1, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\..\prog\KISS\common\build\UnityInjector.dll</HintPath>
     </Reference>
   </ItemGroup>

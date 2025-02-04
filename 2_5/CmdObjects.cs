@@ -397,51 +397,34 @@ public static class CmdObjects {
         return 1;
     }
     private static int ObjParamMaterial(ComShInterpreter sh,Transform tr,string val){
+        Transform tr0=ObjUtil.FindObjRoot(sh,colonDesc);
+        if(tr0==null)  return sh.io.Error("オブジェクトが見つかりません");
+        var mi=new CmdMeshes.MeshInfo(tr,tr0);
+        if(mi==null) return sh.io.Error("マテリアルが見つかりません");
+
         if(val==null){
-            Renderer r=tr.GetComponentInChildren<SkinnedMeshRenderer>();
-            if(r==null) r=tr.GetComponentInChildren<MeshRenderer>();
-            if (r!=null && r.sharedMaterial!=null) for(int i=0; i<r.sharedMaterials.Length; i++){
-                sh.io.PrintLn($"{r.sharedMaterials[i].name}{sh.ofs}{r.sharedMaterials[i].shader.name}");
-            }
+            for(int i=0; i<mi.material.Count; i++)
+                sh.io.PrintLn($"{mi.material[i].name}{sh.ofs}{mi.material[i].shader.name}");
             return 0;
         }
+
         string[] sa=val.Split(ParseUtil.colon);
-        if(sa.Length!=2) return sh.io.Error("パラメータの書式が不正です");
-        if(!int.TryParse(sa[0],out int idx)||idx<0) return sh.io.Error("マテリアル番号の指定が不正です");
-        int ret=ObjUtil.ChgMaterial(tr,idx,sa[1]);
-        if(ret==-1) return sh.io.Error("マテリアルの読み込みに失敗しました");
-        if(ret==-2) return sh.io.Error("objコマンドで追加されたオブジェクト以外は変更できません");
+        if(sa.Length!=2) return sh.io.Error("書式が不正です");
+        if(!int.TryParse(sa[0],out int idx)||idx<0||idx>=mi.material.Count) return sh.io.Error("マテリアル番号が不正です");
+        mi.EditMaterial();
+        try{
+            Material mate=mi.material[idx];
+            ImportCM.LoadMaterial(sa[1],null,mate);
+        }catch{ return sh.io.Error("ファイルの読み込みに失敗しました"); }
         return 1;
     }
     private static int ObjParamMaterialCopy(ComShInterpreter sh,Transform tr,string val){
-        if(val==null) return sh.io.Error("コピー元を指定してください");
-
-        string[] sa=ParseUtil.LeftAndRight(val,':');
-        if(sa[1]=="") return sh.io.Error("パラメータの書式が不正です");
-        if(!int.TryParse(sa[0],out int idx)||idx<0) return sh.io.Error("マテリアル番号の指定が不正です");
-
-        string[] sa2=ParseUtil.LeftAndRight(sa[1],'#');
-        if(sa2[1]=="") return sh.io.Error("パラメータの書式が不正です");
-        if(!int.TryParse(sa2[1],out int fromidx)||fromidx<0) return sh.io.Error("マテリアル番号の指定が不正です");
-
-        Transform fromtr=ObjUtil.FindObj(sh,sa2[0].Split(':'));
-        if(fromtr==null) return sh.io.Error("オブジェクトが見つかりません");
-
-        Renderer fromrdr=fromtr.GetComponentInChildren<Renderer>();
-        if (fromrdr==null || fromrdr.sharedMaterial==null || fromidx>=fromrdr.sharedMaterials.Length)
-            return sh.io.Error("マテリアルが見つかりません");
- 
-        var tr0=ObjUtil.FindObjRoot(sh,colonDesc);
-        if(tr0==null)  return sh.io.Error("オブジェクトが見つかりません");
-
+        Transform tr0=ObjUtil.FindObjRoot(sh,colonDesc);
+        if(tr0==null) return sh.io.Error("オブジェクトが存在しません");
         var mi=new CmdMeshes.MeshInfo(tr,tr0);
-        if(mi==null) return sh.io.Error("マテリアルが見つかりません");
-        if(mi.material.Count<=idx) return sh.io.Error("マテリアル番号の指定が不正です");
-        mi.EditMaterial();
-        var ma=fromrdr.sharedMaterials;
-        mi.material[idx].shader=ma[fromidx].shader;
-        mi.material[idx].CopyPropertiesFromMaterial(ma[fromidx]);
-        return 1;
+        if(mi.count<=colonDesc.meshno) return sh.io.Error("指定されたメッシュが存在しません");
+        var sm=new CmdMeshes.SingleMesh(colonDesc.meshno,mi);
+        return CmdMeshes.MeshParamMaterialCopy(sh,sm,val);
     }
     private static int ObjParamShape(ComShInterpreter sh,Transform tr,string val){
         ObjInfo oi;
@@ -2586,6 +2569,7 @@ public static class ObjUtil {
         if(sa[0]!="" && sa[0][0]=='%'){
             if(!int.TryParse(name.Substring(1),out int iid)) return null;
             var o=Resources.InstanceIDToObject(iid);
+            if(o==null) return null;
             if(o.GetType()==typeof(GameObject)) tr=((GameObject)o).transform;
             else if(o.GetType()==typeof(Transform)) tr=(Transform)o;
             if(tr!=null) return (sa[1]=="")?tr:tr.Find(sa[1]);
@@ -3062,22 +3046,19 @@ public static class ObjUtil {
     }
     public static int PlayMotion(Animation a,string file,float speed,int loop){
         string myposefile=ComShInterpreter.myposeDir+file;
-        byte[] arr;
-        if(File.Exists(myposefile)) arr=UTIL.ReadAll(myposefile);
-        else arr=UTIL.AReadAll(file);
-        if(arr==null) return -1;
-
+        AnmFile af=null;
         try{
-            var af=new AnmFile(arr);
+            if(File.Exists(myposefile)) af=new AnmFile(myposefile);
+            else{ var arr=UTIL.AReadAll(file); if(arr!=null) af=new AnmFile(arr); }
+            if(af==null||af.IsEmpty()) return -1;
             int gender=ChkBoneGender(a.gameObject.transform);
-            if(gender==0 && af.gender==1) arr=af.ChgGender();
+            if(gender==0 && af.gender==1) af.ChgGender();
         }catch{ return -1; }
-        if(arr==null) return -1;
+        if(af==null) return -1;
 
         string tag=file.ToLower();
-        var clip=ImportCM.LoadAniClipNative(arr, true, true, true);
+        var clip=af.ToClip();
         if(clip==null) return -1;
-        clip.legacy=true;
         clip.name=tag;
 
         // お掃除

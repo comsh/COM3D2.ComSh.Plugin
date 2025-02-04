@@ -361,7 +361,7 @@ public static class CmdMaidMan {
     private static int MaidParamW2L(ComShInterpreter sh,Maid m,string val){
         return _CmdParamW2L(sh,m.transform,val);
     }
-    private static AnimationState SingleMotion(Maid m,MotionName.Clip clip,bool q,bool tailq){
+    private static AnimationState SingleMotion(Maid m,MotionName.Clip clip,bool q,bool tailq,bool nolposq){
         string name=clip.name;
         string filename,id;
         if(clip.tmpq==1){
@@ -380,29 +380,29 @@ public static class CmdMaidMan {
         }else{
             id=UTIL.Suffix(id,".anm");
         }
-        byte[] array;
         AnmFile af=null;
         try{
             if(clip.tmpq==1){
                 if(File.Exists(filename)){
-                    array=File.ReadAllBytes(filename); 
-                    af=new AnmFile(array);
-                    if(m.boMAN!=(af.gender==1)) array=af.ChgGender();
-                }else array=null;
+                    af=new AnmFile(filename,nolposq);
+                    if(m.boMAN!=(af.gender==1)) af.ChgGender();
+                }else af=null;
             }else{
                 if(File.Exists(filename)){
-                    array=File.ReadAllBytes(filename); 
-                    af=new AnmFile(array);
-                    if(m.boMAN!=(af.gender==1)) array=af.ChgGender();
+                    af=new AnmFile(filename,nolposq);
+                    if(m.boMAN!=(af.gender==1)) af.ChgGender();
                     m.SetAutoTwistAll(true);
                 }else{
-                    array=UTIL.AReadAll(name);
-                    af=new AnmFile(array);
-                    if(m.boMAN!=(af.gender==1)) array=af.ChgGender();
+                    var buf=UTIL.AReadAll(name);
+                    if(buf!=null){
+                        af=new AnmFile(buf,nolposq);
+                        if(m.boMAN!=(af.gender==1)) af.ChgGender();
+                    }
+                    buf=null;
                 }
             }
         }catch{ return null; }
-        if(array==null||array.Length==0) return null;
+        if(af==null||af.IsEmpty()) return null;
         if(clip.type==0 && q==false){ // ベースのモーションなら胸モーション有効/無効の判断
             if(!m.boMAN){
                 int iid=m.GetInstanceID();
@@ -416,11 +416,13 @@ public static class CmdMaidMan {
                 m.body0.jbMuneR.enabled=rq;
             }
         }
-        return CrossFade(m,id,array,clip,q,tailq);
+        return CrossFade(m,id,af.ToClip(),clip,q,tailq);
     }
-    private static AnimationState CrossFade(Maid m,string id,byte[] array,MotionName.Clip clip,bool q,bool tailq){
+    private static AnimationState CrossFade(Maid m,string id,AnimationClip ac,MotionName.Clip clip,bool q,bool tailq){
         Animation anim=m.body0.m_Animation;
-        AnimationState st=m.body0.LoadAnime(id,array,clip.type=='&',false);
+        ac.name=id;
+        anim.AddClip(ac,id);
+        AnimationState st=anim[id];
         st.blendMode=(clip.type=='&')?AnimationBlendMode.Additive:AnimationBlendMode.Blend;
         st.layer=clip.layer;
         st.speed=clip.speed;
@@ -474,7 +476,7 @@ public static class CmdMaidMan {
             bool q=cl.type!=0;
             for(int j=0; j<cl.list.Count; j++){
                 MotionName.Clip clip=cl.list[j];
-                AnimationState st=SingleMotion(m,clip,q,i==ml.list.Count-1);
+                AnimationState st=SingleMotion(m,clip,q,i==ml.list.Count-1,sh.env["_use_anm_lpos"]!="1");
                 if(st==null) return sh.io.Error("指定されたモーションが見つかりません");
                 updated=true;
             }
@@ -978,9 +980,13 @@ public static class CmdMaidMan {
         if(kvs==null) return sh.io.Error(ParseUtil.error);
         foreach (TBodySkin skin in m.body0.goSlot) if(skin!=m.body0.Face && skin.morph!=null){
             bool dirty=false;
-            foreach(string dk in kvs.Keys) if(skin.morph.hash.ContainsKey(dk)){
-                skin.morph.SetBlendValues((int)skin.morph.hash[dk],kvs[dk]);
-                dirty=true;
+            foreach(string dk in kvs.Keys){
+                var lr=ParseUtil.LeftAndRight2(dk,'.');
+                if(lr[0]!="" && skin.Category.ToLower()!=lr[0]) continue;
+                if(skin.morph.hash.ContainsKey(lr[1])){
+                    skin.morph.SetBlendValues((int)skin.morph.hash[lr[1]],kvs[dk]);
+                    dirty=true;
+                }
             }
             if(dirty) skin.morph.FixBlendValues();
         }
