@@ -433,6 +433,7 @@ public static class CmdMaidMan {
         if(q) anim.CrossFadeQueued(id,clip.fade,QueueMode.CompleteOthers);
         else anim.CrossFade(id,clip.fade);
         st.weight=clip.weight;
+        m.body0.LastAnimeFN=id;
         return st;
     }
     private static WrapMode Int2Wrap(int lp){

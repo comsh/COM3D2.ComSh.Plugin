@@ -454,6 +454,7 @@ public static class CmdMaidMan {
             st.AddMixingTransform(clip.tr[k].tr,clip.tr[k].single==0);
         if(q) anim.CrossFadeQueued(id,clip.fade,QueueMode.CompleteOthers);
         else anim.CrossFade(id,clip.fade);
+
         st.weight=clip.weight;
         if(st.layer==0){
             if(fi_anist==null){
@@ -462,6 +463,7 @@ public static class CmdMaidMan {
             }
             fi_anist.SetValue(m.body0,st);
         }
+        m.body0.LastAnimeFN=id;
         return 0;
     }
     private static WrapMode Int2Wrap(int lp){
