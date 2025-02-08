@@ -922,30 +922,20 @@ public static class CmdMaidMan {
             string fname=UTIL.Suffix(menus[i],".menu");
             var mh=MaidUtil.ReadMenuHeader(fname);
             if(mh==null) return sh.io.Error("menuファイルの読込に失敗しました");
-            if(m.boMAN){
+            if(current.boMAN){
                 if(mh.cate=="body"||mh.cate=="head"){
-                    if(m.pairMan!=null && m.IsCrcBody!=(mh.version>=2100&&fname.StartsWith("crc_",Ordinal))){
-                        int ret=StudioMode.ManBodyChange(m,out current);
-                        if(ret<0||current==null) return sh.io.Error("失敗しました");
-                        if(ret==0){
-                            CharacterMgr cm=GameMain.Instance.CharacterMgr;
-                            current=cm.SwapNewManBody(m.ActiveSlotNo,!m.IsCrcBody);
-                            if(current.IsCrcBody&&current.IsNewManIsRealMan) current.SwapNewRealManProp(true);
-                        }
+                    if(current==m && current.pairMan!=null && current.IsCrcBody!=(mh.version>=2100&&fname.StartsWith("crc_",Ordinal))){
+                        current=ManBodySwitch(current);
+                        if(current==null) return sh.io.Error("失敗しました");
                     }
                     StudioMode.ManHeadBodyStudio(current,fname);
                     int hash=fname.ToLower().GetHashCode();
                     if(current.GetProp(mh.cate).nFileNameRID!=hash) current.SetProp(mh.cate,fname,hash);
                 }else if(mh.cate=="def"){
                     if(fname.StartsWith("_i_man_",Ordinal)){
-                        if(m.pairMan!=null && m.IsCrcBody!=(mh.version>=2100&&fname.StartsWith("crc_",Ordinal))){
-                            int ret=StudioMode.ManBodyChange(m,out current);
-                            if(ret<0||current==null) return sh.io.Error("失敗しました");
-                            if(ret==0){
-                                CharacterMgr cm=GameMain.Instance.CharacterMgr;
-                                current=cm.SwapNewManBody(m.ActiveSlotNo,!m.IsCrcBody);
-                                if(current.IsCrcBody&&current.IsNewManIsRealMan) current.SwapNewRealManProp(true);
-                            }
+                        if(current==m&&current.pairMan!=null && current.IsCrcBody!=(mh.version>=2100&&fname.StartsWith("crc_",Ordinal))){
+                            current=ManBodySwitch(current);
+                            if(current==null) return sh.io.Error("失敗しました");
                         }
                         Menu.ProcScript(current,fname);
                     }
@@ -958,6 +948,7 @@ public static class CmdMaidMan {
         }
         current.body0.FixMaskFlag();
         current.body0.FixVisibleFlag();
+        current.boAllProcPropBUSY=false;
         current.AllProcProp();
         return 1;
     }
@@ -968,25 +959,36 @@ public static class CmdMaidMan {
             if(pair!=null) sh.io.Print(pair.status.guid).Print(pair.IsCrcBody?" crc":" old");
             return 0;
         }
-        CharacterMgr cm=GameMain.Instance.CharacterMgr;
+        Maid current=m;
         if(val=="crc"||val=="1"){
-            if(!m.IsCrcBody){
-                int ret=StudioMode.ManBodyChange(m,out Maid current);
-                if(ret<0||current==null) return sh.io.Error("失敗しました");
-                if(ret==0){
-                    cm.SwapNewManBody(m.ActiveSlotNo,true);
-                    var m2=cm.SwapNewManBody(m.ActiveSlotNo,true);
-                    if(m2.IsNewManIsRealMan) m2.SwapNewRealManProp(true);
-                }
-            }
+            if((current=ManBodyToNew(m))==null) return sh.io.Error("失敗しました");
         }else if(val=="old"||val=="0"){
-            if(m.IsCrcBody){
-                int ret=StudioMode.ManBodyChange(m,out Maid current);
-                if(ret<0||current==null) return sh.io.Error("失敗しました");
-                if(ret==0) cm.SwapNewManBody(m.ActiveSlotNo,false);
-            }
+            if(m.IsCrcBody) if((current=ManBodyToOld(m))==null) return sh.io.Error("失敗しました");
         }else return sh.io.Error("値が不正です");
+        if(current!=m){
+            if(current.boAllProcPropBUSY){
+                current.boAllProcPropBUSY=false;
+                current.AllProcProp();
+            }
+        }
         return 1;
+    }
+    private static Maid ManBodySwitch(Maid m){ return (m.IsCrcBody)?ManBodyToOld(m):ManBodyToNew(m); }
+    private static Maid ManBodyToNew(Maid m){
+        if(m.IsCrcBody) return m;
+        CharacterMgr cm=GameMain.Instance.CharacterMgr;
+        int ret=StudioMode.ManBodyChange(m,out Maid current);
+        if(ret<0||current==null) return null;
+        if(ret==0) current=cm.ToNewRealMan(m.ActiveSlotNo,m.HasNewRealMan);
+        return current;
+    }
+    private static Maid ManBodyToOld(Maid m){
+        if(!m.IsCrcBody) return m;
+        CharacterMgr cm=GameMain.Instance.CharacterMgr;
+        int ret=StudioMode.ManBodyChange(m,out Maid current);
+        if(ret<0||current==null) return null;
+        if(ret==0) current=cm.SwapNewManBody(m.ActiveSlotNo,false);
+        return current;
     }
     private static int MaidParamHadake(ComShInterpreter sh,Maid m,string val){
         if(!m.IsCrcBody) return 0;

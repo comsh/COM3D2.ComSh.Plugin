@@ -140,8 +140,6 @@ public static class StudioMode {
         if(fi_transdic==null) return -1;
         var mi_select=typeof(PlacementWindow).GetMethod("SetSelectMaid",BindingFlags.Instance|BindingFlags.NonPublic);
         if(mi_select==null) return -1;
-        var mi_activate=typeof(PlacementWindow).GetMethod("ActiveMaid",BindingFlags.Instance|BindingFlags.NonPublic);
-        if(mi_activate==null) return -1;
 
         if(man.pairMan==null) return -1;
 
@@ -149,16 +147,11 @@ public static class StudioMode {
 
         var selected=pl.mgr.select_maid;
         mi_select.Invoke(pl,new object[]{man});
-
-        /*pl.mgr.OnMaidRemoveEventPrev(man);
-        cm.CharaVisible(man.ActiveSlotNo,false,true);
-        pl.mgr.OnMaidRemoveEvent(man);*/
         pl.DeActiveMaid(man,false);
 
         // body入れ替え
         cm.SetActiveMan(man,man.ActiveSlotNo);
-        pairman=cm.SwapNewManBody(man.ActiveSlotNo,!man.IsCrcBody);
-        if(pairman.IsCrcBody&&pairman.IsNewManIsRealMan) pairman.SwapNewRealManProp(true);
+        pairman=(man.IsCrcBody)?cm.SwapNewManBody(man.ActiveSlotNo,false):cm.ToNewRealMan(man.ActiveSlotNo,man.HasNewRealMan);
 
         // UIが持ってるmanを差し換え
         var list=(System.Collections.IList)fi_maidlist.GetValue(pl);
