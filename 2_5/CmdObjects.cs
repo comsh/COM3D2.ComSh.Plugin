@@ -725,7 +725,7 @@ public static class CmdObjects {
         var emit=ps.emission;
         emit.enabled=true;
         emit.rateOverTime=1;
-        var mate=new Material(Shader.Find("Particles/Additive (Soft)"));
+        var mate=new Material(Shader.Find("Legacy Shaders/Particles/Additive (Soft)"));
         mate.SetTexture("_MainTex",Texture2D.blackTexture);
         pr.sharedMaterial=mate;
         return 1;
@@ -807,6 +807,12 @@ public static class CmdObjects {
             if(shader==null) return sh.io.Error("指定されたシェーダは見つかりません");
             mate=par.EditMaterial();
             mate.shader=shader;
+            break;
+        case "rq":
+            if(par.render==null) return 0;
+            if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
+            mate=par.EditMaterial();
+            mate.renderQueue=(int)f;
             break;
         case "png":
             string file="";

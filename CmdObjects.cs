@@ -608,6 +608,12 @@ public static class CmdObjects {
             mate=op.EditMaterial();
             mate.shader=shader;
             break;
+        case "rq":
+            if(op.render==null) return 0;
+            if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
+            mate=op.EditMaterial();
+            mate.renderQueue=(int)f;
+            break;
         case "damping":
             if(op.anim==null) return 0;
             if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
@@ -802,6 +808,12 @@ public static class CmdObjects {
             if(shader==null) return sh.io.Error("指定されたシェーダは見つかりません");
             mate=par.EditMaterial();
             mate.shader=shader;
+            break;
+        case "rq":
+            if(par.render==null) return 0;
+            if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
+            mate=par.EditMaterial();
+            mate.renderQueue=(int)f;
             break;
         case "png":
             string file="";

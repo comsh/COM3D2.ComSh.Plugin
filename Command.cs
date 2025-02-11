@@ -165,6 +165,7 @@ public static class Command {
         cmdTbl.Add("tohex", new Cmd(CmdToHex));
         cmdTbl.Add("todec", new Cmd(CmdToDec));
         cmdTbl.Add("nop", new Cmd(CmdNop));
+        cmdTbl.Add("comver", new Cmd(CmdComVer));
         
         cmdTbl.Add("__uibutton", new Cmd(CmdUIButton));
         cmdTbl.Add("__res",new Cmd(Cmd__Resource));
@@ -180,6 +181,8 @@ public static class Command {
         CmdSubCamera.Init();
         CmdMisc.Init();
     }
+
+    private static int CmdComVer(ComShInterpreter sh,List<string> args){ sh.io.Print("2.0"); return 0; }
 
     private static int Cmd__Resource(ComShInterpreter sh,List<string> args){ // 調査専用
         if(args.Count==2){
