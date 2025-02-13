@@ -851,7 +851,7 @@ public static class CmdMaidMan {
             for(int i=0; i<r.Length; i++) sh.io.PrintLn(r[i].name); 
             return 0;
         }
-        int mode=2;
+        int mode=-1;
         if(val.Length>2 && val[val.Length-2]==','){
             mode=val[val.Length-1]-'0';
             if(mode<0||mode>2) return sh.io.Error("読込モードは0～2で指定してください");
@@ -866,6 +866,8 @@ public static class CmdMaidMan {
         if(preset==null) return sh.io.Error("プリセットファイルが読み込めません");
         if(mode==0) preset.ePreType=CharacterMgr.PresetType.Body;
         else if(mode==1) preset.ePreType=CharacterMgr.PresetType.Wear;
+        else if(mode==2) preset.ePreType=CharacterMgr.PresetType.All;
+        // デフォルト(mode==-1)のときはファイル内のePreTypeに従う
         cm.PresetSet(m,preset);
         m.boAllProcPropBUSY=false;
         m.AllProcProp();
@@ -1347,7 +1349,7 @@ public static class CmdMaidMan {
             if(sa2.Length!=3) return sh.io.Error("書式が不正です");
             if(!m.body0.IsSlotNo(sa2[0])||!m.body0.IsSlotNo(sa2[1]))
                 return sh.io.Error("スロット名が不正です");
-            string bname=ParseUtil.CompleteBoneName(sa2[2],m.boMAN);
+            string bname=ParseUtil.CompleteBoneName(sa2[2],m.boMAN,m.IsCrcBody);
             m.body0.SetVisibleNodeSlotParts(sa2[0],0,sa2[1],p[0]=='+',bname);
         }
         m.body0.FixMaskFlag();
@@ -2187,7 +2189,7 @@ public static class CmdMaidMan {
                 if(lstTr==null||lstScl==null) return sh.io.Error("失敗しました");
             }catch{ return sh.io.Error("失敗しました"); }
     
-            string bname=ParseUtil.CompleteBoneName(sa[1],m.boMAN);
+            string bname=ParseUtil.CompleteBoneName(sa[1],m.boMAN,m.IsCrcBody);
     
             if(sw=='+'){
                 int idx; for(idx=0; idx<lstTr.Count; idx+=2) if(lstTr[idx].name==bname) break;

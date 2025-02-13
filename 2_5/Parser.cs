@@ -865,12 +865,6 @@ public static class ParseUtil {
         for(int i=0; i<txt.Length; i++) if(txt[i]==c) ret++;
         return ret;
     }
-    public static string[] SplitApBoneName(string str){
-        string[] sa=str.Split(colon);
-        if(sa.Length!=3) { error="ボーンまたはアタッチポイントの指定に誤りがあります"; return null; };
-        if(IsWordChar(sa[2][0])) sa[2]=CompleteBoneName(sa[2],sa[0]=="man");
-        return sa;
-    }
     /* 例えば Bip01 L UpperArm をBLUpperArm と書けるようにする
        Bip01 Spine1 ならBSpine1。ちょっとだけ短い＆空白エスケープ不要＆男女書き分け不要に
        もしBip01 [LR]\S+ に該当するボーンが現れたら破綻する */
@@ -880,9 +874,9 @@ public static class ParseUtil {
         {"BRToe2","ManBip R Toe1"}, {"BRToe21","ManBip R Toe11"}, {"BRToe2Nub","ManBip R Toe1Nub"},
         {"BLToe2","ManBip L Toe1"}, {"BLToe21","ManBip L Toe11"}, {"BLToe2Nub","ManBip L Toe1Nub"}
     };
-    public static string CompleteBoneName(string shortname,bool manq){
+    public static string CompleteBoneName(string shortname,bool manq,bool crcq=false){
         if(shortname.Length<5 || !char.IsUpper(shortname[1]) || shortname[0]!='B') return shortname;
-        var dic=manq?completename_m:completename_f;
+        var dic=(manq&&!crcq)?completename_m:completename_f;
         if(dic.TryGetValue(shortname,out string ret)) return ret;
 
         string root,lr="",uname;
@@ -891,7 +885,7 @@ public static class ParseUtil {
         else if(shortname[1]=='R') { lr=" R"; n++; }
         if(lr.Length>0 && !char.IsUpper(shortname[2])) return shortname;
 
-        root=manq?"ManBip":"Bip01";
+        root=(manq&&!crcq)?"ManBip":"Bip01";
         uname=shortname.Substring(n);
         return dic[shortname]=root+lr+" "+uname;
     }

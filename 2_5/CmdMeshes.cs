@@ -1560,9 +1560,9 @@ public static class CmdMeshes {
         if(frommi==null) return sh.io.Error("マテリアルが見つかりません");
         if(frommi.material.Count<=tgtcd.meshno) return sh.io.Error("マテリアル番号が不正です");
 
+        sm.mi.EditMaterial();
         var frommate=frommi.material[tgtcd.meshno];
         var tomate=sm.mi.material[sm.submeshno];
-        sm.mi.EditMaterial();
         tomate.shader=frommate.shader;
         tomate.CopyPropertiesFromMaterial(frommate);
         return 1;

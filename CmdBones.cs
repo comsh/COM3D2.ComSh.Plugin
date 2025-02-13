@@ -179,7 +179,7 @@ public static class BoneUtil{
         public static MaidBone Find(Maid m,string abn,string slot=null){
             if(m.body0==null||m.body0.m_trBones==null) return null;
             if(abn.Length==0) return null;
-            string fullname=ParseUtil.CompleteBoneName(abn,m.boMAN);
+            string fullname=ParseUtil.CompleteBoneName(abn,m.boMAN,m.IsCrcBody);
             Transform tr;
             if(!string.IsNullOrEmpty(slot)){
                 if(!m.body0.IsSlotNo(slot)) return null;

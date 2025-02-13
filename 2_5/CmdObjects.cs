@@ -419,12 +419,18 @@ public static class CmdObjects {
         return 1;
     }
     private static int ObjParamMaterialCopy(ComShInterpreter sh,Transform tr,string val){
+        if(val==null) return 0;
+        string[] lr=ParseUtil.LeftAndRight(val,':');
+        if(lr[0]==""||lr[1]=="") return sh.io.Error("書式が不正です");
+        int meshno=0;
+        if(!int.TryParse(lr[0],out meshno)||meshno<0) return sh.io.Error("メッシュ番号が不正です");
+
         Transform tr0=ObjUtil.FindObjRoot(sh,colonDesc);
         if(tr0==null) return sh.io.Error("オブジェクトが存在しません");
         var mi=new CmdMeshes.MeshInfo(tr,tr0);
-        if(mi.count<=colonDesc.meshno) return sh.io.Error("指定されたメッシュが存在しません");
-        var sm=new CmdMeshes.SingleMesh(colonDesc.meshno,mi);
-        return CmdMeshes.MeshParamMaterialCopy(sh,sm,val);
+        if(mi.count<=meshno) return sh.io.Error("指定されたメッシュが存在しません");
+        var sm=new CmdMeshes.SingleMesh(meshno,mi);
+        return CmdMeshes.MeshParamMaterialCopy(sh,sm,lr[1]);
     }
     private static int ObjParamShape(ComShInterpreter sh,Transform tr,string val){
         ObjInfo oi;
