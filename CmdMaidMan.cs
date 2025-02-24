@@ -795,8 +795,11 @@ public static class CmdMaidMan {
         var anim=m.body0.m_Animation;
         int gender=(m.boMAN&&!m.IsCrcBody)?1:0;
         foreach(AnimationState ast in anim){
-            if(ast.layer==no) anim.RemoveClip(ast.clip);
-            if(ClipCache.Find(ast.clip,gender)==null) UnityEngine.Object.Destroy(ast.clip) ;
+            if(ast.layer==no){
+                var ac=ast.clip;
+                anim.RemoveClip(ac);
+                if(ClipCache.Find(ac,gender)==null) GameObject.Destroy(ac) ;
+            }
         }
         if(anim.GetClipCount()==0){
             anim.AddClip(emptyAnmClip,m.body0.LastAnimeFN.ToLower());
