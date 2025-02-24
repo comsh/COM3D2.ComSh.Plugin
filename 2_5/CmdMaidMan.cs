@@ -2347,7 +2347,9 @@ public static class MaidUtil {
         if(key[0]=='%' && int.TryParse(key.Slice(1),out n)) return ManByInstanceID(n);
         if(k.StartsWith("男",Ordinal)) k=k.Slice(1);
         if(int.TryParse(k,out n)) return NthMan(n);
-        else if(key=="主人公"||key=="御主人様"||key=="ご主人様") return NthMan(0); // やりすぎ感
+        else if(MemoryExtensions.Equals(key,"主人公",Ordinal)
+             || MemoryExtensions.Equals(key,"御主人様",Ordinal)
+             || MemoryExtensions.Equals(key,"ご主人様",Ordinal) ) return NthMan(0);
         else return ManByGuid(key);
     }
     public static Maid FindMaidMan(string type,string key){
@@ -2414,8 +2416,8 @@ public static class MaidUtil {
         for (int i=0; i<cm.GetMaidCount(); i++) {
         Maid m = cm.GetMaid(i);
         if (m==null) continue;
-            if(name==m.status.guid.AsSpan()) return m;
-            if(name==m.status.fullNameJpStyle.AsSpan().Trim()) return m;
+            if(MemoryExtensions.Equals(name,m.status.guid,Ordinal)) return m;
+            if(MemoryExtensions.Equals(name,m.status.fullNameJpStyle.AsSpan().Trim(),Ordinal)) return m;
         }
         return null;
     }
