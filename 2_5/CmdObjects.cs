@@ -1132,11 +1132,11 @@ public static class CmdObjects {
     }
     private static int ObjParamBakeMesh(ComShInterpreter sh,Transform tr,string val){
         if(val==null) return sh.io.Error("オブジェクト名を指定してください");
-        bool clonetexq=false;
+        int clonetype=0;
         string[] lr=ParseUtil.LeftAndRight(val,',');
         if(lr[1]!=""){
-            if(lr[1]!="1"&&lr[1]!="0") return sh.io.Error("0か1を指定してください");
-            clonetexq=lr[1]=="1";
+            if(lr[1]!="1"&&lr[1]!="0"&&lr[1]!="2") return sh.io.Error("0,1,2のいずれかを指定してください");
+            clonetype=lr[1][0]-'0';
         }
 
         if(!UTIL.ValidObjName(lr[0])) return sh.io.Error("その名前は使用できません");
@@ -1156,7 +1156,7 @@ public static class CmdObjects {
         go.transform.position=tr.position;
         go.transform.rotation=tr.rotation;
         go.transform.localScale=tr.localScale;
-        for(int i=0; i<smra.Length; i++) CreateBakeMeshObj(smra[i].name,smra[i],go.transform,clonetexq);
+        for(int i=0; i<smra.Length; i++) CreateBakeMeshObj(smra[i].name,smra[i],go.transform,clonetype);
         var oi=ObjInfo.AddObjInfo(go.transform,"");
         ObjUtil.objDic[go.transform.name]=go.transform;
         oi.data.Backup();
@@ -1183,7 +1183,7 @@ public static class CmdObjects {
         tr.gameObject.SetActive(val=="1");
         return 1;
     }
-    private static GameObject CreateBakeMeshObj(string name,SkinnedMeshRenderer smr,Transform parent,bool clonetexq=false){
+    private static GameObject CreateBakeMeshObj(string name,SkinnedMeshRenderer smr,Transform parent,int clonetype=0){
         Mesh mesh=new Mesh();
         smr.BakeMesh(mesh);
         var go=new GameObject(name);
@@ -1195,12 +1195,12 @@ public static class CmdObjects {
         mf.sharedMesh=mesh;
         MeshRenderer mr=go.AddComponent<MeshRenderer>();
         var ma=smr.sharedMaterials;
-        if(clonetexq) for(int i=0; i<ma.Length; i++){
-            var m=UnityEngine.Object.Instantiate(ma[i]);
+        if(clonetype==1) for(int i=0; i<ma.Length; i++){
+            var m=new Material(ma[i]);
             TextureUtil.CloneAllTexture(m);
             ma[i]=m;
         }
-        mr.sharedMaterials=ma;
+        if(clonetype!=0) mr.materials=ma; else mr.sharedMaterials=ma;
         return go;
     }
     private static int ObjParamLookAt(ComShInterpreter sh,Transform tr,string val){

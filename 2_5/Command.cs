@@ -2084,19 +2084,27 @@ public static class Command {
         sh.EndLoop();
         return ret;
     }
-
     public class PubSubEntry {
         public static int seq=0;
         public string id;
+        public int maxcount=-1;
+        public int count=0;
         public ComShInterpreter sh;
         public ComShParser parser;
-        public PubSubEntry(ComShInterpreter sh){this.sh=sh;this.id=(seq++).ToString();}
+        public PubSubEntry(ComShInterpreter sh,int max){this.sh=sh;this.id=(seq++).ToString(); maxcount=max;}
+        public PubSubEntry(ComShInterpreter sh,string name,int max){
+            this.sh=sh;
+            if(name==null) this.id=(seq++).ToString(); else this.id=name;
+            maxcount=max;
+        }
+        public bool IsExpire(){return maxcount>=0&&maxcount==count;}
         public int Parse(int idx){
             parser=EvalParser(sh,idx);
             if(parser==null) return -1;
             return 0;
         }
         public void Invoke(string msg){
+            if(maxcount==count) return;
             ComShInterpreter.Output orig=sh.io.output;
             var subout=new ComShInterpreter.SubShOutput();
             sh.io.output=new ComShInterpreter.Output(subout.Output);
@@ -2107,6 +2115,7 @@ public static class Command {
             if(ret<0 || sh.exitq){ ret=sh.io.exitStatus; sh.exitq=false; }
             sh.io.output=orig;
             if(ret>=0) sh.io.Print(subout.GetSubShResult());
+            count++;
         }
     }
     private static Dictionary<string,LinkedList<PubSubEntry>> pubsubdic=new Dictionary<string,LinkedList<PubSubEntry>>();
@@ -2121,20 +2130,42 @@ public static class Command {
         return 0;
     }
     private static int CmdSubscribe(ComShInterpreter sh,List<string> args){
-        if(args.Count!=3) return sh.io.Error("使い方: subscribe トピック名 コマンド");
-        string key=args[1];
-        if(!IsKvsNameValid(key)) return sh.io.Error("トピック名が不正です");
+        int max=-1;
+        int cmdidx;
+        string topic="",id=null;
+        if(args.Count==3){
+            topic=args[1]; cmdidx=2;
+        }else if(args.Count==5){
+            topic=args[1]; id=args[2]; cmdidx=3;
+            if(!int.TryParse(args[4],out max)||max<0) return sh.io.Error("数値が不正です");
+        }else if(args.Count==4) {
+            if(int.TryParse(args[3],out max)){ // 識別名なしのケース
+                topic=args[1]; cmdidx=2;
+            }else{
+                topic=args[1]; id=args[2]; cmdidx=3; max=-1;
+            }
+        }else return sh.io.Error("使い方1: subscribe トピック名 コマンド [最大回数]\n使い方2: subscribe トピック名 ID コマンド [最大回数]");
 
-        var pse=new PubSubEntry(sh);
-        if(pse.Parse(2)<0) return -1;
+        if(!IsKvsNameValid(topic)) return sh.io.Error("トピック名が不正です");
+        if(id!=null&&((max<0&&id=="")||(id!=""&&!UTIL.ValidName(id)))) return sh.io.Error("識別名が不正です");
+
+        if(!string.IsNullOrEmpty(id)){
+            LinkedList<PubSubEntry> chklst;
+            if(pubsubdic.TryGetValue(topic,out chklst)){
+                foreach(var rec in chklst){ if(rec.id==id){ return sh.io.Error("その識別名は登録済です");} }
+            }
+        }
+
+        var pse=new PubSubEntry(sh,id,max);
+        if(pse.Parse(cmdidx)<0) return -1;
 
         LinkedList<PubSubEntry> lst;
-        if(!pubsubdic.TryGetValue(key,out lst)){
+        if(!pubsubdic.TryGetValue(topic,out lst)){
             lst=new LinkedList<PubSubEntry>();
-            pubsubdic[key]=lst;
+            pubsubdic[topic]=lst;
         }
         lst.AddLast(pse);
-        sh.io.Print(pse.id.ToString());
+        if(id==null) sh.io.Print(pse.id.ToString());
         return 0;
     }
     private static int CmdUnSubscribe(ComShInterpreter sh,List<string> args){
@@ -2143,13 +2174,13 @@ public static class Command {
         if(!IsKvsNameValid(key)) return sh.io.Error("トピック名が不正です");
         LinkedList<PubSubEntry> lst;
         if(!pubsubdic.TryGetValue(key,out lst)) return sh.io.Error("トピックが定義されていません");
-        if(lst.Count==0) return sh.io.Error("そのIDは登録されていません");
+        if(lst.Count==0){ pubsubdic.Remove(key); return sh.io.Error("そのIDは登録されていません");}
         for(int i=2; i<args.Count; i++){
             if(args[i]=="*"){ lst.Clear(); break; }
             var node=lst.First;
             while(node!=null){
                 var next=node.Next;
-                if(node.Value.id==args[i]){lst.Remove(node); break;}
+                if(node.Value.id==args[i]) lst.Remove(node);
                 node=next;
             }
         }
@@ -2171,8 +2202,10 @@ public static class Command {
         while(node!=null){
             var next=node.Next;
             node.Value.Invoke(msg);
+            if(node.Value.IsExpire()) lst.Remove(node);
             node=next;
         }
+        if(lst.Count==0) pubsubdic.Remove(key);
     }
     private static int CmdVars2Str(ComShInterpreter sh,List<string> args){
         if(args.Count<2) return sh.io.Error("使い方: vars2str 変数名...");

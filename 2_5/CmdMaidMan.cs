@@ -39,6 +39,8 @@ public static class CmdMaidMan {
         maidParamDic.Add("scale.y",new CmdParam<Maid>(MaidParamScaleY));
         maidParamDic.Add("scale.z",new CmdParam<Maid>(MaidParamScaleZ));
         maidParamDic.Add("motion",new CmdParam<Maid>(MaidParamMotion));
+        maidParamDic.Add("motion.cache",new CmdParam<Maid>(MaidParamMotionCache));
+        maidParamDic.Add("motion.cachedel",new CmdParam<Maid>(MaidParamMotionCacheDel));
         maidParamDic.Add("motion.pause",new CmdParam<Maid>(MaidParamMotionPause));
         maidParamDic.Add("motion.frame",new CmdParam<Maid>(MaidParamMotionFrame));
         maidParamDic.Add("motion.time",new CmdParam<Maid>(MaidParamMotionTime));
@@ -47,6 +49,7 @@ public static class CmdMaidMan {
         maidParamDic.Add("motion.timelp",new CmdParam<Maid>(MaidParamMotionTimepL));
         maidParamDic.Add("motion.speed",new CmdParam<Maid>(MaidParamMotionSpeed));
         maidParamDic.Add("motion.layer",new CmdParam<Maid>(MaidParamMotionLayer));
+        maidParamDic.Add("motion.layerdel",new CmdParam<Maid>(MaidParamMotionLayerDel));
         maidParamDic.Add("motion.length",new CmdParam<Maid>(MaidParamMotionLength));
         maidParamDic.Add("motion.weight",new CmdParam<Maid>(MaidParamMotionWeight));
         maidParamDic.Add("lookat",new CmdParam<Maid>(MaidParamLookAt));
@@ -120,6 +123,7 @@ public static class CmdMaidMan {
         "position","rotation","scale","pos","rot",
         "motion","shape","iid","list","motion.time","motion.speed","motion.layer","motion.length",
         "motion.weight","motion.timep","motion.timel","motion.timelp","motion.frame","motion.pause",
+        "motion.cache","motion.cachedel","motion.layerdel",
         "attach","detach","lookat","ik","cloth","style","shape.verlist","face","faceset",
         "wpos","wrot","lpos","lrot","opos","orot","lquat","wquat","wposrot","lposrot","component",
         "position.x","position.y","position.z", "pos.x","pos.y","pos.z",
@@ -365,78 +369,132 @@ public static class CmdMaidMan {
     private static int MaidParamW2L(ComShInterpreter sh,Maid m,string val){
         return _CmdParamW2L(sh,m.transform,val);
     }
-    private static int SingleMotion(Maid m,MotionName.Clip clip,bool q,bool tailq,bool nolposq){
-        string name=clip.name;
-        string filename,id;
-        if(clip.tmpq==1){
-            var tf=DataFiles.GetTempFile(name);
-            if(tf==null) return -1;
-            filename=tf.filename;
-            id=tf.original;
-        }else{
-            id=name;
-            name=UTIL.Suffix(name,".anm");
-            filename=ComShInterpreter.myposeDir+name;
-        }
-        if(clip.layer>0 && clip.official_layer<0){
-            string seq=UTIL.GetSeqId();
-            id=$"{Path.GetFileNameWithoutExtension(id)}_l_{clip.layer}_#{seq}.anm";
-        }else{
-            id=UTIL.Suffix(id,".anm");
-        }
-        AnmFile af=null;
+    private static int SingleMotion(Maid m,MotionName.Clip clip,bool q,bool tailq,bool nolposq,bool cacheq,bool playq){
+        string id=UTIL.Suffix(clip.name,".anm");
         int manbip=m.body0.trBip.name=="ManBip"?1:0;
-        try{
-            if(clip.tmpq==1){   // temp file
-                if(File.Exists(filename)){
-                    af=new AnmFile(filename,nolposq);
-                    if(manbip!=af.gender) af.ChgGender();
-                }else af=null;
+        ClipCache.CacheData cache=ClipCache.Find(id,manbip);
+        if(m.IsCrcBody && cache.clip==null){
+            id="crc_"+id;
+            cache=ClipCache.Find(id,manbip);
+        }
+        if(cache.clip==null){
+            string name=clip.name;
+            string filename;
+            if(clip.tmpq==1){
+                var tf=DataFiles.GetTempFile(name);
+                if(tf==null) return -1;
+                filename=tf.filename;
+                id=tf.original;
             }else{
-                if(File.Exists(filename)){ // mypose
-                    af=new AnmFile(filename,nolposq);
-                    if(manbip!=af.gender) af.ChgGender();
-                    m.SetAutoTwistAll(true);
+                id=name;
+                name=UTIL.Suffix(name,".anm");
+                filename=ComShInterpreter.myposeDir+name;
+            }
+            if(clip.layer>0 && clip.official_layer<0){
+                string seq=UTIL.GetSeqId();
+                id=$"{Path.GetFileNameWithoutExtension(id)}_l_{clip.layer}_#{seq}.anm";
+            }else{
+                id=UTIL.Suffix(id,".anm");
+            }
+            AnmFile af=null;
+            try{
+                if(clip.tmpq==1){   // temp file
+                    if(File.Exists(filename)){
+                        af=new AnmFile(filename,nolposq);
+                        if(manbip!=af.gender) af.ChgGender();
+                    }else af=null;
                 }else{
-                    if(name.StartsWith("crc_")){
-                        var buf=UTIL.AReadAll(name);
-                        if(buf!=null){
-                            af=new AnmFile(buf,nolposq);
-                            if(manbip==1) af.ChgGender();
-                        }
-                        buf=null;
+                    if(File.Exists(filename)){ // mypose
+                        af=new AnmFile(filename,nolposq);
+                        if(manbip!=af.gender) af.ChgGender();
+                        m.SetAutoTwistAll(true);
                     }else{
-                        string name2;
-                        if(m.IsCrcBody && GameUty.IsExistFile((name2="crc_"+name),GameUty.FileSystem)){
-                            id="crc_"+id;
-                            var buf=UTIL.AReadAll(name2);
-                            if(buf!=null) af=new AnmFile(buf,nolposq);
-                            buf=null;
-                        }else{
+                        if(name.StartsWith("crc_")){
                             var buf=UTIL.AReadAll(name);
                             if(buf!=null){
                                 af=new AnmFile(buf,nolposq);
-                                if(manbip!=af.gender) af.ChgGender();
+                                if(manbip==1) af.ChgGender();
                             }
                             buf=null;
+                        }else{
+                            string name2;
+                            if(m.IsCrcBody && GameUty.IsExistFile((name2="crc_"+name),GameUty.FileSystem)){
+                                id="crc_"+id;
+                                var buf=UTIL.AReadAll(name2);
+                                if(buf!=null) af=new AnmFile(buf,nolposq);
+                                buf=null;
+                            }else{
+                                var buf=UTIL.AReadAll(name);
+                                if(buf!=null){
+                                    af=new AnmFile(buf,nolposq);
+                                if(manbip!=af.gender) af.ChgGender();
+                                }
+                                buf=null;
+                            }
                         }
                     }
                 }
+            }catch(Exception e){ Debug.Log(e.ToString()); return -1; }
+            if(af==null||af.IsEmpty()) return -1;
+            cache=new ClipCache.CacheData(af.ToClip(),af.useMuneR,af.useMuneL);
+            if(cacheq) ClipCache.Add(id,manbip,cache);
+        }
+        if(playq){
+            if(clip.type==0 && q==false){ // ベースのモーションなら胸モーション有効/無効の判断
+                if(!m.boMAN && cache.clip!=null){
+                    int iid=m.GetInstanceID();
+                    int yrq=5;
+                    if(muneMotionYureq.ContainsKey(iid)) yrq=muneMotionYureq[iid];
+                    int l=yrq>>2,r=yrq&3;
+                    bool lq=(l==2||(l==1&&cache.yureL==0)),rq=(r==2||(r==1&&cache.yureR==0));
+                    m.body0.SetMuneYureLWithEnable(lq);
+                    m.body0.SetMuneYureRWithEnable(rq);
+                }
             }
-        }catch(Exception e){ Debug.Log(e.ToString()); return -1; }
-        if(af==null||af.IsEmpty()) return -1;
-        if(clip.type==0 && q==false){ // ベースのモーションなら胸モーション有効/無効の判断
-            if(!m.boMAN && af!=null){
-                int iid=m.GetInstanceID();
-                int yrq=5;
-                if(muneMotionYureq.ContainsKey(iid)) yrq=muneMotionYureq[iid];
-                int l=yrq>>2,r=yrq&3;
-                bool lq=(l==2||(l==1&&af.useMuneL==0)),rq=(r==2||(r==1&&af.useMuneR==0));
-                m.body0.SetMuneYureLWithEnable(lq);
-                m.body0.SetMuneYureRWithEnable(rq);
+            return CrossFade(m,id,cache.clip,clip,q,tailq);
+        }
+        return 0;
+    }
+    private class ClipCache {
+        public struct CacheData {
+            public AnimationClip clip;
+            public byte yureR;
+            public byte yureL;
+            public CacheData(AnimationClip c,byte r,byte l){clip=c;yureR=r;yureL=l;}
+        }
+        private static Dictionary<string,CacheData> f_clipdic=new Dictionary<string,CacheData>();
+        private static Dictionary<string,CacheData> m_clipdic=new Dictionary<string,CacheData>();
+        public static string Find(AnimationClip ac,int gender){
+            var dic=(gender==1)?m_clipdic:f_clipdic;
+            foreach(var kv in dic)
+                if(kv.Value.clip==ac) return kv.Key;
+            return null;
+        }
+        public static CacheData Find(string id,int gender){
+            var dic=(gender==1)?m_clipdic:f_clipdic;
+            if(dic.TryGetValue(id,out CacheData ret)) return ret;
+            return default(CacheData);
+        }
+        public static void Add(string id,int gender,CacheData cd){
+            var dic=(gender==1)?m_clipdic:f_clipdic;
+            dic[id]=cd;
+        }
+        public static void Add(string id,int gender,AnimationClip clip,byte r,byte l){
+            var dic=(gender==1)?m_clipdic:f_clipdic;
+            dic[id]=new CacheData(clip,r,l);
+        }
+        public static bool Del(string id,int gender){
+            var dic=(gender==1)?m_clipdic:f_clipdic;
+            if(!dic.TryGetValue(id,out CacheData cd)) return false;
+            GameObject.Destroy(cd.clip);
+            return dic.Remove(id);
+        }
+        public static void List(ComShInterpreter sh,int gender){
+            var dic=(gender==1)?m_clipdic:f_clipdic;
+            foreach(var k in dic.Keys){
+                sh.io.Print(k).Print(sh.ofs).PrintLn(gender==1?"ManBip":"Bip01");
             }
         }
-        return CrossFade(m,id,af.ToClip(),clip,q,tailq);
     }
 
     private static FieldInfo fi_anist;
@@ -473,6 +531,7 @@ public static class CmdMaidMan {
         else if(lp==3) return WrapMode.ClampForever;
         return 0;
     }
+    private static AnimationClip emptyAnmClip=new AnimationClip(){legacy=true};
     private static int MaidParamMotion(ComShInterpreter sh,Maid m,string val){
         if(val==null){
             var s=MaidUtil.GetCurrentMotion(m);
@@ -482,20 +541,28 @@ public static class CmdMaidMan {
         Animation anim=m.GetAnimation();
         if(val==""){
             GameMain.Instance.ScriptMgr.StopMotionScript();
-            m.StopAnime();
-            anim.AddClip(new AnimationClip(){legacy=true},m.body0.LastAnimeFN.ToLower());
+            var remove=new List<string>(10);
+            foreach(AnimationState state in anim) remove.Add(state.name);
+            int gender=(m.boMAN&&!m.IsCrcBody)?1:0;
+            foreach(var name in remove){
+                var ac=anim.GetClip(name);
+                anim.RemoveClip(name);
+                if(ClipCache.Find(ac,gender)==null) UnityEngine.Object.Destroy(ac);
+            }
+            anim.AddClip(emptyAnmClip,m.body0.LastAnimeFN.ToLower());
             return 1;
         }
         if(val[0]!='+'&&val[0]!=':'&&val[0]!='&'){    // お掃除
             GameMain.Instance.ScriptMgr.StopMotionScript();
             var remove=new List<string>(10);
             foreach(AnimationState state in anim)
-                if(!anim.IsPlaying(state.name)||state.layer>0||state.name.IndexOf(" - Queued Clone",Ordinal)>=0)
+                if(state.layer>0||((!anim.IsPlaying(state.name))&&state.name.IndexOf(" - Queued Clone",Ordinal)<0))
                     remove.Add(state.name);
+            int gender=(m.boMAN&&!m.IsCrcBody)?1:0;
             foreach(var name in remove){
                 var ac=anim.GetClip(name);
                 anim.RemoveClip(name);
-                UnityEngine.Object.Destroy(ac);
+                if(ClipCache.Find(ac,gender)==null) UnityEngine.Object.Destroy(ac);
             }
         }
 
@@ -507,12 +574,31 @@ public static class CmdMaidMan {
             bool q=cl.type!=0;
             for(int j=0; j<cl.list.Count; j++){
                 MotionName.Clip clip=cl.list[j];
-                int ret=SingleMotion(m,clip,q,i==ml.list.Count-1,sh.env["_use_anm_lpos"]!="1");
+                int ret=SingleMotion(m,clip,q,i==ml.list.Count-1,sh.env["_use_anm_lpos"]!="1",false,true);
                 if(ret<0) return sh.io.Error("指定されたモーションが見つかりません");
                 updated=true;
             }
         }
         if(updated) StudioMode.OnMotionChange(m);
+        return 1;
+    }
+    private static int MaidParamMotionCache(ComShInterpreter sh,Maid m,string val){
+        if(val==null){
+            ClipCache.List(sh,m.body0.trBip.name=="ManBip"?1:0);
+            return 0;
+        }
+        MotionName.Clip clip=new MotionName.Clip();
+        clip.name=val;
+        int ret=SingleMotion(m,clip,false,false,false,true,false);
+        if(ret<0) return sh.io.Error("指定されたモーションが見つかりません");
+        return 1;
+    }
+    private static int MaidParamMotionCacheDel(ComShInterpreter sh,Maid m,string val){
+        if(val==null){
+            ClipCache.List(sh,m.body0.trBip.name=="ManBip"?1:0);
+            return 0;
+        }
+        ClipCache.Del(UTIL.Suffix(val,".anm"),m.body0.trBip.name=="ManBip"?1:0);
         return 1;
     }
     private static int MaidParamMotionTimeL(ComShInterpreter sh,Maid m,string val){
@@ -705,6 +791,20 @@ public static class CmdMaidMan {
                 sh.io.PrintJoinLn(sh.ofs, ast.layer+":"+ast.name, blendstr, "w"+ast.weight);
             }
         return 0;
+    }
+    private static int MaidParamMotionLayerDel(ComShInterpreter sh,Maid m,string val){
+        if(val==null) return 0;
+        if(!int.TryParse(val,out int no)||no<0) return sh.io.Error("数値が不正です");
+        var anim=m.body0.m_Animation;
+        int gender=(m.boMAN&&!m.IsCrcBody)?1:0;
+        foreach(AnimationState ast in anim){
+            if(ast.layer==no) anim.RemoveClip(ast.clip);
+            if(ClipCache.Find(ast.clip,gender)==null) GameObject.Destroy(ast.clip) ;
+        }
+        if(anim.GetClipCount()==0){
+            anim.AddClip(emptyAnmClip,m.body0.LastAnimeFN.ToLower());
+        }
+        return 1;
     }
     private static int MaidParamMotionPause(ComShInterpreter sh,Maid m,string val){
         var anm=m.body0.m_Animation;
@@ -2226,21 +2326,23 @@ public static class CmdMaidMan {
 public static class MaidUtil {
 
     // メイド検索＆取得。連番 or 氏名 or guid
-    public static Maid FindMaid(string key){
+    public static Maid FindMaid(string key){return FindMaid(key.AsSpan());}
+    public static Maid FindMaid(ReadOnlySpan<char> key){
         if(key.Length==0) return null;
         int n;
         if(int.TryParse(key,out n)) return NthMaid(n); 
-        if(key[0]=='%' && int.TryParse(key.Substring(1),out n)) return MaidByInstanceID(n);
-        if(key[0]=='@' && int.TryParse(key.Substring(1),out n)) return MaidByStockNo(n);
+        if(key[0]=='%' && int.TryParse(key.Slice(1),out n)) return MaidByInstanceID(n);
+        if(key[0]=='@' && int.TryParse(key.Slice(1),out n)) return MaidByStockNo(n);
         return MaidByGuidOrName(key);
     }
     // 男性検索＆取得。連番 or 表示名
-    public static Maid FindMan(string key){
+    public static Maid FindMan(string key){return FindMan(key.AsSpan());}
+    public static Maid FindMan(ReadOnlySpan<char> key){
         if(key.Length==0) return null;
-        string k=key;
+        var k=key;
         int n;
-        if(key[0]=='%' && int.TryParse(key.Substring(1),out n)) return ManByInstanceID(n);
-        if(k.StartsWith("男",Ordinal)) k=k.Substring(1);
+        if(key[0]=='%' && int.TryParse(key.Slice(1),out n)) return ManByInstanceID(n);
+        if(k.StartsWith("男",Ordinal)) k=k.Slice(1);
         if(int.TryParse(k,out n)) return NthMan(n);
         else if(key=="主人公"||key=="御主人様"||key=="ご主人様") return NthMan(0); // やりすぎ感
         else return ManByGuid(key);
@@ -2303,13 +2405,14 @@ public static class MaidUtil {
         }
         return -1;
     }
-    public static Maid MaidByGuidOrName(string name){
+    public static Maid MaidByGuidOrName(string name){return MaidByGuidOrName(name.AsSpan());}
+    public static Maid MaidByGuidOrName(ReadOnlySpan<char> name){
         CharacterMgr cm = GameMain.Instance.CharacterMgr;
         for (int i=0; i<cm.GetMaidCount(); i++) {
         Maid m = cm.GetMaid(i);
         if (m==null) continue;
-            if(name==m.status.guid) return m;
-            if(name==m.status.fullNameJpStyle.Trim()) return m;
+            if(name==m.status.guid.AsSpan()) return m;
+            if(name==m.status.fullNameJpStyle.AsSpan().Trim()) return m;
         }
         return null;
     }
@@ -2331,7 +2434,8 @@ public static class MaidUtil {
         }
         return null;
     }
-    public static Maid ManByGuid(string guid){
+    public static Maid ManByGuid(string guid){return ManByGuid(guid.AsSpan());}
+    public static Maid ManByGuid(ReadOnlySpan<char> guid){
         CharacterMgr cm = GameMain.Instance.CharacterMgr;
         for (int i=0; i<cm.GetManCount(); i++) {
             Maid m=cm.GetMan(i);

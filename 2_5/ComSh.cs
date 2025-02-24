@@ -18,7 +18,9 @@ namespace COM3D2.ComSh.Plugin {
         public void OnApplicationQuit(){ DataFiles.Clean(); }
 	    private void OnSceneLoaded(Scene scene, LoadSceneMode mode){
             ComShWM.lastSceneChangeTime=DateTime.UtcNow.Ticks;
-            StudioMode.SceneChg(SceneManager.GetActiveScene().name);
+            string sname=SceneManager.GetActiveScene().name;
+            Command.DoPublish("_scenechange",sname);
+            StudioMode.SceneChg(sname);
         }
 	}
 
@@ -389,21 +391,38 @@ namespace COM3D2.ComSh.Plugin {
             ed.selectIndex=si;
             return old;
         }
-        private static char[] logchar=new char[15000];
-        public void AddLog(string add){ // addの最終行は改行なしで渡してね
+        public void AddLog(string add){
             int l=add.Length;
             if(l>=15000){
-                add.CopyTo(l-15000,logchar,0,15000);
-                logTe.text=new string(logchar,0,15000);
+                LogText.Copy(add,l-15000,0,15000);
             }else{
                 var log=logTe.text;
                 int len=15000-l-1;
                 if(log.Length<len) len=log.Length;
                 int start=log.Length-len;
-                log.CopyTo(start,logchar,0,len);
-                logchar[len]='\n';      // 初回に限り無駄にはなるけど表示上問題なし
-                add.CopyTo(0,logchar,len+1,l);
-                logTe.text=new string(logchar,0,len+1+l);
+                LogText.Copy(log,start,0,len);
+                LogText.SetChar(len,'\n');
+                LogText.Copy(add,0,len+1,l);
+            }
+            logTe.text=LogText.GetText();
+        }
+        private static class LogText {
+            public static string text=new string(' ',15000);
+            public static int length=0;
+            public static string GetText(){
+                if(length==15000) return text;    //一旦15000まで育てば、そのまま(文字列生成せず)返せる
+                return text.Substring(0,length);  //短いうちは部分文字列生成で我慢
+            }
+            public static unsafe void SetChar(int idx,char c){
+                fixed(char *p=text){p[idx]=c;}
+                if(idx+1>length) length=idx+1;
+            }
+            public static unsafe void Copy(string src,int s0,int d0,int len){
+                fixed(char *p=text){
+                    int si=s0,di=d0;
+                    for(int i=0; i<len; i++) p[di++]=src[si++];
+                    if(di>length) length=di;
+                }
             }
         }
         public string GetLog(){ return logTe.text; }
@@ -556,7 +575,7 @@ namespace COM3D2.ComSh.Plugin {
 	}
 
     public class ComShHistory {
-        private const int HISTORYSIZE=30;
+        private const int HISTORYSIZE=50;
 		private string[] history = new string[HISTORYSIZE];
         private int top=-1;
         private int wIndex=-1;

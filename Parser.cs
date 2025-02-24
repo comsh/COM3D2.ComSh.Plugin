@@ -1012,6 +1012,7 @@ public static class ParseUtil {
                 if(si>0){
                     this.slot=this.id.Substring(si+1);
                     this.id=this.id.Substring(0,si);
+                    if(this.bone=="") this.bone="/";
                 }
             }
         }

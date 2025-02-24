@@ -491,7 +491,7 @@ public static class CmdMeshes {
         if(val.IndexOf('=')<0){
             var m=sm.mi.material[sm.submeshno];
             if(!m.HasProperty(val)) return sh.io.Error("指定されたプロパティは現在のシェーダでは無効です");
-            if(val.EndsWith("Color",StringComparison.Ordinal)){
+            if(m.HasVector(val)){
                 var c=m.GetColor(val);
                 sh.io.Print(sh.fmt.RGBA(c));
             }else{
@@ -539,7 +539,8 @@ public static class CmdMeshes {
     private static int MeshParamKeyword(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null){
             string[] kwa=sm.mi.material[sm.submeshno].shaderKeywords;
-            for(int i=0; i<kwa.Length; i++) sh.io.Print(kwa[i]);
+            if(kwa.Length>0) sh.io.Print(kwa[0]);
+            for(int i=1; i<kwa.Length; i++) sh.io.Print(sh.ofs).Print(kwa[i]);
             return 0;
         }
         sm.mi.EditMaterial();
@@ -554,9 +555,9 @@ public static class CmdMeshes {
         return 1;
     }
     private static int MeshParamBlend(ComShInterpreter sh,SingleMesh sm,string val){
-        if(sm.mi.material[sm.submeshno].shader.name!="Standard"){
-            return sh.io.Error("Standardシェーダでのみ有効です");
-        }
+        if(!sm.mi.material[sm.submeshno].HasInt("_SrcBlend")
+         ||!sm.mi.material[sm.submeshno].HasInt("_DstBlend")
+         ||!sm.mi.material[sm.submeshno].HasInt("_ZWrite") ) return sh.io.Error("このシェーダでは実行できません");
         if(val==null){
             string mode="不明";
             if(sm.mi.material[sm.submeshno].renderQueue==-1){

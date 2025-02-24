@@ -542,7 +542,8 @@ public static class CmdMeshes {
     private static int MeshParamKeyword(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null){
             string[] kwa=sm.mi.material[sm.submeshno].shaderKeywords;
-            for(int i=0; i<kwa.Length; i++) sh.io.Print(kwa[i]);
+            if(kwa.Length>0) sh.io.Print(kwa[0]);
+            for(int i=1; i<kwa.Length; i++) sh.io.Print(sh.ofs).Print(kwa[i]);
             return 0;
         }
         sm.mi.EditMaterial();

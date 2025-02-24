@@ -18,7 +18,9 @@ namespace COM3D2.ComSh.Plugin {
         public void OnApplicationQuit(){ DataFiles.Clean(); }
 	    private void OnSceneLoaded(Scene scene, LoadSceneMode mode){
             ComShWM.lastSceneChangeTime=DateTime.UtcNow.Ticks;
-            StudioMode.SceneChg(SceneManager.GetActiveScene().name);
+            string sname=SceneManager.GetActiveScene().name;
+            Command.DoPublish("_scenechange",sname);
+            StudioMode.SceneChg(sname);
         }
 	}
 
@@ -556,7 +558,7 @@ namespace COM3D2.ComSh.Plugin {
 	}
 
     public class ComShHistory {
-        private const int HISTORYSIZE=30;
+        private const int HISTORYSIZE=50;
 		private string[] history = new string[HISTORYSIZE];
         private int top=-1;
         private int wIndex=-1;
