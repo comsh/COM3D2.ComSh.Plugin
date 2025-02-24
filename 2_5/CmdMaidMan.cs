@@ -531,7 +531,6 @@ public static class CmdMaidMan {
         else if(lp==3) return WrapMode.ClampForever;
         return 0;
     }
-    private static AnimationClip emptyAnmClip=new AnimationClip(){legacy=true};
     private static int MaidParamMotion(ComShInterpreter sh,Maid m,string val){
         if(val==null){
             var s=MaidUtil.GetCurrentMotion(m);
@@ -549,7 +548,7 @@ public static class CmdMaidMan {
                 anim.RemoveClip(name);
                 if(ClipCache.Find(ac,gender)==null) UnityEngine.Object.Destroy(ac);
             }
-            anim.AddClip(emptyAnmClip,m.body0.LastAnimeFN.ToLower());
+            anim.AddClip(new AnimationClip(){legacy=true},m.body0.LastAnimeFN.ToLower());
             return 1;
         }
         if(val[0]!='+'&&val[0]!=':'&&val[0]!='&'){    // お掃除
@@ -589,7 +588,7 @@ public static class CmdMaidMan {
         }
         MotionName.Clip clip=new MotionName.Clip();
         clip.name=val;
-        int ret=SingleMotion(m,clip,false,false,false,true,false);
+        int ret=SingleMotion(m,clip,false,false,sh.env["_use_anm_lpos"]!="1",true,false);
         if(ret<0) return sh.io.Error("指定されたモーションが見つかりません");
         return 1;
     }
@@ -804,9 +803,7 @@ public static class CmdMaidMan {
                 if(ClipCache.Find(ac,gender)==null) GameObject.Destroy(ac) ;
             }
         }
-        if(anim.GetClipCount()==0){
-            anim.AddClip(emptyAnmClip,m.body0.LastAnimeFN.ToLower());
-        }
+        if(anim.GetClipCount()==0) anim.AddClip(new AnimationClip(){legacy=true},m.body0.LastAnimeFN.ToLower());
         return 1;
     }
     private static int MaidParamMotionPause(ComShInterpreter sh,Maid m,string val){
