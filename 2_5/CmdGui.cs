@@ -33,10 +33,27 @@ public static class CmdGui {
         Command.AddCmd("pagelist",new Cmd(CmdPageList));
     }
 
-    private static float[] XYWHf(List<string> args,int start){
+    private static float[] currentgridxywh={0,0,0,0};
+    private static float[] currentxywh={0,0,0,0};
+    private static float[] XYWHf(List<string> args,int start,bool gridq=false){
+        float[] current=gridq?currentgridxywh:currentxywh;
         float[] ret=new float[4];
-        for(int i=0; i<4; i++) if(!float.TryParse(args[start+i],out ret[i])||ret[i]<0) return null;
+        for(int i=0; i<4; i++){
+            string nstr=args[start+i];
+            if(nstr=="") return null;
+            if(nstr=="."){
+                ret[i]=current[i];
+            }else if(nstr[0]=='+'){
+                if(!float.TryParse(nstr.Substring(1),out ret[i])) return null;
+                ret[i]+=current[i];
+            }else if(nstr[0]=='-'){
+                if(!float.TryParse(nstr,out ret[i])) return null;
+                ret[i]+=current[i];
+            }else if(!float.TryParse(nstr,out ret[i])||ret[i]<0) return null;
+        }
         if(ret[2]==0||ret[3]==0) return null;
+        for(int i=0; i<4; i++) current[i]=ret[i];
+        if(gridq) for(int i=0; i<4; i++) currentxywh[i]=0;
         return ret;
     }
     private static int[] XYWH(ComShPanel panel,List<string> args,int start){
@@ -53,12 +70,13 @@ public static class CmdGui {
             if(sh.panel==null) return sh.io.Error("これ以上パネルを作成できません");
             if(!ComShWM.IsVisible()){ ComShWM.SetVisible(true); ComShWM.HideTerm();}
         }else return sh.io.Error("使い方: panel タイトル x y 幅 高さ [フォントサイズ]");
+        for(int i=0; i<4; i++){currentgridxywh[i]=0;currentxywh[i]=0;}
         return 0;
     }
     private static int CmdGrid(ComShInterpreter sh,List<string> args){
         if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
         float[] xywh;
-        if(args.Count==5 && (xywh=XYWHf(args,1))!=null){
+        if(args.Count==5 && (xywh=XYWHf(args,1,true))!=null){
             sh.panel.SetGrid(xywh);
         }else return sh.io.Error("使い方: grid x y 幅 高さ");
         return 0;

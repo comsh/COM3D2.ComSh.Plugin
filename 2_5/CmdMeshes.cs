@@ -300,17 +300,17 @@ public static class CmdMeshes {
                 c.uv=t;
                 changed|=4;
             }
-            if(suv2!="" && (t=sh.env["_uv2"])!=suv2){
+            if((t=sh.env["_uv2"])!=suv2){
                 if(c==null) c=new VerLoopChange(th);
                 c.uv2=t;
                 changed|=8;
             }
-            if(suv3!="" && (t=sh.env["_uv3"])!=suv3){
+            if((t=sh.env["_uv3"])!=suv3){
                 if(c==null) c=new VerLoopChange(th);
                 c.uv3=t;
                 changed|=16;
             }
-            if(suv4!="" && (t=sh.env["_uv4"])!=suv4){
+            if((t=sh.env["_uv4"])!=suv4){
                 if(c==null) c=new VerLoopChange(th);
                 c.uv4=t;
                 changed|=32;
@@ -867,7 +867,7 @@ public static class CmdMeshes {
         if(lr[1]=="") right=lr[0]; else { prop=lr[0]; right=lr[1]; }
 
         Material orig=sm.mi.oid.originalMate[sm.submeshno];
-        var origtex=(orig==null)?null:orig.GetTexture(prop);
+        var origtex=(orig==null||!orig.HasProperty(prop))?null:orig.GetTexture(prop);
 
         string[] sa=right.Split(ParseUtil.comma);
         int w=0,h=0,wrap=0;
@@ -954,7 +954,7 @@ public static class CmdMeshes {
     }
     private static int PixelLoop(ComShInterpreter sh,SingleMesh sm,ComShParser psr,Material mate,string prop,Texture tx,int hsvq,Material orig){
         int ret=0;
-        var origtex=orig.GetTexture(prop);
+        var origtex=(orig==null||!orig.HasProperty(prop))?null:orig.GetTexture(prop);
         Texture2D t2;
         bool t2cloneq=false;
         if(origtex==tx || !ReferenceEquals(tx.GetType(),typeof(Texture2D))){
@@ -1090,7 +1090,7 @@ public static class CmdMeshes {
     }
     private static int ApplyColorMatrix(ComShInterpreter sh,SingleMesh sm,float[] fa,Material mate,string prop,Texture tx,Material orig,bool hsvq){
         int ret=0;
-        var origtex=orig.GetTexture(prop);
+        var origtex=(orig==null||!orig.HasProperty(prop))?null:orig.GetTexture(prop);
         Texture2D t2;
         bool t2cloneq=false;
         if(origtex==tx || !ReferenceEquals(tx.GetType(),typeof(Texture2D))){
@@ -1170,7 +1170,7 @@ public static class CmdMeshes {
                     texiid.Add(t2);
                 }
                 var old=mate.GetTexture(prop);
-                var origtex=mate0.GetTexture(prop);
+                var origtex=(mate0==null||!mate0.HasProperty(prop))?null:mate0.GetTexture(prop);
                 if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old);
                 mate.SetTexture(prop,t2);
             }
@@ -1655,7 +1655,7 @@ public static class CmdMeshes {
             public Rect(int x,int y,int w,int h){this.x=x;this.y=y;this.w=w;this.h=h;}
         }
         public Rect GetTexXYRange(int w,int h){
-            if(area!=null) return new Rect((int)area[0],(int)area[1],(int)area[2],(int)area[3]);
+            if(area!=null) return new Rect((int)area[0],(int)area[1],(int)Mathf.Min(area[2],w-area[0]),(int)Mathf.Min(area[3],h-area[1]) );
             return new Rect(0,0,w,h);
         }
         public int ApplyTexFilter(int x,int y){
@@ -1742,7 +1742,7 @@ public static class CmdMeshes {
             var r=me.rend;
 
             Material newMaterial=new Material(oid.originalMate[submeshno]);
-            UnityEngine.Object.Destroy(oid.workMate[submeshno]);
+            //UnityEngine.Object.Destroy(oid.workMate[submeshno]);
             oid.workMate[submeshno]=newMaterial;
 
             var ma=r.sharedMaterials;
