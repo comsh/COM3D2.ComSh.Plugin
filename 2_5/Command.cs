@@ -1800,6 +1800,11 @@ public static class Command {
         for(i=0; i<key.Length; i++) if(!(ParseUtil.IsWordChar(key[i])||key[i]=='/')) break;
         return i==key.Length;
     }
+    private static bool IsTopicNameValid(string key){
+        int i;
+        for(i=0; i<key.Length; i++) if(!(ParseUtil.IsWordChar(key[i])||key[i]=='/'||key[i]=='-')) break;
+        return i==key.Length;
+    }
     private static int CmdDistance(ComShInterpreter sh,List<string> args){
         float[] v=new float[4];
         if(args.Count!=2 && args.Count!=3) return sh.io.Error("使い方: distance 座標1 [座標2]");
@@ -2146,7 +2151,7 @@ public static class Command {
             }
         }else return sh.io.Error("使い方1: subscribe トピック名 コマンド [最大回数]\n使い方2: subscribe トピック名 ID コマンド [最大回数]");
 
-        if(!IsKvsNameValid(topic)) return sh.io.Error("トピック名が不正です");
+        if(!IsTopicNameValid(topic)) return sh.io.Error("トピック名が不正です");
         if(id!=null&&((max<0&&id=="")||(id!=""&&!UTIL.ValidName(id)))) return sh.io.Error("識別名が不正です");
 
         if(!string.IsNullOrEmpty(id)){
@@ -2171,7 +2176,7 @@ public static class Command {
     private static int CmdUnSubscribe(ComShInterpreter sh,List<string> args){
         if(args.Count<3) return sh.io.Error("使い方: unsubscribe トピック名 ID...");
         string key=args[1];
-        if(!IsKvsNameValid(key)) return sh.io.Error("トピック名が不正です");
+        if(!IsTopicNameValid(key)) return sh.io.Error("トピック名が不正です");
         LinkedList<PubSubEntry> lst;
         if(!pubsubdic.TryGetValue(key,out lst)) return sh.io.Error("トピックが定義されていません");
         if(lst.Count==0){ pubsubdic.Remove(key); return sh.io.Error("そのIDは登録されていません");}

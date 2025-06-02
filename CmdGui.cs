@@ -41,14 +41,18 @@ public static class CmdGui {
         for(int i=0; i<4; i++){
             string nstr=args[start+i];
             if(nstr=="") return null;
-            if(nstr=="."){
+            if(nstr=="="){
                 ret[i]=current[i];
+            }else if(nstr=="." && !gridq){
+                if(i<2) ret[i]=current[i]+current[i+2]; else ret[i]=current[i];
             }else if(nstr[0]=='+'){
-                if(!float.TryParse(nstr.Substring(1),out ret[i])) return null;
-                ret[i]+=current[i];
+                float f;
+                if(nstr.Length==1) f=1; else if(!float.TryParse(nstr.Substring(1),out f)) return null;
+                ret[i]=current[i]+f;
             }else if(nstr[0]=='-'){
-                if(!float.TryParse(nstr,out ret[i])) return null;
-                ret[i]+=current[i];
+                float f;
+                if(nstr.Length==1) f=1; else if(!float.TryParse(nstr.Substring(1),out f)) return null;
+                ret[i]=current[i]-f;
             }else if(!float.TryParse(nstr,out ret[i])||ret[i]<0) return null;
         }
         if(ret[2]==0||ret[3]==0) return null;
@@ -76,7 +80,7 @@ public static class CmdGui {
     private static int CmdGrid(ComShInterpreter sh,List<string> args){
         if(sh.panel==null) return sh.io.Error("panelコマンドでパネルウィンドウを定義してください");
         float[] xywh;
-        if(args.Count==5 && (xywh=XYWHf(args,1))!=null){
+        if(args.Count==5 && (xywh=XYWHf(args,1,true))!=null){
             sh.panel.SetGrid(xywh);
         }else return sh.io.Error("使い方: grid x y 幅 高さ");
         return 0;

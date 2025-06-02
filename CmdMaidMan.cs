@@ -5,6 +5,8 @@ using static System.StringComparison;
 using static COM3D2.ComSh.Plugin.Command;
 using System;
 using System.Reflection;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace COM3D2.ComSh.Plugin {
 
@@ -76,6 +78,10 @@ public static class CmdMaidMan {
         maidParamDic.Add("facesave",new CmdParam<Maid>(MaidParamFaceSave));
         maidParamDic.Add("faceset",new CmdParam<Maid>(MaidParamFaceset));
         maidParamDic.Add("sing",new CmdParam<Maid>(MaidParamSing));
+        maidParamDic.Add("sing2",new CmdParam<Maid>(MaidParamSing2));
+        maidParamDic.Add("sing.mml",new CmdParam<Maid>(MaidParamSingMML));
+        maidParamDic.Add("sing.keys",new CmdParam<Maid>(MaidParamSingKeys));
+        maidParamDic.Add("sing.vowel",new CmdParam<Maid>(MaidParamSingVowel));
         maidParamDic.Add("voice",new CmdParam<Maid>(MaidParamVoice));
         maidParamDic.Add("gravityS",new CmdParam<Maid>(MaidParamGravityS));
         maidParamDic.Add("gravityH",new CmdParam<Maid>(MaidParamGravityH));
@@ -103,6 +109,10 @@ public static class CmdMaidMan {
         maidParamDic.Add("shape.rename",new CmdParam<Maid>(MaidParamShapeRename));
         maidParamDic.Add("clothfollow",new CmdParam<Maid>(MaidParamClothFollow));
         maidParamDic.Add("component",new CmdParam<Maid>(MaidParamComponent));
+        maidParamDic.Add("skirtparam",new CmdParam<Maid>(MaidParamSkirtParam));
+        maidParamDic.Add("skirtparam.curve",new CmdParam<Maid>(MaidParamSkirtParamCurve));
+        maidParamDic.Add("skirtparam.save",new CmdParam<Maid>(MaidParamSkirtParamSave));
+        maidParamDic.Add("skirtparam.load",new CmdParam<Maid>(MaidParamSkirtParamLoad));
 
         maidParamDic.Add("l2w",new CmdParam<Maid>(MaidParamL2W));
         maidParamDic.Add("w2l",new CmdParam<Maid>(MaidParamW2L));
@@ -1498,10 +1508,11 @@ public static class CmdMaidMan {
         m.MabatakiUpdateStop=(sw==0);
         return 1;
     }
+
     private static int MaidParamSing(ComShInterpreter sh,Maid m,string val){
         if(val==null) return 0;
         m.StopKuchipakuPattern();
-        ComShBg.cron.KillJob("maidsing/"+m.status.guid);
+        ComShBg.cron.KillJob("maidsing/"+m.GetInstanceID().ToString());
         if(val==string.Empty) return 1;
 
         string ptn;
@@ -1536,6 +1547,93 @@ public static class CmdMaidMan {
             ca[ci++]=txt[i];
         }
         return new String(ca,0,ci);
+    }
+    private static string kuchipakudir=ComShInterpreter.scriptFolder+@"kuchipaku\";
+    private static int MaidParamSing2(ComShInterpreter sh,Maid m,string val){
+       if(val==null) return 0;
+        m.StopKuchipakuPattern();
+        ComShBg.cron.KillJob("maidsing2/"+m.GetInstanceID().ToString());
+
+        string path=UTIL.GetFullPath(val,kuchipakudir);
+        if(path=="") return sh.io.Error("ファイル名が不正です");
+        string mml="";
+        try{ mml=File.ReadAllText(path); }catch{}
+        if(mml=="") return sh.io.Error("ファイルが読み込めません");
+
+        Kuchipaku kp=Kuchipaku.Create(m);
+        if(kp.SetMML(mml)<0) return sh.io.Error("MMLが不正です");
+
+        m.LipSyncEnabled(false);
+        // BGMを時間基準にして口パク更新
+        ComShBg.cron.AddJob("maidsing2/"+m.GetInstanceID().ToString(),0,0,(t)=>{
+            if(m.body0.m_Bones==null) return -1; // メイドさんが削除された
+            AudioSource asrc=GameMain.Instance.SoundMgr.GetAudioSourceBgm();
+            if(asrc==null||!asrc.isPlaying) return -1; // 歌終了
+            kp.UpdateShapes(m,asrc.time*1000);
+            return 0;
+        });
+        return 1;
+    }
+    private static int MaidParamSingMML(ComShInterpreter sh,Maid m,string val){
+       if(val==null) return 0;
+        m.StopKuchipakuPattern();
+        ComShBg.cron.KillJob("maidsing2/"+m.GetInstanceID().ToString());
+        if(val==string.Empty) return 1;
+
+        Kuchipaku kp=Kuchipaku.Create(m);
+        if(kp.SetMML(val)<0) return sh.io.Error("MMLが不正です");
+
+        m.LipSyncEnabled(false);
+        // 実時間で口パク更新
+        long stime=DateTime.UtcNow.Ticks;
+        ComShBg.cron.AddJob("maidsing2/"+m.GetInstanceID().ToString(),0,0,(t)=>{
+            long cur=(t-stime)/TimeSpan.TicksPerMillisecond;
+            if(m.body0.m_Bones==null) return -1; // メイドさんが削除された
+            if(kp.UpdateShapes(m,cur)!=0) return -1;
+            return 0;
+        });
+        return 1;
+    }
+    private static int MaidParamSingKeys(ComShInterpreter sh,Maid m,string val){
+        Kuchipaku kp;
+        if(val==null){
+            kp=Kuchipaku.Find(m);
+            if(kp!=null) sh.io.Print(String.Join(",",kp.vowelkeys));
+            return 0;
+        }
+        kp=Kuchipaku.Create(m);
+        kp.SetKeys(val.Split(','));
+        return 1;
+    }
+    private static int MaidParamSingVowel(ComShInterpreter sh,Maid m,string val){
+        Kuchipaku kp;
+        if(val==null){
+            kp=Kuchipaku.Find(m);
+            if(kp==null) return 0;
+            for(int i=0; i<6; i++){
+                sh.io.Print("あいうえおん"[i]).Print(':');
+                var arr=kp.aiueon[i];
+                if(arr.Length>0) sh.io.Print(sh.fmt.FVal(arr[0]));
+                for(int j=1; j<arr.Length; j++)
+                    sh.io.Print(',').Print(sh.fmt.FVal(arr[j]));
+                sh.io.PrintLn("");
+            }
+            return 0;
+        }
+        var lines=val.Split('\n');
+        for(int i=0; i<lines.Length; i++){
+            var lr=ParseUtil.LeftAndRight(lines[i],ParseUtil.eqcln);
+            if(lr[0].Length!=1) return sh.io.Error("書式が不正です");
+            char c=lr[0][0];
+            var fa=ParseUtil.FloatArr(lr[1]);
+            if(fa==null) return sh.io.Error("数値が不正です");
+
+            kp=Kuchipaku.Create(m);
+            int ret=kp.SetVowel(c,fa);
+            if(ret==-1) return sh.io.Error("母音が不正です");
+            if(ret==-2) return sh.io.Error("要素数が不正です");
+        }
+        return 1;
     }
 
     private static int MaidParamIid(ComShInterpreter sh,Maid m,string val){
@@ -1790,6 +1888,304 @@ public static class CmdMaidMan {
         if(sa.Length==7 && float.TryParse(sa[6],out f)) jbl.m_fLimitRot=jbr.m_fLimitRot=f;
         return 1;
     }
+    private static int MaidParamSkirtParamSave(ComShInterpreter sh,Maid m,string val){
+        if(val==null) return 0;
+        var lr=ParseUtil.LeftAndRight2(val,':');
+        string file=UTIL.GetFullPath(UTIL.Suffix(lr[1],".psk"),ComShInterpreter.scriptFolder+@"export\");
+        if(file=="") return sh.io.Error("ファイル名が不正です");
+        try{
+            using (var bw=new BinaryWriter(File.OpenWrite(file))){
+                foreach(var skin in m.body0.goSlot) if(m.body0.GetSlotVisible(skin.SlotId)){
+                    if(lr[0]!="" && lr[0]!=skin.SlotId.ToString()) continue;
+                    var sb=skin.obj.GetComponent<DynamicSkirtBone>();
+                    if(sb!=null){
+                        sb.SerializeWrite(bw);
+                        break;
+                    }
+                }
+            }
+        }catch(Exception e){ Debug.Log(e.ToString()); return sh.io.Error("書き込みに失敗しました"); }
+        return 1;
+    }
+    private static int MaidParamSkirtParamLoad(ComShInterpreter sh,Maid m,string val){
+        if(val==null) return 0;
+        var lr=ParseUtil.LeftAndRight2(val,':');
+        var dat=UTIL.AReadAll(UTIL.Suffix(lr[1],".psk"));
+        if(dat==null) return sh.io.Error("読み込みに失敗しました");
+        try{
+            using (var bw=new BinaryReader(new MemoryStream(dat))){
+                foreach(var skin in m.body0.goSlot) if(m.body0.GetSlotVisible(skin.SlotId)){
+                    if(lr[0]!="" && lr[0]!=skin.SlotId.ToString()) continue;
+                    var sb=skin.obj.GetComponent<DynamicSkirtBone>();
+                    if(sb!=null){
+                        sb.SerializeRead(bw);
+                        break;
+                    }
+                }
+            }
+        }catch(Exception e){ Debug.Log(e.ToString()); return sh.io.Error("読み込みに失敗しました"); }
+        return 1;
+    }
+    private static int MaidParamSkirtParam(ComShInterpreter sh,Maid m,string val){
+        if(val==null){
+            foreach(var skin in m.body0.goSlot) if(m.body0.GetSlotVisible(skin.SlotId)){
+                var sb=skin.obj.GetComponent<DynamicSkirtBone>();
+                if(sb!=null) SkirtParamPrint(sh,sb,skin.SlotId);
+            }
+            return 0;
+        }
+        var lines=val.Split(ParseUtil.lf);
+        for(int i=0; i<lines.Length; i++){
+            var lr=ParseUtil.LeftAndRight(lines[i],'=');
+            if(lr[0]!="" && lr[1]!=""){
+                var sk=ParseUtil.LeftAndRight2(lr[0],'.');
+                foreach(var skin in m.body0.goSlot) if(m.body0.GetSlotVisible(skin.SlotId)){
+                    if(sk[0]!="" && sk[0]!=skin.SlotId.ToString()) continue;
+                    var sb=skin.obj.GetComponent<DynamicSkirtBone>();
+                    if(sb!=null){
+                        int ret=SkirtParamSet(sh,sb,sk[1],lr[1]);
+                        if(ret<0) return ret;
+                        sb.UpdateParameters();
+                    }
+                }
+            }
+        }
+        return 1;
+    }
+    private static void SkirtParamPrint(ComShInterpreter sh,DynamicSkirtBone dsb,TBody.SlotID sid){
+        string slot=sid.ToString();
+        sh.io.Print(slot).Print(".radius:").PrintLn(sh.fmt.FVal(dsb.m_fPanierRadius));
+
+        if(dsb.m_PanierRadiusDistribGroup!=null) for(int i=0; i<dsb.m_PanierRadiusDistribGroup.Length; i++){
+            var grp=dsb.m_PanierRadiusDistribGroup[i];
+            sh.io.Print(slot).Print('.').Print(grp.strBoneName).Print(':').PrintLn(sh.fmt.FVal(grp.fRadius));
+        }
+        sh.io.Print(slot).Print(".force:").PrintLn(sh.fmt.FVal(dsb.m_fPanierForce));
+        sh.io.Print(slot).Print(".threshold:").PrintLn(sh.fmt.FVal(dsb.m_fPanierForceDistanceThreshold));
+        sh.io.Print(slot).Print(".stressforce:").PrintLn(sh.fmt.FVal(dsb.m_fPanierStressForce));
+        sh.io.Print(slot).Print(".stressdegree:").Print(sh.fmt.FVal(dsb.m_fStressDgreeMin)).Print('-').PrintLn(sh.fmt.FVal(dsb.m_fStressDgreeMax));;
+        sh.io.Print(slot).Print(".stressscale:").PrintLn(sh.fmt.FVal(dsb.m_fStressMinScale));
+        sh.io.Print(slot).Print(".scaleease:").PrintLn(sh.fmt.FVal(dsb.m_fScaleEaseSpeed));
+        sh.io.Print(slot).Print(".count:").PrintLn(sh.fmt.FVal(dsb.m_nCalcTime));
+        sh.io.Print(slot).Print(".velocity:").PrintLn(sh.fmt.FVal(dsb.m_fVelocityForceRate));
+        sh.io.Print(slot).Print(".gravity:").PrintLn(sh.fmt.FPos(dsb.m_vGravity));
+        sh.io.Print(slot).Print(".spring:")
+            .Print(sh.fmt.FVal(dsb.m_aryHard[0])).Print(',')
+            .Print(sh.fmt.FVal(dsb.m_aryHard[1])).Print(',')
+            .Print(sh.fmt.FVal(dsb.m_aryHard[2])).Print(',')
+            .PrintLn(sh.fmt.FVal(dsb.m_aryHard[3]));
+    }
+    private static int SkirtParamSet(ComShInterpreter sh,DynamicSkirtBone dsb,string key,string value){
+        float f; float[] fa;
+        switch(key){
+        case "radius":
+            if(!float.TryParse(value,out f)||f<=0) return sh.io.Error("数値が不正です");
+            dsb.m_fPanierRadius=f;
+            return 1;
+        case "force":
+            if(!float.TryParse(value,out f)) return sh.io.Error("数値が不正です");
+            dsb.m_fPanierForce=f;
+            return 1;
+        case "threshold":
+            if(!float.TryParse(value,out f)) return sh.io.Error("数値が不正です");
+            dsb.m_fPanierForceDistanceThreshold=f;
+            return 1;
+        case "stressforce":
+            if(!float.TryParse(value,out f)) return sh.io.Error("数値が不正です");
+            dsb.m_fPanierStressForce=f;
+            return 1;
+        case "stressdegree":
+            fa=ParseUtil.FloatArr(value);
+            if(fa==null||fa.Length!=2||fa[0]<0||fa[1]<0) return sh.io.Error("数値が不正です");
+            dsb.m_fStressDgreeMin=fa[0]; dsb.m_fStressDgreeMax=fa[1];
+            return 1;
+        case "stressscale":
+            if(!float.TryParse(value,out f)) return sh.io.Error("数値が不正です");
+            dsb.m_fStressMinScale=f;
+            return 1;
+        case "scaleease":
+            if(!float.TryParse(value,out f)) return sh.io.Error("数値が不正です");
+            dsb.m_fScaleEaseSpeed=f;
+            return 1;
+        case "count":
+            if(!float.TryParse(value,out f)||f<0) return sh.io.Error("数値が不正です");
+            dsb.m_nCalcTime=(int)f;
+            return 1;
+        case "velocity":
+            if(!float.TryParse(value,out f)) return sh.io.Error("数値が不正です");
+            dsb.m_fVelocityForceRate=f;
+            return 1;
+        case "gravity":
+            fa=ParseUtil.Xyz(value);
+            if(fa==null) return sh.io.Error("座標が不正です");
+            dsb.m_vGravity=new Vector3(fa[0],fa[1],fa[2]);
+            return 1;
+        case "spring":
+            fa=ParseUtil.FloatArr(value);
+            if(fa==null||fa.Length!=4) return sh.io.Error("数値が不正です");
+            for(int i=0; i<4; i++) dsb.m_aryHard[i]=fa[i];
+            return 1;
+        default:
+                    if(key.Contains("_A_yure_skirt_") && CMT.SearchObjName(dsb.transform,key,false)!=null){
+                DynamicSkirtBone.PanierRadiusGroup grp;
+                if(dsb.m_PanierRadiusDistribGroup==null){
+                    grp=new DynamicSkirtBone.PanierRadiusGroup();
+                    grp.strBoneName=key;
+                    if(!float.TryParse(value,out f)||f<0) return sh.io.Error("数値が不正です");
+                    grp.fRadius=f;
+                    dsb.m_PanierRadiusDistribGroup=new DynamicSkirtBone.PanierRadiusGroup[]{grp};
+                    return 1;
+                }else{
+
+             for(int i=0; i<dsb.m_PanierRadiusDistribGroup.Length; i++){
+                grp=dsb.m_PanierRadiusDistribGroup[i];
+                if(grp==null) continue;
+                if(key==grp.strBoneName){
+                    if(!float.TryParse(value,out f)||f<=0) return sh.io.Error("数値が不正です");
+                    grp.fRadius=f;
+                    return 1;
+                }
+                                    }
+                }
+                var ga=dsb.m_PanierRadiusDistribGroup;
+                var ga2=new DynamicSkirtBone.PanierRadiusGroup[ga.Length+1]; 
+                Array.Copy(ga,ga2,ga.Length);
+                grp=new DynamicSkirtBone.PanierRadiusGroup();
+                grp.strBoneName=key;
+                if(!float.TryParse(value,out f)||f<0) return sh.io.Error("数値が不正です");
+                grp.fRadius=f;
+                ga2[ga2.Length-1]=grp;
+                dsb.m_PanierRadiusDistribGroup=ga2;
+                return 1;
+            }
+            return sh.io.Error("パラメータが不正です");
+        }
+    }
+    private static int MaidParamSkirtParamCurve(ComShInterpreter sh,Maid m,string val){
+        if(val==null){
+            foreach(var skin in m.body0.goSlot) if(m.body0.GetSlotVisible(skin.SlotId)){
+                var sb=skin.obj.GetComponent<DynamicSkirtBone>();
+                if(sb!=null) SkirtParamCurvePrint(sh,sb,skin.SlotId);
+            }
+            return 0;
+        }
+        var lines=val.Split(ParseUtil.lf);
+        for(int i=0; i<lines.Length; i++){
+            var lr=ParseUtil.LeftAndRight(lines[i],'=');
+            if(lr[0]!="" && lr[1]!=""){
+                foreach(var skin in m.body0.goSlot) if(m.body0.GetSlotVisible(skin.SlotId)){
+                    var sk=ParseUtil.LeftAndRight2(lr[0],'.');
+                    if(sk[0]!="" && sk[0]!=skin.SlotId.ToString()) continue;
+                    var sb=skin.obj.GetComponent<DynamicSkirtBone>();
+                    if(sb!=null){
+                        int ret=SkirtParamCurveSet(sh,sb,sk[1],lr[1]);
+                        if(ret<=0) return ret;
+                        sb.UpdateParameters();
+                    }
+                }
+            }
+        }
+        return 1;
+    }
+    private static AnimationCurve SkirtParamCurve(ComShInterpreter sh,string value){
+        var ret=new AnimationCurve();
+        if(CmdMisc.curveDic.ContainsKey(value)) return CmdMisc.curveDic[value];
+        var fa=ParseUtil.FloatArr2(value,ParseUtil.commaslash);
+        if(fa.Length%4>0||fa.Length<8) return null;
+        for(int i=0; i<fa.Length; i+=4) ret.AddKey(new Keyframe(fa[i],fa[i+1],fa[i+2],fa[i+3]));
+        return ret;
+    }
+    private static void PrintSkirtCurve(string key,ComShInterpreter sh,AnimationCurve curve,string slot){
+        if(curve==null) return;
+        int tail=curve.length-1;
+        float t0=curve[0].time,t1=curve[tail].time,v0=curve[0].value,v1=curve[tail].value;
+        sh.io.Print(slot).Print('.').Print(key).Print(':').Print(sh.fmt.FVal(t0)).Print(',').Print(sh.fmt.FVal(v0))
+            .Print('-').Print(sh.fmt.FVal(t1)).Print(',').PrintLn(sh.fmt.FVal(v1));
+    }
+    private static void PrintSkirtCurveDetail(ComShInterpreter sh,AnimationCurve curve){
+        if(curve==null) return;
+        foreach(var kf in curve.keys){
+            sh.io.Print(sh.fmt.FVal(kf.time)).Print(',').Print(sh.fmt.FVal(kf.value))
+                .Print(sh.fmt.FVal(kf.inTangent)).PrintLn(sh.fmt.FVal(kf.outTangent));
+        }
+    }
+    private static void SkirtParamCurvePrint(ComShInterpreter sh,DynamicSkirtBone dsb,TBody.SlotID sid){
+        string slot=sid.ToString();
+        PrintSkirtCurve("radius",sh,dsb.m_PanierRadiusDistrib,slot);
+        if(dsb.m_PanierRadiusDistribGroup!=null) for(int i=0; i<dsb.m_PanierRadiusDistribGroup.Length; i++){
+            var grp=dsb.m_PanierRadiusDistribGroup[i];
+            PrintSkirtCurve(grp.strBoneName,sh,grp.Curve,slot);
+        }
+        PrintSkirtCurve("force",sh,dsb.m_PanierForceDistrib,slot);
+        PrintSkirtCurve("velocity",sh,dsb.m_VelocityForceRateDistrib,slot);
+        PrintSkirtCurve("gravity",sh,dsb.m_GravityDistrib,slot);
+    }
+    private static int SkirtParamCurveSet(ComShInterpreter sh,DynamicSkirtBone dsb,string key,string value){
+        AnimationCurve cv;
+        switch(key){
+        case "radius":
+            if(value==""){ PrintSkirtCurveDetail(sh,dsb.m_PanierRadiusDistrib); return 0;}
+             cv=SkirtParamCurve(sh,value);
+             if(cv==null) return sh.io.Error("数値が不正です");
+             dsb.m_PanierRadiusDistrib=cv;
+            return 1;
+        case "force":
+            if(value==""){ PrintSkirtCurveDetail(sh,dsb.m_PanierForceDistrib); return 0;}
+            cv=SkirtParamCurve(sh,value);
+            if(cv==null) return sh.io.Error("数値が不正です");
+            dsb.m_PanierForceDistrib=cv;
+            return 1;
+        case "velocity":
+            if(value==""){ PrintSkirtCurveDetail(sh,dsb.m_VelocityForceRateDistrib); return 0;}
+            cv=SkirtParamCurve(sh,value);
+            if(cv==null) return sh.io.Error("数値が不正です");
+            dsb.m_VelocityForceRateDistrib=cv;
+            return 1;
+        case "gravity":
+            if(value==""){ PrintSkirtCurveDetail(sh,dsb.m_GravityDistrib); return 0;}
+            cv=SkirtParamCurve(sh,value);
+            if(cv==null) return sh.io.Error("数値が不正です");
+            dsb.m_GravityDistrib=cv;
+            return 1;
+        default:
+            if(key.Contains("_A_yure_skirt_") && CMT.SearchObjName(dsb.transform,key,false)!=null){
+                if(dsb.m_PanierRadiusDistribGroup==null){
+                    var grp=new DynamicSkirtBone.PanierRadiusGroup();
+                    grp.strBoneName=key;
+                    cv=SkirtParamCurve(sh,value);
+                    if(cv==null) return sh.io.Error("数値が不正です");
+                    grp.Curve=cv;
+                    dsb.m_PanierRadiusDistribGroup=new DynamicSkirtBone.PanierRadiusGroup[]{grp};
+                    return 1;
+                }else{
+                    DynamicSkirtBone.PanierRadiusGroup grp;
+                    if(dsb.m_PanierRadiusDistribGroup!=null) for(int i=0; i<dsb.m_PanierRadiusDistribGroup.Length; i++){
+                        grp=dsb.m_PanierRadiusDistribGroup[i];
+                        if(grp==null) continue;
+                        if(key==grp.strBoneName){
+                            if(value==""){ PrintSkirtCurveDetail(sh,grp.Curve); return 0;}
+                            cv=SkirtParamCurve(sh,value);
+                            if(cv==null) return sh.io.Error("数値が不正です");
+                            grp.Curve=cv;
+                            return 1;
+                        }
+                    }
+                    var ga=dsb.m_PanierRadiusDistribGroup;
+                    var ga2=new DynamicSkirtBone.PanierRadiusGroup[ga.Length+1]; 
+                    Array.Copy(ga,ga2,ga.Length);
+                    grp=new DynamicSkirtBone.PanierRadiusGroup();
+                    grp.strBoneName=key;
+                    cv=SkirtParamCurve(sh,value);
+                    if(cv==null) return sh.io.Error("数値が不正です");
+                    grp.Curve=cv;
+                    ga2[ga2.Length-1]=grp;
+                    dsb.m_PanierRadiusDistribGroup=ga2;
+                    return 1;
+                }
+            }
+            return sh.io.Error("パラメータが不正です");
+        }
+    }
     private static int MaidParamBBox(ComShInterpreter sh,Maid m,string val){
         Vector3 min=new Vector3(float.MaxValue,float.MaxValue,float.MaxValue);
         Vector3 max=new Vector3(float.MinValue,float.MinValue,float.MinValue);
@@ -1855,20 +2251,27 @@ public static class CmdMaidMan {
     private static int MaidParamSkirtYure(ComShInterpreter sh,Maid m,string val){
         if(m.body0==null) return 1;
         if(val==null){
-            SkirtYureSub(sh,m,"skirt",-1);
-            SkirtYureSub(sh,m,"onepiece",-1);
+            foreach(var skin in m.body0.goSlot) if(m.body0.GetSlotVisible(skin.SlotId)){
+                var sb=skin.obj.GetComponent<DynamicSkirtBone>();
+                if(sb!=null) SkirtYureSub(sh,m,skin.SlotId.ToString(),-1);
+            }
             return 0;
         }
 
-        int sw=ParseUtil.OnOff(val);
+        var lr=ParseUtil.LeftAndRight2(val,':');
+        int sw=ParseUtil.OnOff(lr[1]);
         if(sw<0) return sh.io.Error("onまたはoffを指定してください");
 
         int ret=0;
-        if(m.body0.GetSlotVisible(TBody.SlotID.skirt)){
-            ret=SkirtYureSub(sh,m,"skirt",sw);
-            if(ret<0) return ret;
+        foreach(var skin in m.body0.goSlot) if(m.body0.GetSlotVisible(skin.SlotId)){
+            string slot=skin.SlotId.ToString();
+            if(lr[0]!="" && lr[0]!=slot) continue;
+            var sb=skin.obj.GetComponent<DynamicSkirtBone>();
+            if(sb!=null){
+                ret=SkirtYureSub(sh,m,slot,sw);
+                if(ret<0) return ret;
+            }
         }
-        if(m.body0.GetSlotVisible(TBody.SlotID.onepiece)) ret=SkirtYureSub(sh,m,"onepiece",sw);
         return ret;
     }
     private static int SkirtYureSub(ComShInterpreter sh,Maid m,string slotname,int sw){
@@ -2614,6 +3017,240 @@ public static class MaidUtil {
                 else return ast.name;
             }
         return "";
+    }
+}
+
+public class Kuchipaku {
+    public static Dictionary<int,Kuchipaku> kuchipakuDic=new Dictionary<int,Kuchipaku>();
+
+    public static Kuchipaku Find(Maid m){
+        int iid=m.GetInstanceID();
+        if(kuchipakuDic.TryGetValue(iid,out Kuchipaku kp)) return kp;
+        return null;
+    }
+    public static Kuchipaku Create(Maid m){
+        int iid=m.GetInstanceID();
+        if(kuchipakuDic.TryGetValue(iid,out Kuchipaku kp)) return kp;
+        return (kuchipakuDic[iid]=new Kuchipaku());
+        // お掃除する機会がないけど、通常は3くらい、最大でも40程度なのでまぁ良しとする
+    }
+
+    public void SetKeys(string[] keys){
+        vowelkeys=keys;
+        for(int i=0; i<6; i++) aiueon[i]=new float[keys.Length];
+    }
+    public int SetVowel(char c,float[] def){
+        int idx="あいうえおんaiueon".IndexOf(c);
+        if(idx<0) return -1;
+        idx%=6;
+        if(def.Length!=vowelkeys.Length) return -2;
+        aiueon[idx]=def;
+        return 0;
+    }
+    private static string[] kana ={
+	    "あいうえおぁぃぅぇぉはひふへほらりるれろ",
+	    "かきくけこがぎぐげごさしすせそざじずぜぞたちつてとだぢづでど",	// ややこわばる系
+	    "なにぬねのまみむめもぱぴぷぺぽばびぶべぼ",		// 閉じる系
+	    "わ　　　を",			// 「う」を経由する系
+	    "や　ゆ　よゃ　ゅ　ょ"	// 「い」を経由する系
+    };
+    public string[] vowelkeys=new string[]{"moutha","mouthc","mouthdw","mouthhe","mouthi","mouths","toothoff"};
+    public float[][] aiueon=new float[6][]{
+        new float[]{0.3f,0.33f,0.3f,0,0,0.2f,0},
+        new float[]{0.02f,0.2f,0.1f,0,0.5f,0.01f,0},
+        new float[]{0,0.75f,0.1f,0,0,0,1},
+        new float[]{0.05f,0.15f,0.15f,0,0.05f,0.25f,0},
+        new float[]{0.15f,0.8f,0.1f,0,0,0,1},
+        new float[]{0f,0.33f,0.1f,0.1f,0.05f,0,0}
+    };
+    public void SetVowelKeys(string[] ka){
+        vowelkeys=ka;
+        if(aiueon[0].Length!=ka.Length){
+            for(int i=0; i<6; i++) aiueon[i]=new float[ka.Length];
+        }
+    }
+    public int SetVowel(int id,float[] va){
+        if(va.Length!=vowelkeys.Length) return -1;
+        aiueon[id]=va;
+        return 0;
+    }
+
+    public static Regex regcmd=new Regex(
+        @"\G((?<ctr>[TVLQE])(?<len>[1-9]\d*)|(?<rest>[Rっー～])(?<len>[1-9]\d*)?(?<futen>\.*)|(?<note>[あ-ん][ゃゅょ]?)(?<len>[1-9]\d*)?(?<futen>\.*))",
+        RegexOptions.Compiled|RegexOptions.IgnoreCase|RegexOptions.ExplicitCapture
+    );
+    public AnimationCurve[] curves; 
+    public float seconds;
+    public struct KPEvent {
+        public float time;
+        public string nstr;
+        public KPEvent(float t,int n){time=t; nstr=n.ToString();}
+    }
+    public List<KPEvent> kpevents;
+    public int kpevIdx=0;
+    public int UpdateShapes(Maid m,float t){
+        if(kpevents!=null&&kpevents.Count>0){
+            if(kpevents[0].time>=t) kpevIdx=0;
+            for(; kpevIdx<kpevents.Count && kpevents[kpevIdx].time<=t; kpevIdx++)
+                Command.DoPublish("kuchipakuevent"+kpevents[kpevIdx].nstr,m.ActiveSlotNo.ToString());
+        }
+        TBodySkin face=m.body0.Face;
+        if(face==null||face.morph==null) return -1;
+        var hash=face.morph.hash;
+        for(int i=0; i<vowelkeys.Length; i++){
+            string key=vowelkeys[i];
+            if(!hash.ContainsKey(key)) continue;
+            float v=curves[i].Evaluate(t);
+            face.morph.SetValueBlendSet(m.ActiveFace,key,v*100);
+        }
+        return (seconds<=t)?1:0;
+    }
+    public int SetMML(string mml){
+        curves=new AnimationCurve[vowelkeys.Length];
+        for(int i=0; i<vowelkeys.Length; i++){
+            curves[i]=new AnimationCurve();
+            addkf(curves[i],0,aiueon[5][i]);
+        }
+        kpevents=new List<KPEvent>();
+
+        float[] max=new float[vowelkeys.Length];
+        for(int i=0; i<vowelkeys.Length; i++){
+            max[i]=0;
+            for(int j=0; j<5; j++) if(max[i]<aiueon[j][i]) max[i]=aiueon[j][i];
+        }
+
+        int tempo=120,l=4;
+        float mul=1,mv=1,t=0;
+        string nmml=normalize(mml);
+        var m=regcmd.Match(nmml);
+        while(m.Success){
+            if(m.Groups["ctr"].Success){
+                if(!m.Groups["len"].Success) return -1;
+                int n=int.Parse(m.Groups["len"].Value);
+                char c=char.ToLower(m.Groups["ctr"].Value[0]);
+                switch(c){
+                case 't': tempo=n; break;
+                case 'v': mul=n/100f; break;
+                case 'l': l=n; break;
+                case 'q': mv=n/100f; break;
+                case 'e': kpevents.Add(new KPEvent(t,n)); break;
+                }
+            }else if(m.Groups["rest"].Success){
+                int rl=l;
+                if(m.Groups["len"].Success) rl=int.Parse(m.Groups["len"].Value);
+                int ft=0;
+                if(m.Groups["futen"].Success) ft=m.Groups["futen"].Value.Length;
+                float rdt=l2t(tempo,futen(rl,ft));
+                t+=rdt;
+                for(int i=0; i<vowelkeys.Length; i++) addkf(curves[i],t,curves[i][curves[i].length-1].value);
+            }else if(m.Groups["note"].Success){
+                string note=m.Groups["note"].Value;
+                char o1=note[0];
+                char o2=note.Length>1?note[1]:'\0';
+                int nl=l;
+                if(m.Groups["len"].Success) nl=int.Parse(m.Groups["len"].Value);
+                int ft=0;
+                if(m.Groups["futen"].Success) ft=m.Groups["futen"].Value.Length;
+                float ndt=l2t(tempo,futen(nl,ft));
+                float atk=ndt*mv;
+                float[] def;
+                if(o2!='\0'){
+                    int b=kana[4].IndexOf(o2);
+                    if(b<0) return -1;
+                    b=b%5;
+                    def=aiueon[b];
+                    for(int i=0; i<vowelkeys.Length; i++) addkf(curves[i],t+atk/2,mul*Mathf.Lerp(aiueon[1][i],def[i],0.4f));
+                }else{
+                    int b=-1;
+                    if(o1=='ん'){
+                        def=aiueon[5];
+                    }else{
+                        int si=0;
+                        for(; si<kana.Length; si++){
+                            b=kana[si].IndexOf(o1);
+                            if(b>=0) break;
+                        }
+                        if(b<0) return -1;
+                        b=b%5;
+                        def=aiueon[b];
+                        if(si==1){
+                            for(int i=0; i<max.Length; i++) addkf(curves[i],t+atk/2,mul*Mathf.Lerp(max[i],def[i],0.7f));
+                        }else if(si==2){
+                            for(int i=0; i<vowelkeys.Length; i++) addkf(curves[i],t+atk/2,mul*Mathf.Lerp(aiueon[5][i],def[i],0.1f));
+                        }else if(si==3){
+                            for(int i=0; i<vowelkeys.Length; i++) addkf(curves[i],t+atk/2,mul*Mathf.Lerp(aiueon[2][i],def[i],0.3f));
+                        }else if(si==4){
+                            for(int i=0; i<vowelkeys.Length; i++) addkf(curves[i],t+atk/2,mul*Mathf.Lerp(aiueon[1][i],def[i],0.4f));
+                        }
+                    }
+                }
+                for(int i=0; i<vowelkeys.Length; i++) addkf(curves[i],t+atk,mul*def[i]);
+                t+=ndt;
+                if(ndt>atk) for(int i=0; i<vowelkeys.Length; i++) addkf(curves[i],t,mul*def[i]);
+            }
+            m=m.NextMatch();
+        }
+        seconds=t*1000f;
+
+        compact();
+
+        return 0;
+    }
+    private int addkf(AnimationCurve ac,float t,float v){ return ac.AddKey(new Keyframe(Mathf.Round(t),fval(v),0,0)); }
+    private float fval(float f){ return (float)Math.Round((double)f,5,MidpointRounding.AwayFromZero); }
+    private float l2t(int tempo,float l){ return 60f / tempo * l * 4 * 1000; }
+	private float futen(float len,int nn){ return (2-1f/(1<<nn))/len; }
+
+    private void compact(){
+        for(int i=0; i<vowelkeys.Length; i++){
+            var cv=curves[i];
+            if(cv.length<=1) continue;
+            var cv2=new AnimationCurve();
+            cv2.AddKey(cv[0]);
+            int j=1;
+            for(; j<cv.length-1; j++)
+                if(cv[j].value!=cv[j-1].value || cv[j].value!=cv[j+1].value) cv2.AddKey(cv[j]);
+            cv2.AddKey(cv[j]);
+            curves[i]=cv2;
+        }
+    }
+
+    public static Regex regnormal=new Regex(
+        @"\s+|[フふヴゔ][ぁぃぇぉァィェォ]?",
+        RegexOptions.Compiled
+    );
+    public string normalize(string mml){
+        StringBuilder sb=new StringBuilder(mml.Length);
+        var m=regnormal.Match(mml);
+        int s=0;
+        while(m.Success){
+            if(m.Index>s) sb.Append(mml.Substring(s,m.Index-s));
+            int i=m.Index;
+            s=m.Index+m.Value.Length;
+            if(char.IsWhiteSpace(m.Value[0])){ m=m.NextMatch(); continue; }
+            char c=m.Value[0];
+            if(c=='フ'||c=='ふ'){
+                if(m.Value.Length==1) sb.Append('ふ');
+                else switch(m.Value[1]){
+                case 'ぁ': case 'ァ': sb.Append('わ'); break;
+                case 'ぃ': case 'ィ': sb.Append('ひ'); break;
+                case 'ぇ': case 'ェ': sb.Append('へ'); break;
+                case 'ぉ': case 'ォ': sb.Append('を'); break;
+                }
+            }else if(c=='ヴ'||c=='ゔ'){
+                if(m.Value.Length==1) sb.Append('ぶ');
+                else switch(m.Value[1]){
+                case 'ぁ': case 'ァ': sb.Append('ば'); break;
+                case 'ぃ': case 'ィ': sb.Append('び'); break;
+                case 'ぇ': case 'ェ': sb.Append('べ'); break;
+                case 'ぉ': case 'ォ': sb.Append('ぼ'); break;
+                }
+            }
+            m=m.NextMatch();
+        }
+        if(s==0) return mml;
+        if(s<mml.Length) sb.Append(mml.Substring(s));
+        return sb.ToString();
     }
 }
 }

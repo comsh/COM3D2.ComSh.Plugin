@@ -36,6 +36,8 @@ public static class CmdMeshes {
         meshParamDic.Add("findverlist",new CmdParam<SingleMesh>(MeshParamFindVerlist));
         meshParamDic.Add("weightverno",new CmdParam<SingleMesh>(MeshParamWeightVerno));
         meshParamDic.Add("weightverlist",new CmdParam<SingleMesh>(MeshParamWeightVerlist));
+        meshParamDic.Add("nearbyverno",new CmdParam<SingleMesh>(MeshParamNearbyVerno));
+        meshParamDic.Add("nearbyverlist",new CmdParam<SingleMesh>(MeshParamNearbyVerlist));
         meshParamDic.Add("wrap",new CmdParam<SingleMesh>(MeshParamTexWrap));
         meshParamDic.Add("uvwh",new CmdParam<SingleMesh>(MeshParamUVWH));
         meshParamDic.Add("graft",new CmdParam<SingleMesh>(MeshParamGraft));
@@ -54,6 +56,7 @@ public static class CmdMeshes {
         meshParamDic.Add("mateload",new CmdParam<SingleMesh>(MeshParamMaterialLoad));
         meshParamDic.Add("matecp",new CmdParam<SingleMesh>(MeshParamMaterialCopy));
         meshParamDic.Add("texcp",new CmdParam<SingleMesh>(MeshParamTextureCopy));
+        meshParamDic.Add("cut",new CmdParam<SingleMesh>(MeshParamCut));
     }
     private static Dictionary<string,CmdParam<SingleMesh>> meshParamDic=new Dictionary<string,CmdParam<SingleMesh>>();
 
@@ -94,38 +97,33 @@ public static class CmdMeshes {
         return ret;
     }
     private static int MeshParamFilter(ComShInterpreter sh,SingleMesh sm,string val){
-        if(val==null || val=="") return 0;
-        float[] sz=new float[6];
-        int n=ParseUtil.XyzSub(val,sz);
-        if(n!=4 && n!=6) return sh.io.Error("フィルタの形式が不正です");
-        if(n==4 && sz[3]<=0) return sh.io.Error("半径の指定が不正です");
-        else if(n==6 && (sz[3]<=0||sz[4]<=0||sz[5]<=0)) return sh.io.Error("幅/高さ/奥行の指定が不正です");
-        if(n==6){
-            sm.filter=new float[]{  // x,y,z,w,h,d -> x0,x1,y0,y1,z0,z1
-                sz[0]-sz[3]/2,sz[0]+sz[3]/2,
-                sz[1]-sz[4]/2,sz[1]+sz[4]/2,
-                sz[2]-sz[5]/2,sz[2]+sz[5]/2
-            };
-        }else if(n==4){
-            sm.filter=new float[]{ sz[0],sz[1],sz[2],sz[3]*sz[3] };   // x,y,z,r -> x,y,z,r^2
-        }
-        return 1;
+        return MeshParamFilterSub(sh,sm,val,out sm.filter);
     }
     private static int MeshParamExclude(ComShInterpreter sh,SingleMesh sm,string val){
+        return MeshParamFilterSub(sh,sm,val,out sm.exclude);
+    }
+    private static int MeshParamFilterSub(ComShInterpreter sh,SingleMesh sm,string val,out float[] result){
+        result=null;
         if(val==null || val=="") return 0;
-        float[] sz=new float[6];
-        int n=ParseUtil.XyzSub(val,sz);
-        if(n!=4 && n!=6) return sh.io.Error("フィルタの形式が不正です");
-        if(n==4 && sz[3]<=0) return sh.io.Error("半径の指定が不正です");
+        float[] sz=ParseUtil.FloatArr(val);
+        if(sz==null) return sh.io.Error("数値が不正です");
+        int n=sz.Length;
+        if(n!=4 && n!=6 && n!=8) return sh.io.Error("フィルタの形式が不正です");
+        if((n==4 && sz[3]<=0) || (n==8 && sz[7]<=0)) return sh.io.Error("半径の指定が不正です");
         else if(n==6 && (sz[3]<=0||sz[4]<=0||sz[5]<=0)) return sh.io.Error("幅/高さ/奥行の指定が不正です");
         if(n==6){
-            sm.exclude=new float[]{  // x,y,z,w,h,d -> x0,x1,y0,y1,z0,z1
+            result=new float[]{  // x,y,z,w,h,d -> x0,x1,y0,y1,z0,z1
                 sz[0]-sz[3]/2,sz[0]+sz[3]/2,
                 sz[1]-sz[4]/2,sz[1]+sz[4]/2,
                 sz[2]-sz[5]/2,sz[2]+sz[5]/2
             };
         }else if(n==4){
-            sm.exclude=new float[]{ sz[0],sz[1],sz[2],sz[3]*sz[3] };   // x,y,z,r -> x,y,z,r^2
+            result=new float[]{ sz[0],sz[1],sz[2],sz[3]*sz[3] };   // x,y,z,r -> x,y,z,r^2
+        }else if(n==8){
+            float d=Mathf.Sqrt(sz[3]*sz[3]+sz[4]*sz[4]+sz[5]*sz[5]);
+            result=new float[]{  // x,y,z,nx,ny,nz,h,r -> x,y,z,nx,ny,nz,h,r^2
+                sz[0],sz[1],sz[2], sz[3]/d,sz[4]/d,sz[5]/d, sz[6],sz[7]*sz[7]
+            };
         }
         return 1;
     }
@@ -154,6 +152,7 @@ public static class CmdMeshes {
     private static int MeshParamFindVerlist(ComShInterpreter sh,SingleMesh sm,string val){
         var va=MeshParamFindVerSub(sm,val,out string err);
         if(err!="") return sh.io.Error(err);
+        sm.list=null;
         if(va!=null && va.Length>0) sm.list=va;
         return 1;
     }
@@ -300,17 +299,17 @@ public static class CmdMeshes {
                 c.uv=t;
                 changed|=4;
             }
-            if(suv2!="" && (t=sh.env["_uv2"])!=suv2){
+            if((t=sh.env["_uv2"])!=suv2){
                 if(c==null) c=new VerLoopChange(th);
                 c.uv2=t;
                 changed|=8;
             }
-            if(suv3!="" && (t=sh.env["_uv3"])!=suv3){
+            if((t=sh.env["_uv3"])!=suv3){
                 if(c==null) c=new VerLoopChange(th);
                 c.uv3=t;
                 changed|=16;
             }
-            if(suv4!="" && (t=sh.env["_uv4"])!=suv4){
+            if((t=sh.env["_uv4"])!=suv4){
                 if(c==null) c=new VerLoopChange(th);
                 c.uv4=t;
                 changed|=32;
@@ -405,6 +404,43 @@ public static class CmdMeshes {
         else if(mt==MeshTopology.Points)
             sm.mi.mesh.SetIndices(Indices1(ia),mt,sm.submeshno);
     }
+    private static int MeshParamCut(ComShInterpreter sh,SingleMesh sm,string val){
+        if(val==null) return 0;
+        string[] lr=ParseUtil.LeftAndRight(val,':');
+        if(lr[0]==""||lr[1]=="") return sh.io.Error("書式が不正です");
+        int[] lst1=ParseUtil.IntArr(lr[0]);    //そんなに多数指定しないだろうから線形で
+        int[] lst2=ParseUtil.IntArr(lr[1]);
+        if(lst1==null||lst2==null) return sh.io.Error(ParseUtil.error);
+        int[] tri=sm.mi.GetIndices3(sm.submeshno);
+        List<int> tri2=new List<int>(tri.Length);
+        for(int i=0; i<tri.Length; i+=3){
+            int a=tri[i],b=tri[i+1],c=tri[i+2];
+            int j,k; 
+            for(j=0; j<lst1.Length; j++){
+                if(lst1[j]==a){
+                    for(k=0; k<lst2.Length; k++) if(lst2[k]==b||lst2[k]==c) break;
+                    if(k<lst2.Length) break;
+                }else if(lst1[j]==b){
+                    for(k=0; k<lst2.Length; k++) if(lst2[k]==a||lst2[k]==c) break;
+                    if(k<lst2.Length) break;
+                }else if(lst1[j]==c){
+                    for(k=0; k<lst2.Length; k++) if(lst2[k]==a||lst2[k]==b) break;
+                    if(k<lst2.Length) break;
+                }
+            }
+            if(j==lst1.Length){ tri2.Add(a); tri2.Add(b); tri2.Add(c);}
+        }
+        int[] ia=tri2.ToArray();
+        sm.mi.mesh.UpdateIndices3(sm.submeshno,ia);
+        var mt=sm.mi.mesh.GetTopology(sm.submeshno);
+        if(mt==MeshTopology.Triangles)
+            sm.mi.mesh.SetIndices(ia,mt,sm.submeshno);
+        else if(mt==MeshTopology.Lines)
+            sm.mi.mesh.SetIndices(Indices2(ia),mt,sm.submeshno);
+        else if(mt==MeshTopology.Points)
+            sm.mi.mesh.SetIndices(Indices1(ia),mt,sm.submeshno);
+        return 1;
+    }
     private static int MeshParamShader(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null){
             sh.io.Print(sm.mi.material[sm.submeshno].shader.name);
@@ -450,6 +486,7 @@ public static class CmdMeshes {
             var m=new Material(sm.mi.material[sm.submeshno]);
             sm.mi.material[sm.submeshno].CopyPropertiesFromMaterial(mate);
             sm.mi.material[sm.submeshno].CopyPropertiesFromMaterial(m);
+            sm.mi.material[sm.submeshno].shaderKeywords=(string[])mate.shaderKeywords.Clone();
             GameObject.Destroy(m);
             GameObject.Destroy(mate);
         }
@@ -833,6 +870,7 @@ public static class CmdMeshes {
                     tex.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
                     var old=mate.GetTexture(prop);
                     if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
+                    if(mode==1) tex.Compress(true);
                     mate.SetTexture(prop,tex);
                     texiid.Add(tex);
                 }
@@ -1076,7 +1114,7 @@ public static class CmdMeshes {
         }else{
             prop="_MainTex"; mat=val;
         }
-        float[] fa=ParseUtil.FloatArr(mat);
+        float[] fa=ParseUtil.FloatArr2(mat,ParseUtil.commaslash);
         if(fa==null||fa.Length!=20) return sh.io.Error("カラーマトリクスが不正です");
 
         sm.mi.EditMaterial();
@@ -1450,6 +1488,116 @@ public static class CmdMeshes {
         }
         return 1;
     }
+    private static int MeshParamNearbyVerno(ComShInterpreter sh,SingleMesh sm,string val){
+        int ret=MeshParamNearbyVernoSub(sh,sm,val,out List<int> vers);
+        if(ret<=0) return ret;
+        if(vers.Count>0){
+            sh.io.Print(vers[0].ToString());
+            for(int i=1; i<vers.Count; i++) sh.io.Print(',').Print(vers[i].ToString());
+        }
+        return 0;
+    }
+    private static int MeshParamNearbyVerlist(ComShInterpreter sh,SingleMesh sm,string val){
+        int ret=MeshParamNearbyVernoSub(sh,sm,val,out List<int> vers);
+        if(ret<=0) return ret;
+        sm.list=vers.ToArray();
+        return 1;
+    }
+    private static int MeshParamNearbyVernoSub(ComShInterpreter sh,SingleMesh sm,string val,out List<int> vers){
+        vers=null;
+        if(val==null) return 0;
+        var sa=ParseUtil.LeftAndRight(val,':');
+        var fa=ParseUtil.FloatArr(sa[0]);
+        if(fa==null||fa.Length<2||fa.Length>3) return sh.io.Error("座標が不正です");
+        float r=0;
+        int bk=0;
+        if(sa[1]!=""){
+            var opt=ParseUtil.FloatArr(sa[1]);
+            if(opt==null||opt.Length>2) return sh.io.Error("数値が不正です");
+            if(opt.Length>0) r=opt[0];
+            if(opt.Length>1) bk=(int)opt[1];
+        }
+ 
+        int midx=sm.mi.mesh.FindMeshIdx(sm.submeshno);
+        if(midx<0) return sh.io.Error("レンダラがありません");
+        bool smrq=sm.mi.mesh[midx].rend.GetType()==typeof(SkinnedMeshRenderer);
+
+        Transform rendtr=sm.mi.mesh[midx].rend.transform;
+        Mesh mesh;
+        if(smrq){
+            SkinnedMeshRenderer smr=(SkinnedMeshRenderer)sm.mi.mesh[midx].rend;
+            mesh=new Mesh();
+            smr.BakeMesh(mesh);
+        }else{
+            MeshRenderer mr=(MeshRenderer)sm.mi.mesh[midx].rend;
+            MeshFilter mf=mr.gameObject.GetComponent<MeshFilter>();
+            if(mf==null) return sh.io.Error("メッシュがありません");
+            mesh=mf.sharedMesh;
+        }
+        vers=new List<int>();
+        var va=mesh.vertices;
+        var tri=sm.mi.GetIndices3(sm.submeshno);
+        HashSet<int> vs=new HashSet<int>();
+        if(fa.Length==2){
+            Camera cam=GameMain.Instance.MainCamera.camera;
+            if(bk==0){
+                var camdir=rendtr.InverseTransformDirection(cam.transform.forward);
+                for(int i=0; i<tri.Length; i+=3){   // 見える側だけ対象
+                    Vector3 v0=va[tri[i]],v1=va[tri[i+1]],v2=va[tri[i+2]];
+                    Vector3 nv=Vector3.Cross((v1-v0).normalized,(v2-v0).normalized);
+                    if(Vector3.Dot(nv,camdir)>=0) continue;
+                    vs.Add(tri[i]); vs.Add(tri[i+1]); vs.Add(tri[i+2]);
+                }
+            }else{
+                for(int i=0; i<tri.Length; i+=3){vs.Add(tri[i]); vs.Add(tri[i+1]); vs.Add(tri[i+2]);}
+            }
+
+            float y=(cam.pixelHeight-1-fa[1]);
+            var tgt=new Vector2(fa[0],y);
+            if(r==0){
+                float min=float.MaxValue;
+                int minidx=0;
+                foreach(int vi in vs){
+                    var p=cam.WorldToScreenPoint(rendtr.TransformPoint(va[vi]));
+                    Vector2 p2=new Vector2(p.x,p.y);
+                    float dd=(p2-tgt).sqrMagnitude;
+                    if(dd<min){min=dd; minidx=vi;}
+                }
+                vers.Add(minidx);
+            }else{
+                float rr=r*r;
+                foreach(int vi in vs){
+                    var p=cam.WorldToScreenPoint(rendtr.TransformPoint(va[vi]));
+                    Vector2 p2=new Vector2(p.x,p.y);
+                    float dd=(p2-tgt).sqrMagnitude;
+                    if(rr>=dd) vers.Add(vi);
+                }
+            }
+        }else{
+            for(int i=0; i<tri.Length; i+=3){vs.Add(tri[i]); vs.Add(tri[i+1]); vs.Add(tri[i+2]);}
+            // tgtをInverTransformPoint()した方が速いけどradiusがscaleに左右されそうなので
+            var tgt=new Vector3(fa[0],fa[1],fa[2]);
+            if(r==0){
+                float min=float.MaxValue;
+                int minidx=0;
+                foreach(int vi in vs){
+                    var p=rendtr.TransformPoint(va[vi]);
+                    float dd=(p-tgt).sqrMagnitude;
+                    if(dd<min){min=dd; minidx=vi;}
+                }
+                vers.Add(minidx);
+            }else{
+                float rr=r*r;
+                foreach(int vi in vs){
+                    var p=rendtr.TransformPoint(va[vi]);
+                    float dd=(p-tgt).sqrMagnitude;
+                    if(dd<=rr) vers.Add(vi);
+                }
+            }
+        }
+        if(smrq) GameObject.Destroy(mesh);
+        return 1;
+    }
 
     private static int MeshParamVideo(ComShInterpreter sh,SingleMesh sm,string val){
         int midx=sm.mi.mesh.FindMeshIdx(sm.submeshno);
@@ -1628,25 +1776,24 @@ public static class CmdMeshes {
         public float[] areaex=null;
         public int[] list=null;
         public int ApplyFilter(Vector3 vt){
-            if(filter!=null){
-                if(filter.Length==6){
-                    if( filter[0]>vt.x || filter[1]<vt.x 
-                     || filter[2]>vt.y || filter[3]<vt.y
-                     || filter[4]>vt.z || filter[5]<vt.z ) return 0;
-                }else if(filter.Length==4){
-                    float x=vt.x-filter[0], y=vt.y-filter[1], z=vt.z-filter[2];
-                    if(filter[3] < x*x+y*y+z*z ) return 0;
-                }
-            }
-            if(exclude!=null){
-                if(exclude.Length==6){
-                    if( exclude[0]<=vt.x && exclude[1]>=vt.x 
-                     && exclude[2]<=vt.y && exclude[3]>=vt.y
-                     && exclude[4]<=vt.z && exclude[5]>=vt.z) return 0;
-                }else if(exclude.Length==4){
-                    float x=vt.x-exclude[0], y=vt.y-exclude[1], z=vt.z-exclude[2];
-                    if(exclude[3] >= x*x+y*y+z*z ) return 0;
-                }
+            if(filter!=null && CheckFilter(vt,filter)==0) return 0;
+            if(exclude!=null && CheckFilter(vt,exclude)==1) return 0;
+            return 1;
+        }
+        private int CheckFilter(Vector3 vt,float[] flt){
+            if(flt.Length==6){
+                if( flt[0]>vt.x || flt[1]<vt.x 
+                 || flt[2]>vt.y || flt[3]<vt.y
+                 || flt[4]>vt.z || flt[5]<vt.z ) return 0;
+            }else if(flt.Length==4){
+                float x=vt.x-flt[0], y=vt.y-flt[1], z=vt.z-flt[2];
+                if(flt[3] < x*x+y*y+z*z ) return 0;
+            }else if(flt.Length==8){
+                var n=new Vector3(flt[3],flt[4],flt[5]);
+                var v=new Vector3(vt.x-flt[0],vt.y-flt[1],vt.z-flt[2]);
+                float dot=Mathf.Abs(Vector3.Dot(n,v));
+                if(dot>flt[6]) return 0;
+                if((n*dot-v).sqrMagnitude>flt[7]) return 0;
             }
             return 1;
         }

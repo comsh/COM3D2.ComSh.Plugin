@@ -415,6 +415,7 @@ public static class ParseUtil {
 
     // SplitやTrimの引数が配列とparam配列の２通りしかないので
     public static char[] comma={','};
+    public static char[] commaslash={',','/'};
     public static char[] period={'.'};
     public static char[] colon={':'};
     public static char[] space={' '};
@@ -688,6 +689,16 @@ public static class ParseUtil {
         }
         return ret;
     }
+    public static int[] IntArr(string str){
+        if(str==null||str.Length==0) return new int[0];
+        string[] sa=str.Split(comma);
+        var ret= new int[sa.Length];
+        for(int i=0; i<sa.Length; i++){
+            if(!int.TryParse(sa[i],out int n)){ error="数値が不正です"; return null;}
+            ret[i]=n;
+        }
+        return ret;
+    }
     public static List<int> IntList(string str){
         if(str==null||str.Length==0) return new List<int>();
         string[] sa=str.Split(comma);
@@ -698,7 +709,9 @@ public static class ParseUtil {
         }
         return ret;
     }
-    public static float[] FloatArr2(string str,char dlmt,int max=int.MaxValue){
+    private static char[] dlmt_once=new char[1];
+    public static float[] FloatArr2(string str,char dlmt,int max=int.MaxValue){ dlmt_once[0]=dlmt; return FloatArr2(str,dlmt_once,max); }
+    public static float[] FloatArr2(string str,char[] dlmt,int max=int.MaxValue){
         if(str==null||str.Length==0) return new float[0];
         string[] sa=str.Split(dlmt);
         int n=(sa.Length>max)?max:sa.Length;
