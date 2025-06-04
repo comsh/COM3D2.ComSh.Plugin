@@ -2091,7 +2091,7 @@ public static class CmdMaidMan {
                 foreach(var skin in m.body0.goSlot.GetListParents()) if(m.body0.GetSlotVisible(skin.SlotId)){
                     if(lr[0]!="" && lr[0]!=skin.SlotId.ToString()) continue;
                     var sb=skin.obj.GetComponent<DynamicSkirtBone>();
-                    if(sb!=null) sb.SerializeWrite(bw);
+                    if(sb!=null){ sb.SerializeWrite(bw); break; }
                 }
             }
         }catch(Exception e){ Debug.Log(e.ToString()); return sh.io.Error("書き込みに失敗しました"); }
