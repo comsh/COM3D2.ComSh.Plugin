@@ -144,7 +144,7 @@ public static class CmdMaidMan {
         "lrot.x","lrot.y","lrot.z", "wrot.x","wrot.y","wrot.z",
         "scale.x","scale.y","scale.z", "prot","pquat",
         "ap","ap.wpos","handle","describe","select","later","evenlater","bbox",
-        "l2w","w2l"
+        "l2w","w2l","shape.add","shape.export"
     };
 
  	private static int CmdMaid(ComShInterpreter sh,List<string> args) {
@@ -1230,7 +1230,7 @@ public static class CmdMaidMan {
     }
         private static int MaidParamShapeRename(ComShInterpreter sh,Maid m,string val){
         if(val==null) return 0;
-        if(m.body0==null || m.body0.goSlot==null || m.body0.goSlot.Count<2) return 1;
+        if(m.body0==null || m.body0.goSlot==null || m.body0.goSlot.Count<1) return 1;
         string[] arr=val.Split(',');
         if(arr.Length!=3) return sh.io.Error("書式が不正です");
         string slot=arr[0],name1=arr[1],name2=arr[2];
@@ -1326,7 +1326,7 @@ public static class CmdMaidMan {
         int idx=m.body0.GetSlotNo(slot);
         var skin=m.body0.goSlot[idx];
         if(skin==null) return sh.io.Error("スロット名が不正です");
-        if(skin.morph==null||skin.morph.hash.ContainsKey(name)) return sh.io.Error("シェイプキーが見つかりません");
+        if(skin.morph==null||!skin.morph.hash.ContainsKey(name)) return sh.io.Error("シェイプキーが見つかりません");
         var bd=skin.morph.BlendDatas[(int)skin.morph.hash[name]];
         if(bd==null) return sh.io.Error("シェイプキーが見つかりません");
         if(ExportBlendData(sh.fmt,slot,bd)<0) return sh.io.Error("書き込みに失敗しました");
