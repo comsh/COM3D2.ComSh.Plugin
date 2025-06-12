@@ -108,6 +108,8 @@ public static class CmdMaidMan {
         maidParamDic.Add("skirtyure",new CmdParam<Maid>(MaidParamSkirtYure));
         maidParamDic.Add("clothyure",new CmdParam<Maid>(MaidParamClothYure));
         maidParamDic.Add("shape.rename",new CmdParam<Maid>(MaidParamShapeRename));
+        maidParamDic.Add("shape.add",new CmdParam<Maid>(MaidParamShapeAdd));
+        maidParamDic.Add("shape.export",new CmdParam<Maid>(MaidParamShapeExport));
         maidParamDic.Add("clothfollow",new CmdParam<Maid>(MaidParamClothFollow));
         maidParamDic.Add("component",new CmdParam<Maid>(MaidParamComponent));
         maidParamDic.Add("skirtparam",new CmdParam<Maid>(MaidParamSkirtParam));
@@ -1226,7 +1228,7 @@ public static class CmdMaidMan {
         }
         return 0;
     }
-    private static int MaidParamShapeRename(ComShInterpreter sh,Maid m,string val){
+        private static int MaidParamShapeRename(ComShInterpreter sh,Maid m,string val){
         if(val==null) return 0;
         if(m.body0==null || m.body0.goSlot==null || m.body0.goSlot.Count<2) return 1;
         string[] arr=val.Split(',');
@@ -1245,6 +1247,118 @@ public static class CmdMaidMan {
                 }
         }
         return 1;
+    }
+    private static int MaidParamShapeAdd(ComShInterpreter sh,Maid m,string val){
+        if(val==null) return 0;
+        if(m.body0==null || m.body0.goSlot==null || m.body0.goSlot.Count<2) return 1;
+        string[] arr=val.Split('.');
+        if(arr.Length!=2) return sh.io.Error("書式が不正です");
+        string slot=arr[0],name=arr[1];
+        if(!m.body0.IsSlotNo(slot)) return sh.io.Error("スロット名が不正です");
+        int idx=m.body0.GetSlotNo(slot);
+        var skin=m.body0.goSlot[idx];
+        if(skin==null) return sh.io.Error("スロット名が不正です");
+        if(skin.morph.hash.ContainsKey(name)) return sh.io.Error("その名前は既に使われています");
+
+        var mi=new CmdMeshes.MeshInfo(skin.obj_tr,skin.obj_tr);
+        if(mi==null||mi.oid==null) return sh.io.Error("メッシュが見つかりません");
+
+        if(mi.oid.workMesh==null||mi.oid.workMesh.Count==0) return sh.io.Error("差分がありません");
+        var mesh=mi.oid.workMesh[0].mesh;
+        if(skin.m_OriVert==null||mesh==null) return sh.io.Error("差分がありません");
+        var va0=skin.m_OriVert.vOriVert;
+        var na0=skin.m_OriVert.vOriNorm;
+        var va=mesh.vertices;
+        var na=mesh.normals;
+        List<int> il=new List<int>();
+        List<Vector3> vl=new List<Vector3>();
+        List<Vector3> nl=new List<Vector3>();
+        for(int i=0; i<va0.Length; i++){
+            Vector3 v=va[i]-va0[i];
+            Vector3 n=na[i]-na0[i];
+
+            foreach(var o in skin.morph.hash.Values){ // 他シェイプキーによる変位を除外
+                int bi=(int)o;
+                var f=skin.morph.GetBlendValues(bi);
+                if(f<0.001&&f>-0.001) continue;
+                var b=skin.morph.BlendDatas[bi];
+                for(int j=0; j<b.v_index.Length; j++)
+                    if(b.v_index[j]==i){ v-=b.vert[j]*f; n-=b.norm[j]*f; }
+            }
+            if(v!=Vector3.zero||n!=Vector3.zero){
+                vl.Add(v); nl.Add(v); il.Add(i);
+            }
+        }
+        if(il.Count==0) sh.io.Error("差分がありません");
+
+        var bd=new BlendData();
+        bd.name=name;
+        bd.v_index=il.ToArray();
+        bd.vert=vl.ToArray();
+        bd.norm=nl.ToArray();
+        if(AddNewBlendData(skin.morph,bd)<0) return sh.io.Error("失敗しました");
+        skin.morph.SetBlendValues((int)skin.morph.hash[name],1);
+        return 1;
+    }
+    private static string[] blendvaluefieldnames=new string[]{"BlendValues","BlendValuesTemp","BlendValuesBackup","BlendValuesCHK"};
+    private static T[] extendArr<T>(T[] fa,int n){ T[] ret=new T[n]; fa.CopyTo(ret,0); return ret; }
+    private static int AddNewBlendData(TMorph morph,BlendData bd){
+        // morph.hash[name]は1オリジンなので注意
+        morph.BlendDatas.Add(bd);
+        morph.MorphCount++;
+        morph.hash[bd.name]=morph.BlendDatas.Count-1;
+        try{
+            for(int i=0; i<blendvaluefieldnames.Length; i++){
+                FieldInfo fi=typeof(TMorph).GetField(blendvaluefieldnames[i],BindingFlags.Instance | BindingFlags.NonPublic);
+                float[] orig=(float[])fi.GetValue(morph);
+                fi.SetValue(morph,extendArr(orig,morph.BlendDatas.Count));
+            }
+        }catch{return -1;}
+        return 0;
+    }
+    private static int MaidParamShapeExport(ComShInterpreter sh,Maid m,string val){
+        if(val==null) return 0;
+        if(m.body0==null || m.body0.goSlot==null || m.body0.goSlot.Count<2) return 1;
+        string[] arr=val.Split('.');
+        if(arr.Length!=2) return sh.io.Error("書式が不正です");
+        string slot=arr[0],name=arr[1];
+        if(!m.body0.IsSlotNo(slot)) return sh.io.Error("スロット名が不正です");
+        int idx=m.body0.GetSlotNo(slot);
+        var skin=m.body0.goSlot[idx];
+        if(skin==null) return sh.io.Error("スロット名が不正です");
+        if(skin.morph==null||skin.morph.hash.ContainsKey(name)) return sh.io.Error("シェイプキーが見つかりません");
+        var bd=skin.morph.BlendDatas[(int)skin.morph.hash[name]];
+        if(bd==null) return sh.io.Error("シェイプキーが見つかりません");
+        if(ExportBlendData(sh.fmt,slot,bd)<0) return sh.io.Error("書き込みに失敗しました");
+        return 1;
+    }
+    private static int ExportBlendData(ComShInterpreter.FMT fmt,string slot,BlendData bd){
+        string datadir=ComShInterpreter.scriptFolder+"export\\";
+        Directory.CreateDirectory(datadir);
+        try{
+            using(StreamWriter sw=new StreamWriter(datadir+$"shape_{slot}_{bd.name}",false,Encoding.UTF8)){
+                sw.WriteLine(bd.name);
+                if(bd.v_index.Length>0) sw.Write(bd.v_index[0].ToString());
+                for(int i=1; i<bd.v_index.Length; i++){
+                    sw.Write(' ');
+                    sw.Write(bd.v_index[i].ToString());
+                }
+                sw.WriteLine();
+                if(bd.vert.Length>0) sw.Write(fmt.FPos(bd.vert[0]));
+                for(int i=1; i<bd.vert.Length; i++){
+                    sw.Write(' ');
+                    sw.Write(fmt.FPos(bd.vert[i]));
+                }
+                sw.WriteLine();
+                if(bd.norm.Length>0) sw.Write(fmt.FPos(bd.norm[0]));
+                for(int i=1; i<bd.norm.Length; i++){
+                    sw.Write(' ');
+                    sw.Write(fmt.FPos(bd.norm[i]));
+                }
+                sw.WriteLine();
+            }
+        }catch{return -1;}
+        return 0;
     }
     private static int MaidParamStyleSub(ComShInterpreter sh,Maid m,string val,bool tmpq){
         if(val==null){
