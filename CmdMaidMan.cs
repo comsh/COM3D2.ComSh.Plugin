@@ -1713,20 +1713,22 @@ public static class CmdMaidMan {
         if(val==null){
             kp=Kuchipaku.Find(m);
             if(kp!=null) sh.io.Print(String.Join(",",kp.vowelkeys));
+            else sh.io.Print(String.Join(",",Kuchipaku.default_vowelkeys));
             return 0;
         }
         kp=Kuchipaku.Create(m);
-        kp.SetKeys(val.Split(','));
+        kp.SetVowelKeys(val.Split(','));
         return 1;
     }
     private static int MaidParamSingVowel(ComShInterpreter sh,Maid m,string val){
         Kuchipaku kp;
         if(val==null){
+            float[][] aiueon;
             kp=Kuchipaku.Find(m);
-            if(kp==null) return 0;
+            if(kp==null) aiueon=Kuchipaku.default_aiueon; else aiueon=kp.aiueon;
             for(int i=0; i<6; i++){
                 sh.io.Print("あいうえおん"[i]).Print(':');
-                var arr=kp.aiueon[i];
+                var arr=aiueon[i];
                 if(arr.Length>0) sh.io.Print(sh.fmt.FVal(arr[0]));
                 for(int j=1; j<arr.Length; j++)
                     sh.io.Print(',').Print(sh.fmt.FVal(arr[j]));
@@ -3143,18 +3145,6 @@ public class Kuchipaku {
         // お掃除する機会がないけど、通常は3くらい、最大でも40程度なのでまぁ良しとする
     }
 
-    public void SetKeys(string[] keys){
-        vowelkeys=keys;
-        for(int i=0; i<6; i++) aiueon[i]=new float[keys.Length];
-    }
-    public int SetVowel(char c,float[] def){
-        int idx="あいうえおんaiueon".IndexOf(c);
-        if(idx<0) return -1;
-        idx%=6;
-        if(def.Length!=vowelkeys.Length) return -2;
-        aiueon[idx]=def;
-        return 0;
-    }
     private static string[] kana ={
 	    "あいうえおぁぃぅぇぉはひふへほらりるれろ",
 	    "かきくけこがぎぐげごさしすせそざじずぜぞたちつてとだぢづでど",	// ややこわばる系
@@ -3162,8 +3152,8 @@ public class Kuchipaku {
 	    "わ　　　を",			// 「う」を経由する系
 	    "や　ゆ　よゃ　ゅ　ょ"	// 「い」を経由する系
     };
-    public string[] vowelkeys=new string[]{"moutha","mouthc","mouthdw","mouthhe","mouthi","mouths","toothoff"};
-    public float[][] aiueon=new float[6][]{
+    public static string[] default_vowelkeys=new string[]{"moutha","mouthc","mouthdw","mouthhe","mouthi","mouths","toothoff"};
+    public static float[][] default_aiueon=new float[6][]{
         new float[]{0.3f,0.33f,0.3f,0,0,0.2f,0},
         new float[]{0.02f,0.2f,0.1f,0,0.5f,0.01f,0},
         new float[]{0,0.75f,0.1f,0,0,0,1},
@@ -3171,15 +3161,27 @@ public class Kuchipaku {
         new float[]{0.15f,0.8f,0.1f,0,0,0,1},
         new float[]{0f,0.33f,0.1f,0.1f,0.05f,0,0}
     };
+    public string[] vowelkeys=default_vowelkeys;
+    public float[][] aiueon=default_aiueon;
     public void SetVowelKeys(string[] ka){
         vowelkeys=ka;
-        if(aiueon[0].Length!=ka.Length){
-            for(int i=0; i<6; i++) aiueon[i]=new float[ka.Length];
-        }
+        if(aiueon==default_aiueon) aiueon=new float[6][];
+        for(int i=0; i<6; i++)
+            if(aiueon[i]==null) aiueon[i]=new float[vowelkeys.Length];
     }
     public int SetVowel(int id,float[] va){
         if(va.Length!=vowelkeys.Length) return -1;
+        if(aiueon==default_aiueon) aiueon=new float[6][];
         aiueon[id]=va;
+        for(int i=0; i<6; i++)
+            if(aiueon[i]==null) aiueon[i]=new float[vowelkeys.Length];
+        return 0;
+    }
+    public int SetVowel(char c,float[] def){
+        int idx="あいうえおんaiueon".IndexOf(c);
+        if(idx<0) return -1;
+        idx%=6;
+        if(SetVowel(idx,def)<0) return -2;
         return 0;
     }
 
@@ -3298,7 +3300,7 @@ public class Kuchipaku {
             }
             m=m.NextMatch();
         }
-        seconds=t*1000f;
+        seconds=t;
 
         compact();
 
