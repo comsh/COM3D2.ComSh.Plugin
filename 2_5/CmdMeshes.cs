@@ -1248,7 +1248,13 @@ public static class CmdMeshes {
         return 1;
     }
     private static int MeshParamUVWH(ComShInterpreter sh,SingleMesh sm,string val){
-        if(val==null) return 0;
+        if(val==null){
+            var m=sm.mi.material[sm.submeshno];
+            var xy=m.GetTextureOffset("_MainTex");
+            var wh=m.GetTextureScale("_MainTex");
+            sh.io.Print($"{sh.fmt.FXY(xy)},{sh.fmt.FXY(wh)}");
+            return 0;
+        }
         string ts,prop;
         var sa=ParseUtil.LeftAndRight(val,':');
         if(sa[1]==""){

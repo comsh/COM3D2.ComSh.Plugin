@@ -3,13 +3,18 @@ using UnityEngine;
 using System.Collections.Generic;
 using static System.StringComparison;
 using System.Reflection;
+using System.IO;
+using System.Text;
 
 namespace COM3D2.ComSh.Plugin {
 public static class StudioMode {
     public static PhotoWindowManager pwm; 
 
     public static void SceneChg(string name){
-        if(name!="ScenePhotoMode"){pwm=null; return;}
+        if(name!="ScenePhotoMode"){pwm=null; 
+            if(name.StartsWith("SceneDance_",Ordinal)){ KuchipakuOW(); }
+            return;
+        }
         pwm=GameObject.FindObjectOfType<PhotoWindowManager>();
         InitOnLoad();
     }
@@ -233,5 +238,33 @@ public static class StudioMode {
         },0);
     }
     //private static void OnLoadDlgCancelClick(){}
+
+    private static FieldInfo fi_kuchiptn=typeof(DanceMain).GetField("m_listKuchiPattern",BindingFlags.Instance | BindingFlags.NonPublic);
+    private static void KuchipakuOW(){
+        UnityEngine.SceneManagement.Scene sc=UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+        // シーン変更後 初回のUpdate()時に口パク差し替え
+        // (Awake()より後、かつ何度目かのUpdate()においてメイドが配置される前、に差し換える必要がある)
+        ComShBg.cron.AddJob("__kuchipaku_ow",0,0,(t)=>{
+            try{
+                var oa=sc.GetRootGameObjects();
+                DanceMain dm=null;
+                for(int i=0; i<oa.Length; i++){
+                    var ca=oa[i].GetComponentsInChildren<DanceMain>(true);
+                    if(ca!=null && ca.Length>0){ dm=ca[0]; break; }
+                }
+                if(dm==null) return -1;
+                string[] kuchiptn=(string[])fi_kuchiptn.GetValue(dm);
+                if(kuchiptn==null) return -1;
+                if(dm.m_listKuchiPakuFile!=null && kuchiptn!=null && dm.m_listKuchiPakuFile.Count<=kuchiptn.Length){
+                    for(int i=0; i<dm.m_listKuchiPakuFile.Count; i++){
+                        byte[] buf=UTIL.AReadAll(dm.m_listKuchiPakuFile[i]);
+                        if(buf==null) continue;
+                        kuchiptn[i]=Encoding.UTF8.GetString(buf); // base64なのでUTF8でもOK
+                    }
+                }
+            }catch{};
+            return -1;  // 1回限り
+        });
+    }
 }
 }

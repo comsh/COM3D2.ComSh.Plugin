@@ -7,6 +7,7 @@ using System;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 
 namespace COM3D2.ComSh.Plugin {
 
@@ -116,6 +117,7 @@ public static class CmdMaidMan {
         maidParamDic.Add("skirtparam.curve",new CmdParam<Maid>(MaidParamSkirtParamCurve));
         maidParamDic.Add("skirtparam.save",new CmdParam<Maid>(MaidParamSkirtParamSave));
         maidParamDic.Add("skirtparam.load",new CmdParam<Maid>(MaidParamSkirtParamLoad));
+        maidParamDic.Add("finger.load",new CmdParam<Maid>(MaidParamFingerLoad));
 
         maidParamDic.Add("l2w",new CmdParam<Maid>(MaidParamL2W));
         maidParamDic.Add("w2l",new CmdParam<Maid>(MaidParamW2L));
@@ -144,7 +146,7 @@ public static class CmdMaidMan {
         "lrot.x","lrot.y","lrot.z", "wrot.x","wrot.y","wrot.z",
         "scale.x","scale.y","scale.z", "prot","pquat",
         "ap","ap.wpos","handle","describe","select","later","evenlater","bbox",
-        "l2w","w2l","shape.add","shape.export"
+        "l2w","w2l","shape.add","shape.export","finger.load"
     };
 
  	private static int CmdMaid(ComShInterpreter sh,List<string> args) {
@@ -1693,6 +1695,7 @@ public static class CmdMaidMan {
         if(val==null) return 0;
         m.StopKuchipakuPattern();
         ComShBg.cron.KillJob("maidsing/"+m.GetInstanceID().ToString());
+        ComShBg.cron.KillJob("maidsing2/"+m.GetInstanceID().ToString());
         if(val==string.Empty) return 1;
 
         string ptn;
@@ -1730,8 +1733,16 @@ public static class CmdMaidMan {
     }
     private static string kuchipakudir=ComShInterpreter.scriptFolder+@"kuchipaku\";
     private static int MaidParamSing2(ComShInterpreter sh,Maid m,string val){
-       if(val==null) return 0;
+        if(val==null){
+            if(!Directory.Exists(kuchipakudir)) return 0;
+            var files=Directory.GetFiles(kuchipakudir,"*",SearchOption.AllDirectories);
+            if(files==null) return 0;
+            for(int i=0; i<files.Length; i++)
+                sh.io.PrintLn(files[i].Substring(kuchipakudir.Length).Replace('\\','/'));
+            return 0;
+        }
         m.StopKuchipakuPattern();
+        ComShBg.cron.KillJob("maidsing/"+m.GetInstanceID().ToString());
         ComShBg.cron.KillJob("maidsing2/"+m.GetInstanceID().ToString());
 
         string path=UTIL.GetFullPath(val,kuchipakudir);
@@ -1757,7 +1768,7 @@ public static class CmdMaidMan {
     private static int MaidParamSingMML(ComShInterpreter sh,Maid m,string val){
        if(val==null) return 0;
         m.StopKuchipakuPattern();
-        ComShBg.cron.KillJob("maidsing2/"+m.GetInstanceID().ToString());
+        ComShBg.cron.KillJob("maidsing3/"+m.GetInstanceID().ToString());
         if(val==string.Empty) return 1;
 
         Kuchipaku kp=Kuchipaku.Create(m);
@@ -1766,7 +1777,7 @@ public static class CmdMaidMan {
         m.LipSyncEnabled(false);
         // 実時間で口パク更新
         long stime=DateTime.UtcNow.Ticks;
-        ComShBg.cron.AddJob("maidsing2/"+m.GetInstanceID().ToString(),0,0,(t)=>{
+        ComShBg.cron.AddJob("maidsing3/"+m.GetInstanceID().ToString(),0,0,(t)=>{
             long cur=(t-stime)/TimeSpan.TicksPerMillisecond;
             if(m.body0.m_Bones==null) return -1; // メイドさんが削除された
             if(kp.UpdateShapes(m,cur)!=0) return -1;
@@ -2832,6 +2843,51 @@ public static class CmdMaidMan {
     private static int MaidParamComponent(ComShInterpreter sh,Maid m,string val){
         return CmdObjects.ObjParamComponent(sh,m.transform,val);
     }
+    private static string fingerDir=ComShInterpreter.homeDir+@"PhotoModeData\FingerData\arm\";
+    private static int MaidParamFingerLoad(ComShInterpreter sh,Maid m,string val){
+        if(!Directory.Exists(fingerDir)) return 0;
+        if(val==null){
+            var files=Directory.GetFiles(fingerDir,"*.xml",SearchOption.AllDirectories);
+            if(files==null) return 0;
+            for(int i=0; i<files.Length; i++)
+                sh.io.PrintLn(files[i].Substring(fingerDir.Length,files[i].Length-fingerDir.Length-4).Replace('\\','/'));
+            return 0;
+        }
+        string[] sa=ParseUtil.LeftAndRight2(val,':');
+        bool lq=(sa[0]==""||sa[0].IndexOf('L')>=0),rq=(sa[0]==""||sa[0].IndexOf('R')>=0);
+        if(lq==false&&rq==false) return sh.io.Error("書式が不正です");
+        try{
+            string fn=UTIL.GetFullPath(UTIL.Suffix(sa[1],".xml"),fingerDir);
+            if(fn==null||fn=="") return sh.io.Error("ファイルが見つかりません");
+            var xd=XDocument.Load(fn);
+            var xe=xd.Element("FingerData");
+            if(xe.IsEmpty) return sh.io.Error("ファイルが読み込めません");
+            var rd=xe.Element("RightData");
+            if(rd.IsEmpty) return sh.io.Error("ファイルが読み込めません");
+            char lr=(rd.Value.ToLower()=="true")?'R':'L';
+            var bd=xe.Element("BinaryData");
+            if(bd.IsEmpty) return sh.io.Error("ファイルが読み込めません");
+            byte[] buf=Convert.FromBase64String(bd.Value);
+            using(var ms=new MemoryStream(buf)) using(var br=new BinaryReader(ms)){
+                for(int i=0; i<5; i++) for(int j=0; j<3; j++){
+                    float x=br.ReadSingle(),y=br.ReadSingle(),z=br.ReadSingle(),w=br.ReadSingle();
+                    if(rq){
+                        string root=(j==0)?$"{m.body0.trBip.name} R Finger{i}":$"{m.body0.trBip.name} R Finger{i}_{j}";
+                        var tr=m.body0.GetBone(root);
+                        if(tr==null) continue;
+                        if(lr=='R') tr.localRotation=new Quaternion(x,y,z,w); else tr.localRotation=new Quaternion(-x,-y,z,w);
+                    }
+                    if(lq){
+                        string root=(j==0)?$"{m.body0.trBip.name} L Finger{i}":$"{m.body0.trBip.name} L Finger{i}_{j}";
+                        var tr=m.body0.GetBone(root);
+                        if(tr==null) continue;
+                        if(lr=='L') tr.localRotation=new Quaternion(x,y,z,w); else tr.localRotation=new Quaternion(-x,-y,z,w);
+                    }
+                }
+            }
+        }catch{ return sh.io.Error("読み込みに失敗しました");}
+        return 1;
+    }
 }
 
 public static class MaidUtil {
@@ -3371,14 +3427,14 @@ public class Kuchipaku {
 	    "わ　　　を",			// 「う」を経由する系
 	    "や　ゆ　よゃ　ゅ　ょ"	// 「い」を経由する系
     };
-    public static string[] default_vowelkeys=new string[]{"moutha","mouthc","mouthdw","mouthhe","mouthi","mouths","toothoff"};
+    public static string[] default_vowelkeys=new string[]{"moutha","mouthc","mouthdw","mouthhe","mouthi","mouths","toothoff","mouthup"};
     public static float[][] default_aiueon=new float[6][]{
-        new float[]{0.3f,0.33f,0.3f,0,0,0.2f,0},
-        new float[]{0.02f,0.2f,0.1f,0,0.5f,0.01f,0},
-        new float[]{0,0.75f,0.1f,0,0,0,1},
-        new float[]{0.05f,0.15f,0.15f,0,0.05f,0.25f,0},
-        new float[]{0.15f,0.8f,0.1f,0,0,0,1},
-        new float[]{0f,0.33f,0.1f,0.1f,0.05f,0,0}
+        new float[]{0.3f,0.33f,0.3f,0,0,0.2f,0,0.1f},
+        new float[]{0.02f,0.2f,0.1f,0,0.5f,0.01f,0,0.1f},
+        new float[]{0,0.75f,0.1f,0,0,0,1,0.1f},
+        new float[]{0.05f,0.15f,0.15f,0,0.05f,0.25f,0,0.1f},
+        new float[]{0.15f,0.8f,0.1f,0,0,0,1,0.1f},
+        new float[]{0f,0.33f,0.1f,0.1f,0.05f,0,0,0.1f}
     };
     public string[] vowelkeys=default_vowelkeys;
     public float[][] aiueon=default_aiueon;
@@ -3545,7 +3601,7 @@ public class Kuchipaku {
     }
 
     public static Regex regnormal=new Regex(
-        @"\s+|[フふヴゔ][ぁぃぇぉァィェォ]?",
+        @"\s+|[フふヴゔてでテデしじシジ][ぁぃぇぉァィェォ]?",
         RegexOptions.Compiled
     );
     public string normalize(string mml){
@@ -3573,6 +3629,18 @@ public class Kuchipaku {
                 case 'ぃ': case 'ィ': sb.Append('び'); break;
                 case 'ぇ': case 'ェ': sb.Append('べ'); break;
                 case 'ぉ': case 'ォ': sb.Append('ぼ'); break;
+                }
+            }else if(c=='テ'||c=='デ'||c=='て'||c=='で'){
+                if(m.Value.Length==1) sb.Append('て');
+                else switch(m.Value[1]){
+                case 'ぃ': case 'ィ': sb.Append('ち'); break;
+                }
+            }else if(c=='シ'||c=='ジ'||c=='し'||c=='じ'){
+                if(m.Value.Length==1) sb.Append('し');
+                else switch(m.Value[1]){
+                case 'ぁ': case 'ァ': sb.Append('や'); break;
+                case 'ぇ': case 'ェ': sb.Append('せ'); break;
+                case 'ぉ': case 'ォ': sb.Append('よ'); break;
                 }
             }
             m=m.NextMatch();
