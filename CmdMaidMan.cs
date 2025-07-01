@@ -2678,13 +2678,13 @@ public static class CmdMaidMan {
                 for(int i=0; i<5; i++) for(int j=0; j<3; j++){
                     float x=br.ReadSingle(),y=br.ReadSingle(),z=br.ReadSingle(),w=br.ReadSingle();
                     if(rq){
-                        string root=(j==0)?$"{m.body0.trBip.name} R Finger{i}":$"{m.body0.trBip.name} R Finger{i}_{j}";
+                        string root=(j==0)?$"{m.body0.trBip.name} R Finger{i}":$"{m.body0.trBip.name} R Finger{i}{j}";
                         var tr=m.body0.GetBone(root);
                         if(tr==null) continue;
                         if(lr=='R') tr.localRotation=new Quaternion(x,y,z,w); else tr.localRotation=new Quaternion(-x,-y,z,w);
                     }
                     if(lq){
-                        string root=(j==0)?$"{m.body0.trBip.name} L Finger{i}":$"{m.body0.trBip.name} L Finger{i}_{j}";
+                        string root=(j==0)?$"{m.body0.trBip.name} L Finger{i}":$"{m.body0.trBip.name} L Finger{i}{j}";
                         var tr=m.body0.GetBone(root);
                         if(tr==null) continue;
                         if(lr=='L') tr.localRotation=new Quaternion(x,y,z,w); else tr.localRotation=new Quaternion(-x,-y,z,w);
@@ -3208,14 +3208,16 @@ public class Kuchipaku {
 	    "わ　　　を",			// 「う」を経由する系
 	    "や　ゆ　よゃ　ゅ　ょ"	// 「い」を経由する系
     };
-    public static string[] default_vowelkeys=new string[]{"moutha","mouthc","mouthdw","mouthhe","mouthi","mouths","toothoff","mouthup"};
+    public static string[] default_vowelkeys=new string[]{
+        "moutha","mouths","mouthc","mouthi","mouthdw","mouthup","toothoff"
+    };
     public static float[][] default_aiueon=new float[6][]{
-        new float[]{0.3f,0.33f,0.3f,0,0,0.2f,0,0.1f},
-        new float[]{0.02f,0.2f,0.1f,0,0.5f,0.01f,0,0.1f},
-        new float[]{0,0.75f,0.1f,0,0,0,1,0.1f},
-        new float[]{0.05f,0.15f,0.15f,0,0.05f,0.25f,0,0.1f},
-        new float[]{0.15f,0.8f,0.1f,0,0,0,1,0.1f},
-        new float[]{0f,0.33f,0.1f,0.1f,0.05f,0,0,0.1f}
+        new float[]{0.5f,   0.1f,   0.1f,   0,      0,      0,      0},
+        new float[]{0.08f,  0,      0,      0.3f,   0.1f,   0.2f,   0},
+        new float[]{0.05f,  0,      0.7f,   0,      0.1f,   0,      1},
+        new float[]{0.05f,  0.3f,   0,      0.05f,  0.05f,  0.1f,   0},
+        new float[]{0.2f,   0,      0.7f,   0,      0,      0,      1},
+        new float[]{0.06f,  0,      0,      0,      0.1f,   0.3f,   1}
     };
     public string[] vowelkeys=default_vowelkeys;
     public float[][] aiueon=default_aiueon;
