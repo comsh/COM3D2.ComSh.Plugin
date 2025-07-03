@@ -1678,6 +1678,7 @@ public static class CmdMaidMan {
         m.StopKuchipakuPattern();
         ComShBg.cron.KillJob("maidsing/"+m.GetInstanceID().ToString());
         ComShBg.cron.KillJob("maidsing2/"+m.GetInstanceID().ToString());
+        if(val==string.Empty) return 1;
 
         string path=UTIL.GetFullPath(val,kuchipakudir);
         if(path=="") return sh.io.Error("ファイル名が不正です");
@@ -3205,7 +3206,7 @@ public class Kuchipaku {
 	    "あいうえおぁぃぅぇぉはひふへほらりるれろ",
 	    "かきくけこがぎぐげごさしすせそざじずぜぞたちつてとだぢづでど",	// ややこわばる系
 	    "なにぬねのまみむめもぱぴぷぺぽばびぶべぼ",		// 閉じる系
-	    "わ　　　を",			// 「う」を経由する系
+	    "わゐ　ゑを",			// 「う」を経由する系
 	    "や　ゆ　よゃ　ゅ　ょ"	// 「い」を経由する系
     };
     public static string[] default_vowelkeys=new string[]{
@@ -3384,7 +3385,7 @@ public class Kuchipaku {
     }
 
     public static Regex regnormal=new Regex(
-        @"\s+|[フふヴゔてでテデしじシジ][ぁぃぇぉァィェォ]?",
+        @"\s+|[フふヴゔうてでテデしじシジ][ぁぃぇぉァィェォ]?",
         RegexOptions.Compiled
     );
     public string normalize(string mml){
@@ -3397,12 +3398,12 @@ public class Kuchipaku {
             s=m.Index+m.Value.Length;
             if(char.IsWhiteSpace(m.Value[0])){ m=m.NextMatch(); continue; }
             char c=m.Value[0];
-            if(c=='フ'||c=='ふ'){
-                if(m.Value.Length==1) sb.Append('ふ');
+            if(c=='フ'||c=='ふ'||c=='う'){
+                if(m.Value.Length==1) sb.Append(c);
                 else switch(m.Value[1]){
                 case 'ぁ': case 'ァ': sb.Append('わ'); break;
-                case 'ぃ': case 'ィ': sb.Append('ひ'); break;
-                case 'ぇ': case 'ェ': sb.Append('へ'); break;
+                case 'ぃ': case 'ィ': sb.Append('ゐ'); break;
+                case 'ぇ': case 'ェ': sb.Append('ゑ'); break;
                 case 'ぉ': case 'ォ': sb.Append('を'); break;
                 }
             }else if(c=='ヴ'||c=='ゔ'){
