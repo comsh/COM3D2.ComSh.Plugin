@@ -56,6 +56,10 @@ public static class CmdMeshes {
         meshParamDic.Add("matecp",new CmdParam<SingleMesh>(MeshParamMaterialCopy));
         meshParamDic.Add("texcp",new CmdParam<SingleMesh>(MeshParamTextureCopy));
         meshParamDic.Add("cut",new CmdParam<SingleMesh>(MeshParamCut));
+        meshParamDic.Add("weight",new CmdParam<SingleMesh>(MeshParamWeight));
+        meshParamDic.Add("weightadd",new CmdParam<SingleMesh>(MeshParamWeightAdd));
+        meshParamDic.Add("weightchg",new CmdParam<SingleMesh>(MeshParamWeightChg));
+        meshParamDic.Add("bbox",new CmdParam<SingleMesh>(MeshParamBBox));
     }
     private static Dictionary<string,CmdParam<SingleMesh>> meshParamDic=new Dictionary<string,CmdParam<SingleMesh>>();
 
@@ -327,23 +331,23 @@ public static class CmdMeshes {
             if(c.vertex!=null){
                 if(c.vertex.Length==0) remove.Add(c.idx);
                 else{
-                    float[] xyz=ParseUtil.Xyz(c.vertex);
+                    float[] xyz=ParseUtil.Xyz1(c.vertex);
                     if(xyz==null){ ret=sh.io.Error($"頂点{c.idx} 座標の形式が不正です"); break; }
                     vta[c.idx]=new Vector3(xyz[0],xyz[1],xyz[2]);
                 }
             }
             if(c.normal!=null){
-                float[] xyz=ParseUtil.Xyz(c.normal);
+                float[] xyz=ParseUtil.Xyz1(c.normal);
                 if(xyz==null){ ret=sh.io.Error($"頂点{c.idx}: 法線ベクトルの形式が不正です"); break;}
                 nma[c.idx]=new Vector3(xyz[0],xyz[1],xyz[2]);
             }
             if(c.uv!=null){
-                float[] xy=ParseUtil.Xy(c.uv);
+                float[] xy=ParseUtil.Xy1(c.uv);
                 if(xy==null){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
                 uva[c.idx]=new Vector2(xy[0],xy[1]);
             }
             if(c.uv2!=null){
-                float[] xy=ParseUtil.Xy(c.uv2);
+                float[] xy=ParseUtil.Xy1(c.uv2);
                 if(xy==null){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
                 if(uv2a.Length<=c.idx){
                     var old=uv2a;
@@ -353,7 +357,7 @@ public static class CmdMeshes {
                 uv2a[c.idx]=new Vector2(xy[0],xy[1]);
             }
             if(c.uv3!=null){
-                float[] xy=ParseUtil.Xy(c.uv3);
+                float[] xy=ParseUtil.Xy1(c.uv3);
                 if(xy==null){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
                 if(uv3a.Length<=c.idx){
                     var old=uv3a;
@@ -363,7 +367,7 @@ public static class CmdMeshes {
                 uv3a[c.idx]=new Vector2(xy[0],xy[1]);
             }
             if(c.uv4!=null){
-                float[] xy=ParseUtil.Xy(c.uv4);
+                float[] xy=ParseUtil.Xy1(c.uv4);
                 if(xy==null){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
                 if(uv4a.Length<=c.idx){
                     var old=uv4a;
@@ -763,7 +767,6 @@ public static class CmdMeshes {
         string[] lr=ParseUtil.LeftAndRight2(val,ParseUtil.eqcln);
         if(lr[0]!="") prop=lr[0];
         right=lr[1];
-
         if(!mate.HasProperty(prop)) return sh.io.Error("指定されたプロパティは現在のシェーダでは無効です");
 
         string msg=SetTexProp(mate,prop,right,sm.mi.oid.originalMate[sm.submeshno]);
@@ -1757,6 +1760,115 @@ public static class CmdMeshes {
         tomate.SetTexture(toprop,tex);
         return 1;
     }
+    struct NF {public int n; public float f; public NF(int n,float f){this.n=n; this.f=f;} };
+    public static int MeshParamWeight(ComShInterpreter sh,SingleMesh sm,string val){
+        return MeshParamWeightSub(sh,sm,val,true,true);
+    }
+    public static int MeshParamWeightChg(ComShInterpreter sh,SingleMesh sm,string val){
+        return MeshParamWeightSub(sh,sm,val,true,false);
+    }
+    public static int MeshParamWeightAdd(ComShInterpreter sh,SingleMesh sm,string val){
+        return MeshParamWeightSub(sh,sm,val,false,false);
+    }
+    public static int MeshParamWeightSub(ComShInterpreter sh,SingleMesh sm,string val,bool forceq,bool multiq){
+        if(val==null) return 0;
+
+        int midx=sm.mi.mesh.FindMeshIdx(sm.submeshno);
+        Renderer r=sm.mi.mesh[midx].rend;
+        if(r.GetType()!=typeof(SkinnedMeshRenderer)) return sh.io.Error("ウェイトがありません");
+        SkinnedMeshRenderer smr=(SkinnedMeshRenderer)r;
+
+        int[] pa=new int[3];
+        if(!ParseUtil.CutNext(val,':',pa)) return sh.io.Error("書式が不正です");
+        if(!ParseUtil.TryParseInt(new StrSegment(val,pa[0],pa[0]+pa[1]-1),out int vno)) return sh.io.Error("数値が不正です");
+        sm.mi.EditMesh();
+        Mesh m=smr.sharedMesh; //sm.mi.mesh[sm.submeshno].mesh;
+        if(vno>=m.vertexCount) return sh.io.Error("頂点番号が不正です");
+        var wa=m.boneWeights;
+        if(wa==null||wa.Length==0) return 0;
+        var bw=wa[vno];
+        var tra=smr.bones;
+        if(tra==null||tra.Length==0) return 0;
+        if(pa[2]<0){
+            if(bw.weight0>0.00001) sh.io.PrintLn($"{tra[bw.boneIndex0].name}:{bw.weight0}");
+            if(bw.weight1>0.00001) sh.io.PrintLn($"{tra[bw.boneIndex1].name}:{bw.weight1}");
+            if(bw.weight2>0.00001) sh.io.PrintLn($"{tra[bw.boneIndex2].name}:{bw.weight2}");
+            if(bw.weight3>0.00001) sh.io.PrintLn($"{tra[bw.boneIndex3].name}:{bw.weight3}");
+            return 0;
+        }
+
+        NF[] nfa;
+        if(multiq){
+            nfa=new NF[4];
+            int p=0; for(; p<4; p++){
+                if(!ParseUtil.CutNext(val,'=',pa)||pa[2]<0) return sh.io.Error("書式が不正です");
+                string bone=ParseUtil.CompleteBoneName(val.Substring(pa[0],pa[1]),false);
+                if(!ParseUtil.CutNext(val,',',pa)) return sh.io.Error("書式が不正です");
+                if(!ParseUtil.TryParseFloat(new StrSegment(val,pa[0],pa[0]+pa[1]-1),out float w)||w<0||w>1) return sh.io.Error("数値が不正です");
+                int boneidx=-1;
+                for(int i=0; i<tra.Length; i++) if(tra[i]!=null && tra[i].name==bone){boneidx=i; break;}
+                if(boneidx<0) return sh.io.Error("ボーン名が不正です");
+                nfa[p].n=boneidx; nfa[p].f=w;
+                if(pa[2]<0){ p++; break; }
+            }
+            for(; p<4; p++){nfa[p].n=0; nfa[p].f=0;}
+            float all=0;
+            for(int i=0; i<4; i++) all+=nfa[i].f;
+            for(int i=0; i<4; i++) nfa[i].f=Mathf.Clamp01(nfa[i].f/all);
+        }else{
+            if(!ParseUtil.CutNext(val,'=',pa)||pa[2]<0) return sh.io.Error("書式が不正です");
+            string bone=ParseUtil.CompleteBoneName(val.Substring(pa[0],pa[1]),false);
+            if(!ParseUtil.TryParseFloat(new StrSegment(val,pa[2],val.Length-1),out float w)||w<0||w>1) return sh.io.Error("数値が不正です");
+            int boneidx=-1;
+            for(int i=0; i<tra.Length; i++) if(tra[i]!=null && tra[i].name==bone){boneidx=i; break;}
+            if(boneidx<0) return sh.io.Error("ボーン名が不正です");
+
+            nfa=new NF[]{
+                new NF(bw.boneIndex0,bw.weight0),
+                new NF(bw.boneIndex1,bw.weight1),
+                new NF(bw.boneIndex2,bw.weight2),
+                new NF(bw.boneIndex3,bw.weight3)
+            };
+
+            int ins=-1;
+            for(int i=0; i<4; i++) if(nfa[i].f<0.00001) nfa[i].f=0;
+            for(int i=0; i<4; i++) if(nfa[i].f>0 && nfa[i].n==boneidx){ins=i; break;} //既存上書
+            for(int i=0; ins<0 && i<4; i++) if(nfa[i].f==0){ ins=i; break; }
+            if(ins<0){
+                if(forceq) ins=3;   // 最小のもの(4つ目)を強制上書き
+                //else return sh.io.Error("その頂点にはこれ以上ウェイト付けできません");
+                else return 0; // 4つ埋まってるときは何もしない
+            }
+            float all=0;
+            for(int i=0; i<4; i++) if(i!=ins) all+=nfa[i].f;
+            for(int i=0; i<4; i++) if(i!=ins) nfa[i].f=Mathf.Clamp01(nfa[i].f*(1-w)/all);
+            nfa[ins].n=boneidx;
+            nfa[ins].f=w;
+        }
+        Array.Sort(nfa,(a,b)=>b.f.CompareTo(a.f));
+        bw.boneIndex0=nfa[0].n; bw.weight0=nfa[0].f;
+        bw.boneIndex1=nfa[1].n; bw.weight1=nfa[1].f;
+        bw.boneIndex2=nfa[2].n; bw.weight2=nfa[2].f;
+        bw.boneIndex3=nfa[3].n; bw.weight3=nfa[3].f;
+        wa[vno]=bw;
+        m.boneWeights=wa;
+        //smr.sharedMesh=m;
+        return 1;
+    }
+    private static int MeshParamBBox(ComShInterpreter sh,SingleMesh sm,string val){
+        int midx=sm.mi.mesh.FindMeshIdx(sm.submeshno);
+        Renderer r=sm.mi.mesh[midx].rend;
+        if(r.GetType()==typeof(SkinnedMeshRenderer)){
+            SkinnedMeshRenderer smr=(SkinnedMeshRenderer)r;
+            var mesh=new Mesh();
+            smr.BakeMesh(mesh);
+            mesh.RecalculateBounds();
+            smr.localBounds=mesh.bounds;
+        }
+        var b=r.bounds;
+        sh.io.PrintJoin(sh.ofs,sh.fmt.FPos(b.min),sh.fmt.FPos(b.max));
+        return 0;
+    }
 
     private class VerLoopChange {
         public int idx;
@@ -1991,6 +2103,7 @@ public static class TextureUtil {
         }catch{}
         return null;
     }
+
     public static Cubemap CloneCubemap(Cubemap src){
         int h=src.height;
         var ret=new Cubemap(h,TextureFormat.ARGB32,src.mipmapCount>0);

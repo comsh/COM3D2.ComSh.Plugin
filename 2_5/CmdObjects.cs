@@ -98,6 +98,9 @@ public static class CmdObjects {
         objParamDic.Add("wheel",new CmdParam<Transform>(ObjParamWheel));
         objParamDic.Add("cloth",new CmdParam<Transform>(ObjParamCloth));
         objParamDic.Add("reflection",new CmdParam<Transform>(ObjParamReflection));
+        objParamDic.Add("addbone",new CmdParam<Transform>(ObjParamAddBone));
+        objParamDic.Add("bone",new CmdParam<Transform>(ObjParamBone));
+        objParamDic.Add("bbox",new CmdParam<Transform>(ObjParamBBox));
         
         objParamDic.Add("l2w",new CmdParam<Transform>(_CmdParamL2W));
         objParamDic.Add("w2l",new CmdParam<Transform>(_CmdParamW2L));
@@ -270,7 +273,7 @@ public static class CmdObjects {
     private static ParseUtil.ColonDesc colonDesc;
     public static int CmdObjectSub(ComShInterpreter sh,ParseUtil.ColonDesc cd,List<string> args,int startpos){
         colonDesc=cd;
-        if(cd.id=="//" && cd.num==0 && cd.meshno<0){
+        if(cd.num==0 && cd.id=="//" && cd.meshno<0){
             var scene=UnityEngine.SceneManagement.SceneManager.GetActiveScene();
             foreach(var root in scene.GetRootGameObjects()){ sh.io.PrintLn(root.name); Debug.Log(root.name); }
             return 0;
@@ -1237,7 +1240,7 @@ public static class CmdObjects {
     }
     private static int ObjParamLookAtLocal(ComShInterpreter sh,Transform tr,string val){
         if(val==null){ return 0; }
-        float[] xyz=ParseUtil.Xyz(val);
+        float[] xyz=ParseUtil.Xyz1(val);
         if(xyz==null) return sh.io.Error(ParseUtil.error);
         Quaternion q=Quaternion.FromToRotation(Vector3.forward,new Vector3(xyz[0],xyz[1],xyz[2]));
         tr.transform.localRotation*=q;
@@ -1281,14 +1284,8 @@ public static class CmdObjects {
     }
     private static int ObjParamLocIKSub(ComShInterpreter sh,Transform tr,string val,Vector3 zaxis){
         if(val==null) return 0;
-        float[] xyz=ParseUtil.Xyz(val);
-        if(xyz==null){
-            var objtr=ObjUtil.FindObj(sh,val.Split(ParseUtil.colon));
-            if(objtr!=null){
-                Vector3 v=objtr.position;
-                xyz=new float[]{v.x,v.y,v.z};
-            } else return sh.io.Error("座標の指定が不正です");
-        }
+        float[] xyz=ParseUtil.Position(val);
+        if(xyz==null) return sh.io.Error("座標の指定が不正です");
 
         Transform p=tr;
         if(p.name=="Bip01" || p.name=="ManBip") return sh.io.Error("親ボーンが足りません");
@@ -1804,12 +1801,12 @@ public static class CmdObjects {
                 jt.anchor=tr.worldToLocalMatrix.MultiplyPoint3x4(tgttr.position);
                 break;
             case "anchor":
-                fa=ParseUtil.Xyz(lr[1]);
+                fa=ParseUtil.Xyz1(lr[1]);
                 if(fa==null) return sh.io.Error("座標が不正です");
                 jt.anchor=new Vector3(fa[0],fa[1],fa[2]);
                 break;
             case "axis":
-                fa=ParseUtil.Xyz(lr[1]);
+                fa=ParseUtil.Xyz1(lr[1]);
                 if(fa==null) return sh.io.Error("ベクトルが不正です");
                 jt.axis=new Vector3(fa[0],fa[1],fa[2]);
                 break;
@@ -1930,17 +1927,17 @@ public static class CmdObjects {
                 jt.axis=v.normalized;
                 break;
             case "anchor":
-                fa=ParseUtil.Xyz(lr[1]);
+                fa=ParseUtil.Xyz1(lr[1]);
                 if(fa==null) return sh.io.Error("座標が不正です");
                 jt.anchor=new Vector3(fa[0],fa[1],fa[2]);
                 break;
             case "twistaxis":
-                fa=ParseUtil.Xyz(lr[1]);
+                fa=ParseUtil.Xyz1(lr[1]);
                 if(fa==null) return sh.io.Error("ベクトルが不正です");
                 jt.axis=new Vector3(fa[0],fa[1],fa[2]);
                 break;
             case "swingaxis":
-                fa=ParseUtil.Xyz(lr[1]);
+                fa=ParseUtil.Xyz1(lr[1]);
                 if(fa==null) return sh.io.Error("ベクトルが不正です");
                 jt.swingAxis=new Vector3(fa[0],fa[1],fa[2]);
                 break;
@@ -2052,12 +2049,12 @@ public static class CmdObjects {
                 jt.anchor=v;
                 break;
             case "anchor":
-                fa=ParseUtil.Xyz(lr[1]);
+                fa=ParseUtil.Xyz1(lr[1]);
                 if(fa==null) return sh.io.Error("座標が不正です");
                 jt.anchor=new Vector3(fa[0],fa[1],fa[2]);
                 break;
             case "axis":
-                fa=ParseUtil.Xyz(lr[1]);
+                fa=ParseUtil.Xyz1(lr[1]);
                 if(fa==null) return sh.io.Error("ベクトルが不正です");
                 jt.axis=new Vector3(fa[0],fa[1],fa[2]);
                 break;
@@ -2147,12 +2144,12 @@ public static class CmdObjects {
                 jt.anchor=v;
                 break;
             case "anchor":
-                fa=ParseUtil.Xyz(lr[1]);
+                fa=ParseUtil.Xyz1(lr[1]);
                 if(fa==null) return sh.io.Error("座標が不正です");
                 jt.anchor=new Vector3(fa[0],fa[1],fa[2]);
                 break;
             case "axis":
-                fa=ParseUtil.Xyz(lr[1]);
+                fa=ParseUtil.Xyz1(lr[1]);
                 if(fa==null) return sh.io.Error("ベクトルが不正です");
                 jt.axis=new Vector3(fa[0],fa[1],fa[2]);
                 break;
@@ -2413,12 +2410,12 @@ public static class CmdObjects {
                 cl.useGravity=(sw==1);
                 break;
             case "force":
-                fa=ParseUtil.Xyz(lr[1]);
+                fa=ParseUtil.Xyz1(lr[1]);
                 if(fa==null) return sh.io.Error(ParseUtil.error);
                 cl.externalAcceleration=new Vector3(fa[0],fa[1],fa[2]);
                 break;
             case "randomforce":
-                fa=ParseUtil.Xyz(lr[1]);
+                fa=ParseUtil.Xyz1(lr[1]);
                 if(fa==null) return sh.io.Error(ParseUtil.error);
                 cl.randomAcceleration=new Vector3(fa[0],fa[1],fa[2]);
                 break;
@@ -2545,6 +2542,99 @@ public static class CmdObjects {
         }
         return 1;
 
+    }
+    private static int ObjParamAddBone(ComShInterpreter sh,Transform tr,string val){
+        if(val==null) return 0;
+        string[] sa=ParseUtil.LeftAndRight(val,ParseUtil.period);
+        if(sa[0]==""||sa[1]=="") return sh.io.Error("書式が不正です");
+        if(!UTIL.ValidObjName(sa[1])) return sh.io.Error("オブジェクト名が不正です");
+        Renderer r;
+        var oi=ObjInfo.GetObjInfo(tr);
+        if(oi==null) r=tr.GetComponentInChildren<Renderer>();
+        else r=oi.data.FindComponent<Renderer>();
+        if(r==null||r.GetType()!=typeof(SkinnedMeshRenderer)) return sh.io.Error("SkinnedMeshRendererが見つかりません");
+        SkinnedMeshRenderer smr=(SkinnedMeshRenderer)r;
+        var bounds=smr.localBounds;
+        if(smr.bones==null||smr.bones.Length<=0) return sh.io.Error("ボーンがありません");
+        int n=smr.bones.Length;
+        Transform[] tra=new Transform[n+1];
+        Array.Copy(smr.bones,tra,n);
+        bool manq=false;
+        for(int i=0; i<n; i++) if(tra[i]!=null && tra[i].name!=null && tra[i].name.StartsWith("ManBip")){ manq=true; break; }
+        string parentname=ParseUtil.CompleteBoneName(sa[0],manq);
+        int pidx=-1;
+        string sclname="";
+        if(!parentname.EndsWith("_SCL_")) sclname=parentname+"_SCL_";
+        for(int i=0; i<n; i++) if(tra[i]!=null && (tra[i].name==parentname||tra[i].name==sclname)){ pidx=i; break; }
+        if(pidx<0) return sh.io.Error("親ボーンが見つかりません");
+
+        Mesh mesh=smr.sharedMesh;
+        var go=new GameObject(sa[1]);
+        go.transform.SetParent(tra[pidx]);
+        go.transform.localPosition=Vector3.zero;
+        go.transform.localRotation=Quaternion.identity;
+        tra[tra.Length-1]=go.transform;
+
+        smr.bones=tra;
+
+        Matrix4x4[] ma=new Matrix4x4[n+1];
+        Array.Copy(smr.sharedMesh.bindposes,ma,n);
+        ma[ma.Length-1]=ma[pidx];
+
+        mesh.bindposes=ma;
+        //smr.sharedMesh=mesh;
+        smr.localBounds=bounds;
+
+        if(oi!=null && oi.data!=null) oi.data.UpdateBones();
+        return 1;
+    }
+    private static int ObjParamBone(ComShInterpreter sh,Transform tr,string val){
+        Renderer r;
+        var oi=ObjInfo.GetObjInfo(tr);
+        if(oi==null) r=tr.GetComponentInChildren<Renderer>();
+        else r=oi.data.FindComponent<Renderer>();
+        if(r==null||r.GetType()!=typeof(SkinnedMeshRenderer)) return sh.io.Error("SkinnedMeshRendererが見つかりません");
+        SkinnedMeshRenderer smr=(SkinnedMeshRenderer)r;
+        int n=smr.bones.Length;
+        if(val==null){
+            for(int i=0; i<n; i++) if(smr.bones[i]!=null) sh.io.Print(smr.bones[i].name);
+            return 0;
+        }
+        for(int i=0; i<n; i++) if(smr.bones[i]!=null){
+            if(smr.bones[i].name==val){
+                sh.io.PrintLn2("iid:",tr.gameObject.GetInstanceID().ToString());
+                UTIL.PrintTrInfo(sh,tr);
+                return 0;
+            }
+        }
+        return 0;
+    }
+    private static int ObjParamBBox(ComShInterpreter sh,Transform tr,string val){
+        var bounds=ObjBBox(tr);
+        if(bounds.extents==Vector3.zero) return 0;
+        sh.io.PrintJoin(sh.ofs,sh.fmt.FPos(bounds.min),sh.fmt.FPos(bounds.max));
+        return 0;
+    }
+    public static Bounds ObjBBox(Transform tr){
+        Renderer[] r;
+        var oi=ObjInfo.GetObjInfo(tr);
+        if(oi==null) r=tr.GetComponentsInChildren<Renderer>();
+        else r=(oi.data.FindComponents<Renderer>()).ToArray();
+        if(r==null||r.Length==0) return new Bounds(Vector3.zero,Vector3.zero);
+        var bounds=getBounds(r[0]);
+        for(int i=1; i<r.Length; i++) bounds.Encapsulate(getBounds(r[i]));
+        return bounds;
+    }
+    private static Bounds getBounds(Renderer r){
+        if(r.GetType()==typeof(SkinnedMeshRenderer)){
+            SkinnedMeshRenderer smr=(SkinnedMeshRenderer)r;
+            var mesh=new Mesh();
+            smr.BakeMesh(mesh);
+            mesh.RecalculateBounds();
+            smr.localBounds=mesh.bounds;
+            GameObject.Destroy(mesh);
+        }
+        return r.bounds;
     }
 }
 public static class ObjUtil {

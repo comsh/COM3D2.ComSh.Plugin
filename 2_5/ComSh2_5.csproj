@@ -26,6 +26,26 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\AnmCnv.cs" Link="AnmCnv.cs" />
+    <Compile Include="..\CmdBones.cs" Link="CmdBones.cs" />
+    <Compile Include="..\CmdCamera.cs" Link="CmdCamera.cs" />
+    <Compile Include="..\CmdGui.cs" Link="CmdGui.cs" />
+    <Compile Include="..\CmdLights.cs" Link="CmdLights.cs" />
+    <Compile Include="..\CmdMisc.cs" Link="CmdMisc.cs" />
+    <Compile Include="..\CmdSubCamera.cs" Link="CmdSubCamera.cs" />
+    <Compile Include="..\ComShBg.cs" Link="ComShBg.cs" />
+    <Compile Include="..\ComShHandle.cs" Link="ComShHandle.cs" />
+    <Compile Include="..\DataFiles.cs" Link="DataFiles.cs" />
+    <Compile Include="..\Interpreter.cs" Link="Interpreter.cs" />
+    <Compile Include="..\MiniSed.cs" Link="MiniSed.cs" />
+    <Compile Include="..\Panel.cs" Link="Panel.cs" />
+    <Compile Include="..\Parser.cs" Link="Parser.cs" />
+    <Compile Include="..\StrSegment.cs" Link="StrSegment.cs" />
+    <Compile Include="..\Variables.cs" Link="Variables.cs" />
+    <Compile Include="..\Video.cs" Link="Video.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="Assembly-CSharp">
       <HintPath>..\..\..\..\prog\KISS\COM3D2_5\COM3D2x64_Data\Managed\Assembly-CSharp.dll</HintPath>
     </Reference>

@@ -340,3 +340,5 @@ ASALocalRun/
 healthchecksdb
 
 .editorconfig
+/2_5/SJIS.cs
+/2_5/StrSegment.cs

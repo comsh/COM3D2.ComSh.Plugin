@@ -416,6 +416,7 @@ public static class ParseUtil {
     // SplitやTrimの引数が配列とparam配列の２通りしかないので
     public static char[] comma={','};
     public static char[] commaslash={',','/'};
+    public static char[] commaslashlf={',','/','\n'};
     public static char[] period={'.'};
     public static char[] colon={':'};
     public static char[] space={' '};
@@ -549,17 +550,31 @@ public static class ParseUtil {
         if(n==2) return ret;
         else { error="座標が不正です"; return null; }
     }
+    public static float[] Xy1(string str){
+        if(str==null||str.Length==0) return null;
+        int n=XyzSub(str,xyzbuf);
+        if(n==2) return xyzbuf;
+        else { error="座標が不正です"; return null; }
+    }
     public static float[] XyzR(string str,out bool relativeq){
         relativeq=(str!=null && str.Length>0 && str[0]=='+');
         float[] ret=new float[3];
-        int n=XyzSub(relativeq?str.Substring(1):str,ret);
+        int n=XyzSub(new StrSegment(str,relativeq?1:0),ret);
         if(n==3) return ret;
         else { error="座標が不正です"; return null; }
     }
-    public static float[] Xyz(string str){
+    public static float[] Xyz(string str){ return Xyz(new StrSegment(str)); }
+    public static float[] Xyz(StrSegment seg){
         float[] ret=new float[3];
-        int n=XyzSub(str,ret);
+        int n=XyzSub(seg,ret);
         if(n==3) return ret;
+        else { error="座標が不正です"; return null; }
+    }
+    private static float[] xyzbuf=new float[3]; // すぐvector3にするならXyz()はXyz1()でOK
+    public static float[] Xyz1(string str){ return Xyz1(new StrSegment(str)); }
+    public static float[] Xyz1(StrSegment seg){
+        int n=XyzSub(seg,xyzbuf);
+        if(n==3) return xyzbuf;
         else { error="座標が不正です"; return null; }
     }
     public static float[] Xyz(string[] sa){
@@ -570,15 +585,16 @@ public static class ParseUtil {
         }
         return ret;
     }
-    public static int XyzSub(string str,float[] ret){
-        if(str==null||str.Length==0) return 0;
-        string[] sa=str.Split(comma);
-        if(sa.Length>ret.Length) return -1;
-        for(int i=0; i<sa.Length; i++){
-            ret[i]=ParseFloat(sa[i]);
-            if(float.IsNaN(ret[i])) return -1;
+    public static int XyzSub(string str,float[] ret){ return XyzSub(new StrSegment(str),ret); }
+    public static int XyzSub(StrSegment seg,float[] ret){
+        if(seg.str==null||seg.str.Length==0) return 0;
+        var cnxt=new CutNextText(seg);
+        int i=0;
+        for(; i<ret.Length; i++){
+            if(CutNext(ref cnxt,',')<0) break;
+            if(!TryParseFloat(cnxt.txt.SliceLen(cnxt.head,cnxt.len),out ret[i])) return -1;
         }
-        return sa.Length;
+        return i;
     }
     public static int XyzSubW(string str,double[] ret){
         if(str==null||str.Length==0) return 0;
@@ -667,6 +683,45 @@ public static class ParseUtil {
         }
         return Xyz(str);
     }
+    public static float[] Position(string str){return Position(new StrSegment(str));}
+    public static float[] Position(StrSegment str){
+        if(str.IndexOf(',')>=0) return Xyz1(str);
+        int n=Position(str,xyzbuf);
+        if(n==3) return xyzbuf;
+        else { error="座標が不正です"; return null; }
+    }
+    public static int Position(string str,float[] ret){return Position(new StrSegment(str),ret);}
+    public static int Position(StrSegment str,float[] ret){
+        var cd=new ColonDesc(str);
+        if(cd.num==0) return XyzSub(str,ret);
+        var tr=ObjUtil.FindObj(ComShInterpreter.currentSh,cd);
+        if(tr==null) return 0;
+        var pos=tr.position;
+        ret[0]=pos.x; ret[1]=pos.y; ret[2]=pos.z;
+        return 3;
+    }
+    public static int CountC(string str,char c){
+        int cnt=0;
+        for(int i=0; i<str.Length; i++) if(str[i]==c) cnt++;
+        return cnt;
+    }
+    public static int CountC(StrSegment str,char c){
+        int cnt=0;
+        for(int i=0; i<str.Length; i++) if(str[i]==c) cnt++;
+        return cnt;
+    }
+    public static int CountC(string str,char[] ca){
+        int cnt=0;
+        for(int i=0; i<str.Length; i++)
+            for(int j=0; j<ca.Length; j++) if(str[i]==ca[j]){ cnt++; break; }
+        return cnt;
+    }
+    public static int CountC(StrSegment str,char[] ca){
+        int cnt=0;
+        for(int i=0; i<str.Length; i++)
+            for(int j=0; j<ca.Length; j++) if(str[i]==ca[j]){ cnt++; break; }
+        return cnt;
+    }
     public static float[] FloatArr(string str){
         if(str==null||str.Length==0) return new float[0];
         string[] sa=str.Split(comma);
@@ -686,6 +741,16 @@ public static class ParseUtil {
         for(int i=0; i<sa.Length; i++){
             ret[i]=ParseDouble(sa[i]);
             if(double.IsNaN(ret[i])){ error="数値が不正です"; return null;}
+        }
+        return ret;
+    }
+    public static double[] DoubleArr2(string str){
+        double[] ret=DoubleArr(str);
+        if(ret==null && str.IndexOf(',')<0){
+            var tr=ObjUtil.FindObj(ComShInterpreter.currentSh,new ColonDesc(str));
+            if(tr==null) return null;
+            var pos=tr.position;
+            return new double[3]{pos.x,pos.y,pos.z};
         }
         return ret;
     }
@@ -793,19 +858,66 @@ public static class ParseUtil {
         return sa;
     }
     public static string Nth(string txt,string dlm,int n){
-        int cnt=1;
-        int[] pa=new int[3];
-        while(CutNext(txt,dlm,pa)){
-            if(cnt==n) return txt.Substring(pa[0],pa[1]);
-            cnt++;
+        var cnxt=new CutNextText(txt);
+        for(int i=0; i<n-1; i++) if(CutNext(ref cnxt,dlm)<0) return null;
+        if(CutNext(ref cnxt,dlm)<0) return null;
+        return txt.Substring(cnxt.head,cnxt.len);
+    }
+    public struct CutNextText {
+        public StrSegment txt;
+        public int head;
+        public int len;
+        public int next;
+        public CutNextText(string t){txt=new StrSegment(t);head=next=len=0;}
+        public CutNextText(StrSegment t){txt=t;head=next=len=0;}
+        public void Init(string t){txt=new StrSegment(t);head=next=len=0;}
+        public void Init(StrSegment t){txt=t;head=next=len=0;}
+        public bool Equals(string str){return string.ReferenceEquals(txt.str,str); }
+    }
+    public static int CutNext(ref CutNextText cnxt,char dlm){
+        if(cnxt.next==-1) return -1;
+        cnxt.head=cnxt.next;
+        int idx=cnxt.txt.IndexOf(dlm,cnxt.head);
+        if(idx>=0){
+            cnxt.next=idx+1;
+            cnxt.len=idx-cnxt.head;
+        }else{
+            cnxt.len=cnxt.txt.Length-cnxt.head;
+            cnxt.next=-1;
         }
-        return null;
+        return cnxt.len;
+    }
+    public static int CutNext(ref CutNextText cnxt,string dlm){
+        if(cnxt.next==-1) return -1;
+        cnxt.head=cnxt.next;
+        int idx=cnxt.txt.IndexOf(dlm,cnxt.head);
+        if(idx>=0){
+            cnxt.next=idx+dlm.Length;
+            cnxt.len=idx-cnxt.head;
+        }else{
+            cnxt.len=cnxt.txt.Length-cnxt.head;
+            cnxt.next=-1;
+        }
+        return cnxt.len;
+    }
+    public static bool CutNext(string txt,char dlm,int[] pa){
+        if(pa[2]==-1) return false;
+        if(pa[2]==-1) return false;
+        pa[0]=pa[2];
+        if((pa[1]=txt.IndexOf(dlm,pa[0]))>=0){
+            pa[2]=pa[1]+1; // 次開始位置
+            pa[1]=pa[1]-pa[0]; // 長さ
+        }else{
+            pa[1]=txt.Length-pa[0];
+            pa[2]=-1;
+        }
+        return true;
     }
     public static bool CutNext(string txt,string dlm,int[] pa){
-        if(pa[2]==-1||pa[2]>=txt.Length) return false;
+        if(pa[2]==-1) return false;
         pa[0]=pa[2];
         if((pa[1]=txt.IndexOf(dlm,pa[0],Ordinal))>=0){
-            pa[2]=pa[1]+1; // 次開始位置
+            pa[2]=pa[1]+dlm.Length; // 次開始位置
             pa[1]=pa[1]-pa[0]; // 長さ
         }else{
             pa[1]=txt.Length-pa[0];
@@ -821,19 +933,6 @@ public static class ParseUtil {
             cnt++;
         }
         return null;
-    }
-    public static bool CutNext(string txt,char dlm,int[] pa){
-        if(pa[2]==-1||pa[2]>=txt.Length) return false;
-        if(pa[2]==-1) return false;
-        pa[0]=pa[2];
-        if((pa[1]=txt.IndexOf(dlm,pa[0]))>=0){
-            pa[2]=pa[1]+1; // 次開始位置
-            pa[1]=pa[1]-pa[0]; // 長さ
-        }else{
-            pa[1]=txt.Length-pa[0];
-            pa[2]=-1;
-        }
-        return true;
     }
     public static string LeftOf(string txt,char dlm){
         int idx=txt.IndexOf(dlm);
@@ -915,6 +1014,50 @@ public static class ParseUtil {
         return dic[name]=string.Join("",sa);
     }
 
+    public static bool TryParseFloat(StrSegment seg,out float f){
+        f=0;
+        if(seg.Length==0) return false;
+        string str=seg.str;
+        int i=seg.head,t=seg.tail;
+        float sign=1;
+        double n=0,s=0;
+        if(str[i]=='+') i++;
+        for(; i<=t; i++) if(str[i]=='-'){sign*=-1;}else break;
+        char c= ' ';
+        for(; i<=t; i++){
+            c=str[i];
+            if(c=='.') break;
+            if(char.IsDigit(c)){n=n*10+(c-'0');}
+            else{ error="数値が不正です"; return false;}
+        }
+        ulong k=1;
+        if(c=='.'){
+            for(i++; i<=t; i++){
+                c=str[i];
+                if(char.IsDigit(c)){s=s*10+(c-'0');k*=10;}
+                else{ error="数値が不正です"; return false;}
+            }
+        }
+        f=sign*(float)(n+s/k);
+        return true;
+    }
+    public static bool TryParseInt(StrSegment seg,out int f){
+        f=0;
+        if(seg.Length==0) return false;
+        string str=seg.str;
+        int i=seg.head,t=seg.tail,sign=1;
+        long n=0;
+        if(str[i]=='+') i++;
+        for(; i<=t; i++) if(str[i]=='-'){sign*=-1;}else break;
+        for(; i<=t; i++){
+            char c=str[i];
+            if(char.IsDigit(c)){n=n*10+(c-'0');}
+            else{ error="数値が不正です"; return false;}
+        }
+        f=(int)(sign*n);
+        return true;
+    }
+
     public static float ParseFloat(string str,float dflt=float.NaN){
         if(string.IsNullOrEmpty(str)) return dflt;
         int i;
@@ -963,71 +1106,58 @@ public static class ParseUtil {
         public string bone;
         public string path;
         public int meshno;
-        public ColonDesc(string s){
-            this.num=0;
-            this.type="";
-            this.id=s;
-            this.slot="";
-            this.bone="";
-            this.path="";
-            this.meshno=-1;
-            if(string.IsNullOrEmpty(s)) return;
-            int li=s.LastIndexOf(':');
-            if(li<0){       // objectname#0の形のみ
-                this.type="obj";
-                int sharp=s.IndexOf('#');
-                if(sharp>=0 && int.TryParse(s.Substring(sharp+1),out int n) && n>=0){
-                    this.num=2;
-                    this.id=s.Substring(0,sharp);
-                    this.meshno=n;
+        public ColonDesc(string s):this(new StrSegment(s)) {}
+        public ColonDesc(StrSegment seg){
+            num=0;
+            type=id=slot=bone=path="";
+            meshno=-1;
+            if(seg.Length==0) return;
+
+            int p,li,n;
+            if((p=seg.IndexOf(':'))>=0){
+                type=seg.Substr(0,p);
+                seg.SliceSelf(p+1,-1);
+            }else{
+                p=FindMeshno(seg);  // mesh objectname#0 の形があり得る
+                if(p>=0 && ParseUtil.TryParseInt(seg.Slice(p+1),out n) && n>=0){
+                    id=seg.Substr(0,p);
+                    meshno=n;
+                    type="obj"; bone="/"; num=3;
+                }else{  // コロン記法じゃない。例えパスがあっても。"//"も含む
+                    id=seg.ToString();
                 }
                 return;
             }
-
-            int fi=s.IndexOf(':');
-            if(fi>=0){
-                if(fi==li){ // maid:0等
-                    this.num=2;
-                    this.type=s.Substring(0,fi);
-                    int sharp=s.IndexOf('#',fi+1);
-                    if(sharp>=0 && int.TryParse(s.Substring(sharp+1),out int n) && n>=0){
-                        this.id=s.Substring(fi+1,sharp-fi-1);
-                        this.meshno=n;
-                        this.bone="/";
-                    }else{
-                        this.id=s.Substring(fi+1);
-                    }
-                }else{      // maid:0:BHead等
-                    this.num=3;
-                    this.type=s.Substring(0,fi);
-                    this.id=s.Substring(fi+1,li-fi-1);
-                    this.bone=s.Substring(li+1);
-                    int p=this.bone.IndexOf('/');
-                    if(p>0){
-                        this.path=this.bone.Substring(p+1);
-                        this.bone=this.bone.Substring(0,p);
-                    }
-                    if(this.path!=""){
-                        int sharp=this.path.IndexOf('#');
-                        if(sharp>=0 && int.TryParse(this.path.Substring(sharp+1),out int n) && n>=0){
-                            this.meshno=n;
-                            this.path=this.path.Substring(0,sharp);
-                        }
-                    }else{
-                        int sharp=this.bone.IndexOf('#');
-                        if(sharp>=0 && int.TryParse(this.bone.Substring(sharp+1),out int n) && n>=0){
-                            this.meshno=n;
-                            this.bone=this.bone.Substring(0,sharp);
-                        }
-                    }
-                }
-                int si=this.id.LastIndexOf('.');
-                if(si>0){
-                    this.slot=this.id.Substring(si+1);
-                    this.id=this.id.Substring(0,si);
-                    if(this.bone=="") this.bone="/";
-                }
+            p=FindMeshno(seg);
+            if(p>=0 && ParseUtil.TryParseInt(seg.Slice(p+1),out n) && n>=0){
+                meshno=n;
+                seg.SliceSelf(0,p-1);
             }
+            if((p=seg.IndexOf('/'))>=0){
+                path=seg.Substr(p+1);
+                seg.SliceSelf(0,p-1);
+            }
+            if((li=seg.IndexOf(':'))>=0){
+                num=3;
+                bone=seg.Substr(li+1);
+                seg.SliceSelf(0,li-1);
+                if(bone=="") bone="/";
+            }else num=2;
+            if((p=seg.IndexOf('.'))>=0){
+                id=seg.Substr(0,p);
+                slot=seg.Substr(p+1);
+            }else id=seg.ToString();
+            if(li<0&&(meshno>=0||slot!="")){bone="/"; num=3; }
+        }
+        // meshnoが無い時にIndexOf('#')系よりもやや判断が速いはず
+        private int FindMeshno(StrSegment seg){
+            int t=seg.Length-1;
+            if(t<0 || !char.IsDigit(seg[t])) return -1;
+            for(int i=t-1; i>=0; i--){
+                if(seg[i]=='#') return i;
+                if(!char.IsDigit(seg[i])) return -1;
+            }
+            return -1;
         }
     }
     public static PropDesc ParseProp(string val){

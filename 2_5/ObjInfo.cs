@@ -247,7 +247,11 @@ public class ObjInfoData {
     }
     private static FieldInfo meshField=null;
     public void UpdateMorph(Transform tr,Mesh oldmesh,Mesh newmesh){
-        if(meshField==null) try{ meshField=typeof(TMorph).GetField("m_mesh",BindingFlags.Instance | BindingFlags.NonPublic); }catch{ return; }
+        if(meshField==null) try{
+            meshField=typeof(TMorph).GetField("m_mesh",BindingFlags.Instance | BindingFlags.Public);
+            // ↑今はpublicだけど↓以前はprivateだったので一応残す
+            if(meshField==null) meshField=typeof(TMorph).GetField("m_mesh",BindingFlags.Instance | BindingFlags.NonPublic);
+        }catch{ return; }
         if(this.morph!=null){
             foreach(TMorph m in this.morph){
                 var mmesh=meshField.GetValue(m);

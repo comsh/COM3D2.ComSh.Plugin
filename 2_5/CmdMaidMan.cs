@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using System.Runtime.InteropServices;
 
 namespace COM3D2.ComSh.Plugin {
 
@@ -118,6 +119,8 @@ public static class CmdMaidMan {
         maidParamDic.Add("skirtparam.save",new CmdParam<Maid>(MaidParamSkirtParamSave));
         maidParamDic.Add("skirtparam.load",new CmdParam<Maid>(MaidParamSkirtParamLoad));
         maidParamDic.Add("finger.load",new CmdParam<Maid>(MaidParamFingerLoad));
+        maidParamDic.Add("contract",new CmdParam<Maid>(MaidParamContract));
+        maidParamDic.Add("finger",new CmdParam<Maid>(MaidParamFinger));
 
         maidParamDic.Add("l2w",new CmdParam<Maid>(MaidParamL2W));
         maidParamDic.Add("w2l",new CmdParam<Maid>(MaidParamW2L));
@@ -146,7 +149,7 @@ public static class CmdMaidMan {
         "lrot.x","lrot.y","lrot.z", "wrot.x","wrot.y","wrot.z",
         "scale.x","scale.y","scale.z", "prot","pquat",
         "ap","ap.wpos","handle","describe","select","later","evenlater","bbox",
-        "l2w","w2l","shape.add","shape.export","finger.load"
+        "l2w","w2l","shape.add","shape.export","finger.load","finger"
     };
 
  	private static int CmdMaid(ComShInterpreter sh,List<string> args) {
@@ -421,7 +424,6 @@ public static class CmdMaidMan {
                     if(File.Exists(filename)){ // mypose
                         af=new AnmFile(filename,nolposq);
                         if(manbip!=af.gender) af.ChgGender();
-                        m.SetAutoTwistAll(true);
                     }else{
                         if(name.StartsWith("crc_")){
                             var buf=UTIL.AReadAll(name);
@@ -465,7 +467,9 @@ public static class CmdMaidMan {
                     m.body0.SetMuneYureRWithEnable(rq);
                 }
             }
-            return CrossFade(m,id,cache.clip,clip,q,tailq);
+            int ret=CrossFade(m,id,cache.clip,clip,q,tailq);
+            m.SetAutoTwistAll(true);
+            return ret;
         }
         return 0;
     }
@@ -1032,6 +1036,7 @@ public static class CmdMaidMan {
             return 0;
         }
         if(val=="") return 1;
+
         string[] menus=val.Split(ParseUtil.comma);
         Maid current=m;
         for(int i=0; i<menus.Length; i++){
@@ -1121,7 +1126,6 @@ public static class CmdMaidMan {
             MaidUtil.MekureZurashi(m,0,MaidUtil.HADAKE,MPN.wear,MPN.onepiece);
         }else return sh.io.Error("f|b|off で指定してください");
         return 1;
-
     }
     private static int MaidParamMekure(ComShInterpreter sh,Maid m,string val){
         if(val==null){
@@ -1442,9 +1446,14 @@ public static class CmdMaidMan {
                 if(tr==null) return sh.io.Error("指定されたライトが見つかりません");
                 MaidUtil.LookAtCron(m,tr);
             }else return sh.io.Error("注視先の指定が不正です");
+        }else if(te.Length==1&&te[0].IndexOf(',')<0){
+            m.LockHeadAndEye(false);
+            Transform tr=ObjUtil.FindObj(sh,te[0]);
+            if(tr==null) return sh.io.Error("指定されたオブジェクトが見つかりません");
+            MaidUtil.LookAtCron(m,tr);
         }else{                      // 座標を見る
             m.LockHeadAndEye(false);
-            float[] xyz=ParseUtil.Xyz(te[0]);
+            float[] xyz=ParseUtil.Xyz1(te[0]);
             if(xyz==null) return sh.io.Error("注視座標が不正です");
             MaidUtil.LookAtCron(m,new Vector3(xyz[0],xyz[1],xyz[2]));
         }
@@ -1691,6 +1700,7 @@ public static class CmdMaidMan {
         m.MabatakiUpdateStop=(sw==0);
         return 1;
     }
+
     private static int MaidParamSing(ComShInterpreter sh,Maid m,string val){
         if(val==null) return 0;
         m.StopKuchipakuPattern();
@@ -1800,7 +1810,6 @@ public static class CmdMaidMan {
     }
     private static int MaidParamSingVowel(ComShInterpreter sh,Maid m,string val){
         Kuchipaku kp;
-
         if(val==null){
             float[][] aiueon;
             kp=Kuchipaku.Find(m);
@@ -1830,6 +1839,7 @@ public static class CmdMaidMan {
         }
         return 1;
     }
+
     private static int MaidParamIid(ComShInterpreter sh,Maid m,string val){
         sh.io.PrintLn(m.GetInstanceID().ToString());
         return 0;
@@ -2134,7 +2144,7 @@ public static class CmdMaidMan {
             if(lr[0]==""||lr[1]=="") return sh.io.Error("書式が不正です");
             switch(lr[0]){
             case "gravity":
-                fa=ParseUtil.Xyz(lr[1]);
+                fa=ParseUtil.Xyz1(lr[1]);
                 if(fa==null||fa[0]<0||fa[1]<0||fa[2]<0) sh.io.Error("数値が不正です");
                 SetDblValue(dbl,dbr,"GravityYMin",fa[0]);
                 SetDblValue(dbl,dbr,"GravityYLandScape",fa[1]);
@@ -2145,22 +2155,22 @@ public static class CmdMaidMan {
                 SetDblValue(dbl,dbr,"TargetDistance",f);
                 break;
             case "damping":
-                fa=ParseUtil.Xy(lr[1]);
+                fa=ParseUtil.Xy1(lr[1]);
                 if(fa==null||fa[0]<0||fa[1]<0) sh.io.Error("数値が不正です");
                 SetDblFloatPair(dbl,dbr,"DampingLerp",fa[0],fa[1]);
                 break;
             case "stiffness":
-                fa=ParseUtil.Xy(lr[1]);
+                fa=ParseUtil.Xy1(lr[1]);
                 if(fa==null||fa[0]<0||fa[1]<0) sh.io.Error("数値が不正です");
                 SetDblFloatPair(dbl,dbr,m.body0.boVisible_NIP?"StiffnessLerp":"StiffnessBraLerp",fa[0],fa[1]);
                 break;
             case "mass":
-                fa=ParseUtil.Xy(lr[1]);
+                fa=ParseUtil.Xy1(lr[1]);
                 if(fa==null||fa[0]<0||fa[1]<0) sh.io.Error("数値が不正です");
                 SetDblFloatPair(dbl,dbr,"MassLerp",fa[0],fa[1]);
                 break;
             case "supine":
-                fa=ParseUtil.Xy(lr[1]);
+                fa=ParseUtil.Xy1(lr[1]);
                 if(fa==null||fa[0]<0||fa[1]<0) sh.io.Error("数値が不正です");
                 SetDblValue(dbl,dbr,"GravityXSupine",fa[0]);
                 SetDblValue(dbl,dbr,"GravityXScalingSupine",fa[1]);
@@ -2332,7 +2342,7 @@ public static class CmdMaidMan {
             dsb.m_fVelocityForceRate=f;
             return 1;
         case "gravity":
-            fa=ParseUtil.Xyz(value);
+            fa=ParseUtil.Xyz1(value);
             if(fa==null) return sh.io.Error("座標が不正です");
             dsb.m_vGravity=new Vector3(fa[0],fa[1],fa[2]);
             return 1;
@@ -2474,7 +2484,7 @@ public static class CmdMaidMan {
                     return 1;
                 }else{
                     DynamicSkirtBone.PanierRadiusGroup grp;
-                    for(int i=0; i<dsb.m_PanierRadiusDistribGroup.Length; i++){
+                    if(dsb.m_PanierRadiusDistribGroup!=null) for(int i=0; i<dsb.m_PanierRadiusDistribGroup.Length; i++){
                         grp=dsb.m_PanierRadiusDistribGroup[i];
                         if(grp==null) continue;
                         if(key==grp.strBoneName){
@@ -2502,6 +2512,16 @@ public static class CmdMaidMan {
         }
     }
     private static int MaidParamBBox(ComShInterpreter sh,Maid m,string val){
+        var slot=m.body0.goSlot;
+        if(slot.Count==0) return 0;
+        Bounds bbox=CmdObjects.ObjBBox(slot[0].obj_tr);
+        //靴と帽子くらいは見た方がいいかも
+        //for(int i=1; i<slot.Count; i++) if(slot[i].obj_tr!=null)
+        //    bbox.Encapsulate(CmdObjects.ObjBBox(slot[i].obj_tr));
+        sh.io.PrintJoin(sh.ofs,sh.fmt.FPos(bbox.min),sh.fmt.FPos(bbox.max));
+        return 0;
+    }
+    private static int MaidParamBBoxBoneOnly(ComShInterpreter sh,Maid m,string val){
         Vector3 min=new Vector3(float.MaxValue,float.MaxValue,float.MaxValue);
         Vector3 max=new Vector3(float.MinValue,float.MinValue,float.MinValue);
         var ls=new List<string>(64);
@@ -2889,32 +2909,95 @@ public static class CmdMaidMan {
         }catch{ return sh.io.Error("読み込みに失敗しました");}
         return 1;
     }
+    private static int MaidParamContract(ComShInterpreter sh,Maid m,string val){
+        if(val==null){
+            if(m.status.contract==MaidStatus.Contract.Trainee) sh.io.Print('T');
+            else if(m.status.contract==MaidStatus.Contract.Free) sh.io.Print('F');
+            else if(m.status.contract==MaidStatus.Contract.Exclusive) sh.io.Print('E');
+            return 0;
+        }
+        if(m.status.contract==MaidStatus.Contract.Trainee) return 0;
+        if(val.Length==1 && val[0]=='f'||val[0]=='F') m.status.contract=MaidStatus.Contract.Free;
+        else if(val.Length==1 && val[0]=='e'||val[0]=='E') m.status.contract=MaidStatus.Contract.Exclusive;
+        return 1;
+    }
+    private static string[] fingerbones_f={
+        "Bip01 L Finger0", "Bip01 L Finger01", "Bip01 L Finger02",
+        "Bip01 L Finger1", "Bip01 L Finger11", "Bip01 L Finger12",
+        "Bip01 L Finger2", "Bip01 L Finger21", "Bip01 L Finger22",
+        "Bip01 L Finger3", "Bip01 L Finger31", "Bip01 L Finger32",
+        "Bip01 L Finger4", "Bip01 L Finger41", "Bip01 L Finger42",
+        "Bip01 R Finger0", "Bip01 R Finger01", "Bip01 R Finger02",
+        "Bip01 R Finger1", "Bip01 R Finger11", "Bip01 R Finger12",
+        "Bip01 R Finger2", "Bip01 R Finger21", "Bip01 R Finger22",
+        "Bip01 R Finger3", "Bip01 R Finger31", "Bip01 R Finger32",
+        "Bip01 R Finger4", "Bip01 R Finger41", "Bip01 R Finger42"
+    };
+    private static string[] fingerbones_m={
+        "ManBip L Finger0", "ManBip L Finger01", "ManBip L Finger02",
+        "ManBip L Finger1", "ManBip L Finger11", "ManBip L Finger12",
+        "ManBip L Finger2", "ManBip L Finger21", "ManBip L Finger22",
+        "ManBip L Finger3", "ManBip L Finger31", "ManBip L Finger32",
+        "ManBip L Finger4", "ManBip L Finger41", "ManBip L Finger42",
+        "ManBip R Finger0", "ManBip R Finger01", "ManBip R Finger02",
+        "ManBip R Finger1", "ManBip R Finger11", "ManBip R Finger12",
+        "ManBip R Finger2", "ManBip R Finger21", "ManBip R Finger22",
+        "ManBip R Finger3", "ManBip R Finger31", "ManBip R Finger32",
+        "ManBip R Finger4", "ManBip R Finger41", "ManBip R Finger42"
+    };
+    private static int MaidParamFinger(ComShInterpreter sh,Maid m,string val){
+        var fingerbones=(m.body0.trBip.name=="ManBip")?fingerbones_m:fingerbones_f;
+        if(val==null){
+            for(int i=0; i<10; i++){
+                if(m.body0.m_dicTrans.TryGetValue(fingerbones[i*3],out Transform f0)
+                && m.body0.m_dicTrans.TryGetValue(fingerbones[i*3+1],out Transform f1)
+                && m.body0.m_dicTrans.TryGetValue(fingerbones[i*3+2],out Transform f2)){
+                    sh.io.Print(i.ToString()).Print(',').Print(sh.fmt.FPos(f0.localRotation.eulerAngles))
+                        .Print(',').Print(sh.fmt.FInt(f1.localRotation.eulerAngles.z))
+                        .Print(',').PrintLn(sh.fmt.FInt(f2.localRotation.eulerAngles.z));
+                }
+            }
+            return 0;
+        }
+        var fa=ParseUtil.FloatArr2(val,ParseUtil.commaslashlf);
+        if(fa==null||fa.Length%6!=0) return sh.io.Error("書式が不正です");
+        for(int i=0; i<fa.Length; i+=6){
+            int fn=(int)fa[i];
+            if(!Mathf.Approximately(fa[i],fn)||fn<0||fn>9) return sh.io.Error("数値が不正です");
+            if(m.body0.m_dicTrans.TryGetValue(fingerbones[fn*3],out Transform f0)
+            && m.body0.m_dicTrans.TryGetValue(fingerbones[fn*3+1],out Transform f1)
+            && m.body0.m_dicTrans.TryGetValue(fingerbones[fn*3+2],out Transform f2)){
+                f0.localRotation=Quaternion.Euler(fa[i+1],fa[i+2],fa[i+3]);
+                f1.localRotation=Quaternion.Euler(0,0,fa[i+4]);
+                f2.localRotation=Quaternion.Euler(0,0,fa[i+5]);
+            }
+        }
+        return 1;
+    }
 }
 
 public static class MaidUtil {
 
     // メイド検索＆取得。連番 or 氏名 or guid
-    public static Maid FindMaid(string key){return FindMaid(key.AsSpan());}
-    public static Maid FindMaid(ReadOnlySpan<char> key){
+    public static Maid FindMaid(string key){return FindMaid(new StrSegment(key));}
+    public static Maid FindMaid(StrSegment key){
         if(key.Length==0) return null;
         int n;
-        if(int.TryParse(key,out n)) return NthMaid(n); 
-        if(key[0]=='%' && int.TryParse(key.Slice(1),out n)) return MaidByInstanceID(n);
-        if(key[0]=='@' && int.TryParse(key.Slice(1),out n)) return MaidByStockNo(n);
+        if(ParseUtil.TryParseInt(key,out n)) return NthMaid(n);
+        if(key[0]=='%' && ParseUtil.TryParseInt(key.Slice(1),out n)) return MaidByInstanceID(n);
+        if(key[0]=='@' && ParseUtil.TryParseInt(key.Slice(1),out n)) return MaidByStockNo(n);
         return MaidByGuidOrName(key);
     }
     // 男性検索＆取得。連番 or 表示名
-    public static Maid FindMan(string key){return FindMan(key.AsSpan());}
-    public static Maid FindMan(ReadOnlySpan<char> key){
+    public static Maid FindMan(string key){return FindMan(new StrSegment(key));}
+    public static Maid FindMan(StrSegment key){
         if(key.Length==0) return null;
         var k=key;
         int n;
-        if(key[0]=='%' && int.TryParse(key.Slice(1),out n)) return ManByInstanceID(n);
-        if(k.StartsWith("男",Ordinal)) k=k.Slice(1);
-        if(int.TryParse(k,out n)) return NthMan(n);
-        else if(MemoryExtensions.Equals(key,"主人公",Ordinal)
-             || MemoryExtensions.Equals(key,"御主人様",Ordinal)
-             || MemoryExtensions.Equals(key,"ご主人様",Ordinal) ) return NthMan(0);
+        if(key[0]=='%' && ParseUtil.TryParseInt(key.Slice(1),out n)) return ManByInstanceID(n);
+        if(k.StartsWith("男")) k.head++;
+        if(ParseUtil.TryParseInt(k,out n)) return NthMan(n);
+        else if(key.eq("主人公")||key.eq("御主人様")||key.eq("ご主人様")) return NthMan(0);
         else return ManByGuid(key);
     }
     public static Maid FindMaidMan(string type,string key){
@@ -2975,14 +3058,14 @@ public static class MaidUtil {
         }
         return -1;
     }
-    public static Maid MaidByGuidOrName(string name){return MaidByGuidOrName(name.AsSpan());}
-    public static Maid MaidByGuidOrName(ReadOnlySpan<char> name){
+    public static Maid MaidByGuidOrName(string name){return MaidByGuidOrName(new StrSegment(name));}
+    public static Maid MaidByGuidOrName(StrSegment name){
         CharacterMgr cm = GameMain.Instance.CharacterMgr;
         for (int i=0; i<cm.GetMaidCount(); i++) {
         Maid m = cm.GetMaid(i);
         if (m==null) continue;
-            if(MemoryExtensions.Equals(name,m.status.guid,Ordinal)) return m;
-            if(MemoryExtensions.Equals(name,m.status.fullNameJpStyle.AsSpan().Trim(),Ordinal)) return m;
+            if(name.eq(m.status.guid)) return m;
+            if(name.eq((new StrSegment(m.status.fullNameJpStyle)).Trim())) return m;
         }
         return null;
     }
@@ -3004,13 +3087,13 @@ public static class MaidUtil {
         }
         return null;
     }
-    public static Maid ManByGuid(string guid){return ManByGuid(guid.AsSpan());}
-    public static Maid ManByGuid(ReadOnlySpan<char> guid){
+    public static Maid ManByGuid(string guid){return ManByGuid(new StrSegment(guid));}
+    public static Maid ManByGuid(StrSegment guid){
         CharacterMgr cm = GameMain.Instance.CharacterMgr;
         for (int i=0; i<cm.GetManCount(); i++) {
             Maid m=cm.GetMan(i);
             if(m==null) continue;
-            if(m.status.guid==guid) return m;
+            if(guid.eq(m.status.guid)) return m;
         }
         return null;
     }
@@ -3406,6 +3489,7 @@ public static class MaidUtil {
         return "";
     }
 }
+
 public class Kuchipaku {
     public static Dictionary<int,Kuchipaku> kuchipakuDic=new Dictionary<int,Kuchipaku>();
 
@@ -3438,7 +3522,7 @@ public class Kuchipaku {
         new float[]{0.05f,  0.3f,   0,      0.05f,  0.05f,  0.1f,   0},
         new float[]{0.2f,   0,      0.7f,   0,      0,      0,      1},
         new float[]{0.06f,  0,      0,      0,      0.1f,   0.3f,   1}
-    }; 
+    };
     public string[] vowelkeys=default_vowelkeys;
     public float[][] aiueon=default_aiueon;
     public void SetVowelKeys(string[] ka){

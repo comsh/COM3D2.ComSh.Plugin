@@ -350,7 +350,7 @@ public static class CmdCamera {
     } 
     private static int CameraParamW2S(ComShInterpreter sh,CameraMain mc,string val){
         if(val==null) return 0;
-        float[] xyz=ParseUtil.Xyz(val);
+        float[] xyz=ParseUtil.Position(val);
         if(xyz==null) return sh.io.Error(ParseUtil.error);
         Vector3 xy=mc.camera.WorldToScreenPoint(new Vector3(xyz[0],xyz[1],xyz[2]));
         // このxyは左下を0,0とする系。左上起点になおして表示
@@ -359,7 +359,7 @@ public static class CmdCamera {
     }
     private static int CameraParamS2W(ComShInterpreter sh,CameraMain mc,string val){
         if(val==null) return 0;
-        float[] xyz=ParseUtil.Xyz(val);
+        float[] xyz=ParseUtil.Xyz1(val);
         if(xyz==null) return sh.io.Error(ParseUtil.error);
         Vector3 pos=mc.camera.ScreenToWorldPoint(new Vector3(xyz[0],mc.camera.pixelHeight-1-xyz[1],xyz[2]));
         sh.io.Print(sh.fmt.FPos(pos));
@@ -370,7 +370,7 @@ public static class CmdCamera {
             sh.io.PrintLn($"{mc.camera.pixelWidth},{mc.camera.pixelHeight}");
             return 0;
         }
-        float[] xy=ParseUtil.Xy(val);
+        float[] xy=ParseUtil.Xy1(val);
         if(xy==null) return sh.io.Error(ParseUtil.error);
         Screen.SetResolution((int)xy[0],(int)xy[1],Screen.fullScreen);
         return 1;

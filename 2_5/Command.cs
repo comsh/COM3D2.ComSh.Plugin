@@ -143,6 +143,7 @@ public static class Command {
         cmdTbl.Add("rgb2hsv", new Cmd(CmdRgb2Hsv));
         cmdTbl.Add("hsv2rgb", new Cmd(CmdHsv2Rgb));
         cmdTbl.Add("indiv", new Cmd(CmdInDiv));
+        cmdTbl.Add("lerp", new Cmd(CmdInDiv));
         cmdTbl.Add("clean", new Cmd(CmdClean));
         cmdTbl.Add("gc", new Cmd(CmdGC));
         cmdTbl.Add("evalkag", new Cmd(CmdEvalKag));
@@ -1276,11 +1277,11 @@ public static class Command {
     private static int CmdExpr(ComShInterpreter sh,List<string> args){
         const string usage="使い方: expr 値1 演算子(+|-|*|/|%) 値2 [演算子 値3...]";
         if(args.Count<4 || args.Count%2==1) return sh.io.Error(usage);
-        double[] v1=ParseUtil.DoubleArr(args[1]);
+        double[] v1=ParseUtil.DoubleArr2(args[1]);
         if(v1==null||v1.Length==0) return sh.io.Error("数値の形式が不正です");
         for(int i=2; i<args.Count; i+=2){
             if(args[i].Length!=1) return sh.io.Error("演算子が不正です");
-            double[] v2=ParseUtil.DoubleArr(args[i+1]);
+            double[] v2=ParseUtil.DoubleArr2(args[i+1]);
             if(v2==null||v2.Length==0) return sh.io.Error("数値の形式が不正です");
             v1=Calc(args[i][0],v1,v2);
             if(v1==null) return sh.io.Error(exprErr);
@@ -1633,10 +1634,9 @@ public static class Command {
         sh.io.Print(sh.fmt.FVal(Mathf.PerlinNoise(xy[0],xy[1])));
         return 0;
     }
-    private static float[] no_radius=new float[]{0};
     private static int CmdFbmNoise(ComShInterpreter sh,List<string> args){
         const string usage="使い方: fbm 振幅 周波数 バイアス x y [半径 角度]";
-        float[] amp,freq,rx=no_radius,ry=no_radius;
+        float[] amp,freq;
         float x,y,bias;
         if(args.Count<5 || args.Count>8) return sh.io.Error(usage);
         amp=ParseUtil.FloatArr(args[1]);
@@ -1648,8 +1648,8 @@ public static class Command {
         if((idx=args[4].IndexOf(','))>=0){
             if(args.Count==8) return sh.io.Error(usage);
             ridx=5;
-            if(!float.TryParse(args[4].Substring(0,idx),out x)
-             ||!float.TryParse(args[4].Substring(idx+1),out y)) return sh.io.Error("数値が不正です");
+            if(!ParseUtil.TryParseFloat(new StrSegment(args[4],0,idx-1),out x)
+             ||!ParseUtil.TryParseFloat(new StrSegment(args[4],idx+1),out y)) return sh.io.Error("数値が不正です");
         }else{
             if(args.Count==5) return sh.io.Error(usage);
             ridx=6;
@@ -1662,20 +1662,29 @@ public static class Command {
             n=Math.Max(n,ra.Length);
             for(int i=0; i<ra.Length; i++) if(ra[i]<=0) return sh.io.Error("数値が不正です");
             if(!float.TryParse(args[ridx+1],out float d)||d<0) return sh.io.Error("数値が不正です");
-            float th=d*Mathf.Deg2Rad,c=Mathf.Cos(th),s=Mathf.Sin(th);
-            rx=new float[ra.Length]; ry=new float[ra.Length];
-            for(int i=0; i<ra.Length; i++){ rx[i]=ra[i]*c; ry[i]=ra[i]*s; }
+
+            float th=d*Mathf.Deg2Rad;
+
+            if(n==0) return sh.io.Error("数値が不正です");
+            float val=bias;
+            for(int i=0; i<n; i++){
+                float a=(i<amp.Length)?amp[i]:amp[amp.Length-1];
+                float f=(i<freq.Length)?freq[i]:freq[freq.Length-1];
+                float r_x=((i<ra.Length)?ra[i]:ra[ra.Length-1])*Mathf.Cos(th*f);
+                float r_y=((i<ra.Length)?ra[i]:ra[ra.Length-1])*Mathf.Sin(th*f);
+                val+=Mathf.PerlinNoise(r_x+x,r_y+y)*a;
+            }
+            sh.io.Print(sh.fmt.FVal(val));
+        }else{
+            if(n==0) return sh.io.Error("数値が不正です");
+            float val=bias;
+            for(int i=0; i<n; i++){
+                float a=(i<amp.Length)?amp[i]:amp[amp.Length-1];
+                float f=(i<freq.Length)?freq[i]:freq[freq.Length-1];
+                val+=Mathf.PerlinNoise(x*f,y*f)*a;
+            }
+            sh.io.Print(sh.fmt.FVal(val));
         }
-        if(n==0) return sh.io.Error("数値が不正です");
-        float val=bias;
-        for(int i=0; i<n; i++){
-            float a=(i<amp.Length)?amp[i]:amp[amp.Length-1];
-            float f=(i<freq.Length)?freq[i]:freq[freq.Length-1];
-            float r_x=(i<rx.Length)?rx[i]:rx[rx.Length-1];
-            float r_y=(i<ry.Length)?ry[i]:ry[ry.Length-1];
-            val+=Mathf.PerlinNoise((r_x+x)*f,(r_y+y)*f)*a;
-        }
-        sh.io.Print(sh.fmt.FVal(val));
         return 0;
     }
     private static int CmdQuat(ComShInterpreter sh,List<string> args){
@@ -1685,7 +1694,7 @@ public static class Command {
                           +"使い方4: quat 中心点 始点 終点\n"
                           +"使い方5: quat 向き1 向き2 補間率";
         if(args.Count==2){
-            float[] eu=ParseUtil.Xyz(args[1]);
+            float[] eu=ParseUtil.Xyz1(args[1]);
             if(eu==null) return sh.io.Error(ParseUtil.error);
             sh.io.Print(sh.fmt.FQuat(Quaternion.Euler(new Vector3(eu[0],eu[1],eu[2]))));
         }else if(args.Count==3){
@@ -1808,11 +1817,11 @@ public static class Command {
     private static int CmdDistance(ComShInterpreter sh,List<string> args){
         float[] v=new float[4];
         if(args.Count!=2 && args.Count!=3) return sh.io.Error("使い方: distance 座標1 [座標2]");
-        int d=ParseUtil.XyzSub(args[1],v);
+        int d=ParseUtil.Position(args[1],v);
         if(d<=0||d>4) return sh.io.Error("座標の指定が不正です");
         if(args.Count==3){
             float[] v1=new float[4];
-            int d1=ParseUtil.XyzSub(args[2],v1);
+            int d1=ParseUtil.Position(args[2],v1);
             if(d1!=d) return sh.io.Error("座標の指定が不正です");
             v[0]-=v1[0]; v[1]-=v1[1]; v[2]-=v1[2]; v[3]-=v1[3];
         }
@@ -1827,11 +1836,11 @@ public static class Command {
     private static int CmdNormalize(ComShInterpreter sh,List<string> args){
         float[] v=new float[4];
         if(args.Count!=2 && args.Count!=3) return sh.io.Error("使い方: normalize 座標1 [座標2]");
-        int d=ParseUtil.XyzSub(args[1],v);
+        int d=ParseUtil.Position(args[1],v);
         if(d<=0||d>4) return sh.io.Error("座標の指定が不正です");
         if(args.Count==3){
             float[] v1=new float[4];
-            int d1=ParseUtil.XyzSub(args[2],v1);
+            int d1=ParseUtil.Position(args[2],v1);
             if(d1!=d) return sh.io.Error("座標の指定が不正です");
             v[0]-=v1[0]; v[1]-=v1[1]; v[2]-=v1[2]; v[3]-=v1[3];
         }
@@ -1910,11 +1919,17 @@ public static class Command {
     }
     private static int CmdCrossProduct(ComShInterpreter sh,List<string> args){
         float[] v1=new float[3],v2=new float[3];
-        if(args.Count!=3) return sh.io.Error("使い方: crossproduct ベクトル1 ベクトル2");
-        int d=ParseUtil.XyzSub(args[1],v1);
+        if(args.Count!=3&&args.Count!=4) return sh.io.Error("使い方: crossproduct ベクトル1 ベクトル2 [原点]");
+        int d=ParseUtil.Position(args[1],v1);
         if(d<=1||d>3) return sh.io.Error("ベクトルの指定が不正です");
-        int d1=ParseUtil.XyzSub(args[2],v2);
+        int d1=ParseUtil.Position(args[2],v2);
         if(d!=d1) return sh.io.Error("ベクトルの指定が不正です");
+        if(args.Count==4){
+            float[] v0=new float[3];
+            d1=ParseUtil.Position(args[3],v0);
+            if(d!=d1) return sh.io.Error("ベクトルの指定が不正です");
+            for(int i=0; i<d; i++){ v1[i]-=v0[i]; v2[i]-=v0[i]; }
+        }
         if(d==3){
             float x=v1[1]*v2[2]-v1[2]*v2[1];
             float y=v1[2]*v2[0]-v1[0]*v2[2];
@@ -1927,13 +1942,20 @@ public static class Command {
     }
     private static int CmdDotProduct(ComShInterpreter sh,List<string> args){
         float[] v1=new float[3],v2=new float[3];
-        if(args.Count!=3) return sh.io.Error("使い方: dotproduct ベクトル1 ベクトル2");
-        int d=ParseUtil.XyzSub(args[1],v1);
+        if(args.Count!=3&&args.Count!=4) return sh.io.Error("使い方: dotproduct ベクトル1 ベクトル2 [原点]");
+        int d=ParseUtil.Position(args[1],v1);
         if(d<=1||d>3) return sh.io.Error("ベクトルの指定が不正です");
-        int d1=ParseUtil.XyzSub(args[2],v2);
+        int d1=ParseUtil.Position(args[2],v2);
         if(d!=d1) return sh.io.Error("ベクトルの指定が不正です");
-        if(d==3) sh.io.Print(sh.fmt.FVal(v1[0]*v2[0]+v1[1]*v2[1]+v1[2]*v2[2]));
-        else sh.io.Print(sh.fmt.FVal(v1[0]*v2[0]+v1[1]*v2[1]));
+        if(args.Count==4){
+            float[] v0=new float[3];
+            d1=ParseUtil.Position(args[3],v0);
+            if(d!=d1) return sh.io.Error("ベクトルの指定が不正です");
+            for(int i=0; i<d; i++){ v1[i]-=v0[i]; v2[i]-=v0[i]; }
+        }
+        float ret=0;
+        for(int i=0; i<d; i++) ret+=v1[i]*v2[i];
+        sh.io.Print(sh.fmt.FVal(ret));
         return 0;
     }
     private static int CmdClamp(ComShInterpreter sh,List<string> args){
@@ -1949,10 +1971,10 @@ public static class Command {
         const string usage="使い方: inside 座標 中心座標 サイズ [回転]";
         if(args.Count!=4 && args.Count!=5) return sh.io.Error(usage);
         float[] p={0,0,0};
-        int n=ParseUtil.XyzSub(args[1],p);
+        int n=ParseUtil.Position(args[1],p);
         if(n<=0||n>3) return sh.io.Error("座標が不正です");
         float[] o={0,0,0};
-        int n2=ParseUtil.XyzSub(args[2],o);
+        int n2=ParseUtil.Position(args[2],o);
         if(n2!=n) return sh.io.Error("座標が不正、または次数が一致していません");
         float[] sz={0,0,0};
         n2=ParseUtil.XyzSub(args[3],sz);
@@ -2309,7 +2331,7 @@ public static class Command {
                 });
                 s=new ReferredVal.GetValue((string v0,out string v1)=>{
                     v1=v0; if(tr==null) return -1;
-                    float[] xyz=ParseUtil.Xyz(v0);
+                    float[] xyz=ParseUtil.Xyz1(v0);
                     if(xyz==null) return 1;
                     tr.position=new Vector3(xyz[0],xyz[1],xyz[2]);
                     return 0;
@@ -2361,7 +2383,7 @@ public static class Command {
                 });
                 s=new ReferredVal.GetValue((string v0,out string v1)=>{
                     v1=v0; if(tr==null) return -1;
-                    float[] xyz=ParseUtil.Xyz(v0);
+                    float[] xyz=ParseUtil.Xyz1(v0);
                     if(xyz==null) return 1;
                     tr.rotation=Quaternion.Euler(xyz[0],xyz[1],xyz[2]);
                     return 0;
@@ -2428,7 +2450,7 @@ public static class Command {
                 });
                 s=new ReferredVal.GetValue((string v0,out string v1)=>{
                     v1=v0; if(tr==null) return -1;
-                    float[] xyz=ParseUtil.Xyz(v0);
+                    float[] xyz=ParseUtil.Xyz1(v0);
                     if(xyz==null) return 1;
                     tr.localPosition=new Vector3(xyz[0],xyz[1],xyz[2]);
                     return 0;
@@ -2480,7 +2502,7 @@ public static class Command {
                 });
                 s=new ReferredVal.GetValue((string v0,out string v1)=>{
                     v1=v0; if(tr==null) return -1;
-                    float[] xyz=ParseUtil.Xyz(v0);
+                    float[] xyz=ParseUtil.Xyz1(v0);
                     if(xyz==null) return 1;
                     tr.localRotation=Quaternion.Euler(xyz[0],xyz[1],xyz[2]);
                     return 0;
@@ -2531,7 +2553,7 @@ public static class Command {
             });
             s=new ReferredVal.GetValue((string v0,out string v1)=>{
                 v1=v0; if(tr==null) return -1;
-                float[] xyz=ParseUtil.Xyz(v0);
+                float[] xyz=ParseUtil.Xyz1(v0);
                 if(xyz==null) return 1;
                 tr.localScale=new Vector3(xyz[0],xyz[1],xyz[2]);
                 return 0;
@@ -2617,16 +2639,16 @@ public static class Command {
     private static int CmdInDiv(ComShInterpreter sh,List<string> args){
         if(args.Count!=4) return sh.io.Error("使い方1: indiv 座標1 座標2 比\n使い方2: indiv 座標1 座標2 座標3");
         float[] p0={0,0,0};
-        int n=ParseUtil.XyzSub(args[1],p0);
+        int n=ParseUtil.Position(args[1],p0);
         if(n<=0||n>3) return sh.io.Error("座標が不正です");
         float[] p1={0,0,0};
-        int n2=ParseUtil.XyzSub(args[2],p1);
+        int n2=ParseUtil.Position(args[2],p1);
         if(n2!=n) return sh.io.Error("座標が不正または次数が一致していません");
         float t=0;
         float[] p2=null;
         if(args[3].IndexOf(',')>=0){
             p2=new float[]{0,0,0};
-            n2=ParseUtil.XyzSub(args[3],p2);
+            n2=ParseUtil.Position(args[3],p2);
             if(n2!=n) return sh.io.Error("座標が不正または次数が一致していません");
         } else if(!float.TryParse(args[3],out t)) return sh.io.Error("数値が不正です");
         if(p2==null){
@@ -2723,7 +2745,7 @@ public static class Command {
             var ret=Vector2.SmoothDamp(new Vector2(fa[0],fa[1]),new Vector2(fa2[0],fa2[1]),ref speed2,period,maxspd,delta);
             sh.io.PrintJoin(sh.ofs,sh.fmt.FXY(ret),sh.fmt.FXY(speed2));
         }else if(n==3){
-            float[] xyz=ParseUtil.Xyz(args[3]);
+            float[] xyz=ParseUtil.Xyz1(args[3]);
             if(xyz==null) return sh.io.Error(ParseUtil.error);
             Vector3 speed3=new Vector3(xyz[0],xyz[1],xyz[2]);
             var ret=Vector3.SmoothDamp(new Vector3(fa[0],fa[1],fa[2]),new Vector3(fa2[0],fa2[1],fa2[2]),ref speed3,period,maxspd,delta);
@@ -2759,7 +2781,7 @@ public static class Command {
             float[] fa;
             switch(lr[0]){
             case "gravity":
-                fa=ParseUtil.Xyz(lr[1]);
+                fa=ParseUtil.Xyz1(lr[1]);
                 if(fa==null) return sh.io.Error("ベクトルが不正です");
                 Physics.gravity=new Vector3(fa[0],fa[1],fa[2]);
                 break;
@@ -2788,7 +2810,7 @@ public static class Command {
     private static int CmdFindCollider(ComShInterpreter sh,List<string> args){
         const string usage="使い方: findcollider 中心 サイズ [回転] [レイヤマスク]";
         if(args.Count!=3&&args.Count!=4&&args.Count!=5) return sh.io.Error(usage);
-        float[] fa=ParseUtil.Xyz(args[1]);
+        float[] fa=ParseUtil.Xyz1(args[1]);
         if(fa==null) return sh.io.Error(ParseUtil.error);
         Vector3 center=new Vector3(fa[0],fa[1],fa[2]);
         fa=ParseUtil.FloatArr(args[2]);
@@ -2803,7 +2825,7 @@ public static class Command {
         int bits=-1;
         Quaternion q=Quaternion.identity;
         if(args.Count>=4){
-            fa=ParseUtil.Xyz(args[3]);
+            fa=ParseUtil.Xyz1(args[3]);
             if(fa==null) return sh.io.Error(ParseUtil.error);
             q=Quaternion.Euler(fa[0],fa[1],fa[2]);
             if(args.Count==5){
@@ -3061,7 +3083,8 @@ public static class Command {
             sh.io.Print(sh.fmt.FPos(tr.position));
             return 0;
         }
-        float[] xyz=ParseUtil.XyzR(val,out bool rq);
+        bool rq=(val[0]=='+');
+        float[] xyz=ParseUtil.Position(new StrSegment(val,rq?1:0));
         if(xyz==null) return sh.io.Error(ParseUtil.error);
         if(rq) tr.position=tr.position+(new Vector3(xyz[0],xyz[1],xyz[2]));
         else tr.position=new Vector3(xyz[0],xyz[1],xyz[2]);
@@ -3136,7 +3159,18 @@ public static class Command {
     }
     public static int _CmdParamWPosRot(ComShInterpreter sh,Transform tr,string val){
         if(val==null){ sh.io.Print(sh.fmt.FPosRot(tr.position,tr.rotation.eulerAngles)); return 0; }
-        float[] fa=ParseUtil.FloatArr(val);
+
+        float[] fa;
+        var cd=new ParseUtil.ColonDesc(val);
+        if(cd.num==0) fa=ParseUtil.FloatArr(val); else{
+            var objtr=ObjUtil.FindObj(sh,cd);
+            if(objtr==null) return sh.io.Error("オブジェクトがありません");
+            var pos=objtr.position;
+            var rot=objtr.eulerAngles;
+            fa=new float[6];
+            fa[0]=pos.x; fa[1]=pos.y; fa[2]=pos.z;
+            fa[3]=rot.x; fa[4]=rot.y; fa[5]=rot.z;
+        }
         if(fa==null||fa.Length!=6) return sh.io.Error("書式が不正です");
         tr.position=new Vector3(fa[0],fa[1],fa[2]);
         tr.rotation=Quaternion.Euler(fa[3],fa[4],fa[5]);
@@ -3216,14 +3250,14 @@ public static class Command {
     }
     public static int _CmdParamOPos(ComShInterpreter sh,Transform tr,string val){
         if(val==null) return 0;
-        float[] xyz=ParseUtil.Xyz(val);
+        float[] xyz=ParseUtil.Xyz1(val);
         if(xyz==null) return sh.io.Error(ParseUtil.error);
         tr.Translate(xyz[0],xyz[1],xyz[2],Space.Self);
         return 1;
     }
     public static int _CmdParamORot(ComShInterpreter sh,Transform tr,string val){
         if(val==null) return 0;
-        float[] xyz=ParseUtil.Xyz(val);
+        float[] xyz=ParseUtil.Xyz1(val);
         if(xyz==null) return sh.io.Error(ParseUtil.error);
         tr.Rotate(xyz[0],xyz[1],xyz[2],Space.Self);
         return 1;
@@ -3298,7 +3332,7 @@ public static class Command {
     }
     public static int _CmdParamL2W(ComShInterpreter sh,Transform tr,string val){
         if(val==null){ sh.io.Print(tr.localToWorldMatrix.ToString()); return 0; }
-        float[] xyz= ParseUtil.Xyz(val);
+        float[] xyz= ParseUtil.Xyz1(val);
         if(xyz==null) return sh.io.Error(ParseUtil.error);
         sh.io.Print(sh.fmt.FPos(
             tr.localToWorldMatrix.MultiplyPoint3x4(new Vector3(xyz[0],xyz[1],xyz[2]))
@@ -3307,7 +3341,7 @@ public static class Command {
     }
     public static int _CmdParamW2L(ComShInterpreter sh,Transform tr,string val){
         if(val==null){ sh.io.Print(tr.worldToLocalMatrix.ToString()); return 0; }
-        float[] xyz= ParseUtil.Xyz(val);
+        float[] xyz= ParseUtil.Position(val);
         if(xyz==null) return sh.io.Error(ParseUtil.error);
         sh.io.Print(sh.fmt.FPos(
             tr.worldToLocalMatrix.MultiplyPoint3x4(new Vector3(xyz[0],xyz[1],xyz[2]))

@@ -30,6 +30,7 @@ public partial class ComShInterpreter {
     }
     public string ns="";
     public int lastcmp=1;
+    public static ComShInterpreter currentSh;
 
     public int looplv=0;
     public Action onloopend=null;
@@ -86,6 +87,7 @@ public partial class ComShInterpreter {
     private int InterpretTokens(List<string> tokens,char prevEoL,char currentEoL,bool canSleep){
         int ret=0;
         Command.Cmd cmd;
+        currentSh=this;
         io.PrintStart(prevEoL);
         // コマンド先頭が'?'だったらエラー無視
         io.suppressError=false;
@@ -129,6 +131,7 @@ public partial class ComShInterpreter {
             }
         }
         io.PrintEnd(currentEoL);
+        currentSh=null;
         return ret;
     }
     public class SubShOutput {
@@ -163,7 +166,11 @@ public partial class ComShInterpreter {
         env.SetBind("_light_root",null,new ReferredVal.GetValue((string v0,out string v1)=>{
             v1=v0; UpdateLightBase(env); return 0;
         }));
+        fmt.Update(env);
+        UpdateObjBase(env);
+        UpdateLightBase(env);
     }
+
     public static bool IsSpecialVar(string name){
         switch(name){
         case "_format_0to1":
