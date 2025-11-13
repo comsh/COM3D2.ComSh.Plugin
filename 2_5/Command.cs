@@ -168,6 +168,7 @@ public static class Command {
         cmdTbl.Add("todec", new Cmd(CmdToDec));
         cmdTbl.Add("nop", new Cmd(CmdNop));
         cmdTbl.Add("comver", new Cmd(CmdComVer));
+        cmdTbl.Add("euler", new Cmd(CmdEuler));
 
         cmdTbl.Add("__uibutton", new Cmd(CmdUIButton));
         cmdTbl.Add("__res",new Cmd(Cmd__Resource));
@@ -1728,6 +1729,13 @@ public static class Command {
                 sh.io.Print(sh.fmt.FQuat(Quaternion.FromToRotation(v1,v2)));
             }
         }else return sh.io.Error(usage);
+        return 0;
+    }
+    private static int CmdEuler(ComShInterpreter sh,List<string> args){
+        if(args.Count!=2) return sh.io.Error("使い方: euler 四元数");
+        float[] q=ParseUtil.Quat(args[1]);
+        var eu=(new Quaternion(q[0],q[1],q[2],q[3])).eulerAngles;
+        sh.io.Print(sh.fmt.FPos(eu.x,eu.y,eu.z));
         return 0;
     }
 	private static int CmdSleep(ComShInterpreter sh,List<string> args){

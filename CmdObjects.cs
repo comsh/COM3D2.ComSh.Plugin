@@ -2558,9 +2558,7 @@ public static class CmdObjects {
         for(int i=0; i<n; i++) if(tra[i]!=null && tra[i].name!=null && tra[i].name.StartsWith("ManBip")){ manq=true; break; }
         string parentname=ParseUtil.CompleteBoneName(sa[0],manq);
         int pidx=-1;
-        string sclname="";
-        if(!parentname.EndsWith("_SCL_")) sclname=parentname+"_SCL_";
-        for(int i=0; i<n; i++) if(tra[i]!=null && (tra[i].name==parentname||tra[i].name==sclname)){ pidx=i; break; }
+        for(int i=0; i<n; i++) if(tra[i]!=null && tra[i].name==parentname){ pidx=i; break; }
         if(pidx<0) return sh.io.Error("親ボーンが見つかりません");
 
         Mesh mesh=smr.sharedMesh;
@@ -2591,14 +2589,28 @@ public static class CmdObjects {
         if(r==null||r.GetType()!=typeof(SkinnedMeshRenderer)) return sh.io.Error("SkinnedMeshRendererが見つかりません");
         SkinnedMeshRenderer smr=(SkinnedMeshRenderer)r;
         int n=smr.bones.Length;
+        Transform[] tra=smr.bones;
         if(val==null){
-            for(int i=0; i<n; i++) if(smr.bones[i]!=null) sh.io.Print(smr.bones[i].name);
+            for(int i=0; i<n; i++) if(tra[i]!=null) sh.io.PrintLn(tra[i].name);
             return 0;
         }
-        for(int i=0; i<n; i++) if(smr.bones[i]!=null){
-            if(smr.bones[i].name==val){
-                sh.io.PrintLn2("iid:",tr.gameObject.GetInstanceID().ToString());
-                UTIL.PrintTrInfo(sh,tr);
+        GameObject go=new GameObject();
+        Matrix4x4[] bpa=smr.sharedMesh.bindposes;
+        bool manq=false;
+        for(int i=0; i<n; i++) if(tra[i]!=null && tra[i].name!=null && tra[i].name.StartsWith("ManBip")){ manq=true; break; }
+        string name=ParseUtil.CompleteBoneName(val,manq);
+        for(int i=0; i<n; i++) if(tra[i]!=null){
+            if(tra[i].name==val || tra[i].name==name){
+                Matrix4x4 bp=bpa[i].inverse;
+                Quaternion q=bp.GetRotation();  // 5.6に.rotationはない。これはどこかの拡張メソッド
+                Vector3 ux=bp.GetColumn(0),uy=bp.GetColumn(1),uz=bp.GetColumn(2);
+                float dx=ux.magnitude,dy=uy.magnitude,dz=uz.magnitude;
+                sh.io.PrintLn2("wpos:",sh.fmt.FPos(bp.GetColumn(3)));
+                sh.io.PrintLn2("wrot:",sh.fmt.FPos(q.eulerAngles));
+                sh.io.PrintLn2("scale:",sh.fmt.FPos(dx,dy,dz));
+                sh.io.PrintLn2("right:",sh.fmt.FPos(ux/dx));
+                sh.io.PrintLn2("up:",sh.fmt.FPos(uy/dy));
+                sh.io.PrintLn2("forward:",sh.fmt.FPos(uz/dz));
                 return 0;
             }
         }

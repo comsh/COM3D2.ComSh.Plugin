@@ -20,8 +20,8 @@ public struct StrSegment {
     public bool eq(StrSegment s2){ return this.Length==s2.Length&&string.CompareOrdinal(str,head,s2.str,s2.head,s2.Length)==0;}
     public StrSegment Trim(){
         int h,t;
-        for(h=this.head; h<=this.tail; h++) if(str[h]!=' ') break;
-        for(t=this.tail; t>=h; t--) if(str[t]!=' ') break;
+        for(h=this.head; h<=this.tail; h++) if(!char.IsWhiteSpace(str[h])) break;
+        for(t=this.tail; t>=h; t--) if(!char.IsWhiteSpace(str[t])) break;
         return new StrSegment(str,h,t);
     }
     public StrSegment Slice(int h){
@@ -42,7 +42,7 @@ public struct StrSegment {
         tail=(t2>tail)?tail:t2;
     }
     public string Substr(int h){return Slice(h).ToString();}
-    public string Substr(int h,int len){return Slice(h,h+len-1).ToString();}
+    public string Substr(int h,int len){return (len<=0)?"":Slice(h,h+len-1).ToString();}
     public int IndexOf(char c){return this.IndexOf(c,0);}
     public int IndexOf(char c,int s){
         if(tail<head) return -1;
