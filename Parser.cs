@@ -683,6 +683,34 @@ public static class ParseUtil {
         }
         return Xyz(str);
     }
+    public static float[] WRotR(string str,out byte relative){return WRotR(new StrSegment(str),out relative);}
+    public static float[] WRotR(StrSegment str,out byte relative){
+        relative=0;
+        if(str.Length==0) return null;
+        if(str[0]=='+'||str[0]=='L'||str[0]=='l') relative=1;
+        else if(str[0]=='R'||str[0]=='r') relative=2;
+
+        if(relative==0){
+            var cd=new ColonDesc(str);
+            if(cd.num==0) return Xyz1(str);
+            var tr=ObjUtil.FindObj(ComShInterpreter.currentSh,cd);
+            if(tr==null) return null;
+            var rot=tr.rotation.eulerAngles;
+            xyzbuf[0]=rot.x; xyzbuf[1]=rot.y; xyzbuf[2]=rot.z;
+            return xyzbuf;
+        }else return Xyz1(str.Slice(1));
+    }
+
+    public static float[] PositionR(string str,out bool relativeq){return PositionR(new StrSegment(str),out relativeq);}
+    public static float[] PositionR(StrSegment str,out bool relativeq){
+        relativeq=(str.Length>0 && str[0]=='+');
+        return relativeq?Xyz1(str.Slice(1)):Position(str);
+    }
+    public static int PositionR(string str,float[] ret,out bool relativeq){return PositionR(new StrSegment(str),ret,out relativeq);}
+    public static int PositionR(StrSegment str,float[] ret,out bool relativeq){
+        relativeq=(str.Length>0 && str[0]=='+');
+        return relativeq?XyzSub(str.Slice(1),ret):Position(str,ret);
+    }
     public static float[] Position(string str){return Position(new StrSegment(str));}
     public static float[] Position(StrSegment str){
         if(str.IndexOf(',')>=0) return Xyz1(str);

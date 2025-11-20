@@ -2674,7 +2674,7 @@ public static class Command {
                 var ll=v0.sqrMagnitude;
                 var v1=new Vector2(p2[0]-p0[0],p2[1]-p0[1]);
                 sh.io.Print(sh.fmt.F0to1(Vector2.Dot(v0,v1)/ll));
-            }else{
+            }else{ // n==1の場合はp2==null側なのでここには来ないけど一応
                 sh.io.Print(sh.fmt.FVal((p2[0]-p0[0])/(p1[0]-p0[0])));
             }
         }
@@ -3189,7 +3189,7 @@ public static class Command {
             sh.io.Print(sh.fmt.FEuler(tr.rotation.eulerAngles));
             return 0;
         }
-        float[] xyz=ParseUtil.RotR(val,out byte rq);
+        float[] xyz=ParseUtil.WRotR(val,out byte rq);
         if(xyz==null) return sh.io.Error(ParseUtil.error);
         if(rq==1) tr.rotation=Quaternion.Euler(xyz[0],xyz[1],xyz[2])*tr.rotation;
         else if(rq==2) tr.rotation=tr.rotation*Quaternion.Euler(xyz[0],xyz[1],xyz[2]);

@@ -1279,8 +1279,29 @@ public static class CmdObjects {
     }
     private static int ObjParamLocIKSub(ComShInterpreter sh,Transform tr,string val,Vector3 zaxis){
         if(val==null) return 0;
-        float[] xyz=ParseUtil.Position(val);
-        if(xyz==null) return sh.io.Error("座標の指定が不正です");
+        Vector3 pos;
+        int cn=ParseUtil.CountC(val,',');
+        float[] xyz,vec;
+        if(cn==0||cn==2){  // obj:name:bone or x,y,z
+            xyz=ParseUtil.Position(val);
+            if(xyz==null) return sh.io.Error("座標の指定が不正です");
+            pos=new Vector3(xyz[0],xyz[1],xyz[2]);
+            vec=null;
+        }else if(cn==1||cn==3){    // obj:name:bone,obj:name2:bone2 or obj:name:bone,vx,vy,vz
+            int idx=val.IndexOf(',');
+            xyz=ParseUtil.Position(new StrSegment(val,0,idx-1));
+            if(xyz==null) return sh.io.Error("座標の指定が不正です");
+            pos=new Vector3(xyz[0],xyz[1],xyz[2]);
+            vec=ParseUtil.Position(new StrSegment(val,idx+1));
+            if(vec==null) return sh.io.Error("座標の指定が不正です");
+        }else if(cn==5){       // x,y,z,vx,vy,vz
+            int idx=val.IndexOf(',',val.IndexOf(',',val.IndexOf(',')+1)+1);
+            xyz=ParseUtil.Xyz1(new StrSegment(val,0,idx-1));
+            if(xyz==null) return sh.io.Error("座標の指定が不正です");
+            pos=new Vector3(xyz[0],xyz[1],xyz[2]);
+            vec=ParseUtil.Xyz1(new StrSegment(val,idx+1));
+            if(vec==null) return sh.io.Error("座標の指定が不正です");
+        }else return sh.io.Error("書式が不正です");
 
         Transform p=tr;
         if(p.name=="Bip01" || p.name=="ManBip") return sh.io.Error("親ボーンが足りません");
@@ -1289,7 +1310,7 @@ public static class CmdObjects {
         p=p.parent;
         if(p==null) return sh.io.Error("親ボーンが足りません");
 
-        int ret=LocIK(new Vector3(xyz[0],xyz[1],xyz[2]),tr.parent.parent,tr.parent,tr,zaxis);
+        int ret=LocIK(pos,tr.parent.parent,tr.parent,tr,zaxis,vec);
         if(ret<0) return sh.io.Error("ボーンの長さが0です");
         return 1;
     }
@@ -1327,13 +1348,23 @@ public static class CmdObjects {
         if(ret<0) return sh.io.Error("ボーンの長さが0です");
         return 1;
     }
-    private static int LocIK(Vector3 t,Transform p0,Transform p1,Transform p2,Vector3 zaxis){
+    private static int LocIK(Vector3 t,Transform p0,Transform p1,Transform p2,Vector3 zaxis,float[] fe){
+        if(fe!=null){
+            if(LocIK0(t,p0,p1,p2,zaxis)<0) return -1;
+            var nv=(p2.position-p0.position).normalized;
+            var v0=Vector3.ProjectOnPlane(p1.position-p0.position,nv);
+            var v1=Vector3.ProjectOnPlane(new Vector3(fe[0],fe[1],fe[2])-p0.position,nv);
+            if(v0.sqrMagnitude>0 && v1.sqrMagnitude>0)
+                p0.rotation=Quaternion.FromToRotation(v0.normalized,v1.normalized)*p0.rotation;
+        }else{ if(LocIK0(t,p0,p1,p2,zaxis)<0) return -1; }
+        return 1;
+    }
+    private static int LocIK0(Vector3 t,Transform p0,Transform p1,Transform p2,Vector3 zaxis){
         float co=LowOfCosine(t,p0.position,p1.position,p2.position);
         if(float.IsNaN(co)) return -1;
         p1.localRotation=Quaternion.AngleAxis(Mathf.Acos(co)*Mathf.Rad2Deg,zaxis);
-        var w2l=p0.worldToLocalMatrix;
-        var lpt=w2l.MultiplyPoint3x4(t);
-        var lpw=w2l.MultiplyPoint3x4(p2.position);
+        var lpt=p0.InverseTransformPoint(t);
+        var lpw=p0.InverseTransformPoint(p2.position);
         p0.localRotation=p0.localRotation*Quaternion.FromToRotation(lpw.normalized,lpt.normalized);
         return 1;
     }
@@ -1364,7 +1395,7 @@ public static class CmdObjects {
         var lpw=w2l.MultiplyPoint3x4(p2.position);
         p0.localRotation=p0.localRotation*Quaternion.FromToRotation(lpw.normalized,lpt.normalized);
         // 次いで p1,p2,p3 で２ボーンIK
-        return LocIK(t,p1,p2,p3,axis2);
+        return LocIK(t,p1,p2,p3,axis2,null);
     }
     private static int ObjParamIK(ComShInterpreter sh,Transform tr,string val){
         if(val==null) return 0;

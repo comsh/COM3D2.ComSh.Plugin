@@ -1981,6 +1981,13 @@ public static class CmdMeshes {
                 var oldMesh=smr.sharedMesh;
                 smr.sharedMesh=newMesh;
                 oid.UpdateMorph(smr.transform,oldMesh,newMesh);
+                if(newMesh.bindposes.Length!=smr.bones.Length){
+                    // ボーン追加しかないので減らす方向のみ
+                    var tra=smr.bones;
+                    var tra2=new Transform[newMesh.bindposes.Length];
+                    Array.Copy(tra,tra2,tra2.Length);
+                    smr.bones=tra2;
+                }
             }else{
                 MeshFilter mf=r.GetComponent<MeshFilter>();
                 if(mf==null) return -1;

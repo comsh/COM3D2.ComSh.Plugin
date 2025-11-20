@@ -79,7 +79,7 @@ public static class CmdCamera {
             return 0;
         }
         ChgCameraType(mc,CameraMain.CameraType.Target);
-        float[] xyz=ParseUtil.XyzR(val,out bool relativeq);
+        float[] xyz=ParseUtil.PositionR(val,out bool relativeq);
         if(xyz==null) return sh.io.Error(ParseUtil.error);
         Vector3 target=new Vector3(xyz[0],xyz[1],xyz[2]);
         if(relativeq) target+=mc.GetTargetPos();
@@ -217,7 +217,7 @@ public static class CmdCamera {
             return 0;
         }
         ChgCameraType(mc,CameraMain.CameraType.Free);
-        float[] xyz=ParseUtil.RotR(val,out byte relative);
+        float[] xyz=ParseUtil.WRotR(val,out byte relative);
         if(xyz==null) return sh.io.Error(ParseUtil.error);
         if(relative==1) mc.SetRotation((Quaternion.Euler(xyz[0],xyz[1],xyz[2])*tr.rotation).eulerAngles);
         else if(relative==2) mc.SetRotation((tr.rotation*Quaternion.Euler(xyz[0],xyz[1],xyz[2])).eulerAngles);
@@ -281,7 +281,7 @@ public static class CmdCamera {
             sh.io.PrintLn(sh.fmt.FPos(mc.GetPos()));
             return 0;
         }
-        float[] xyz=ParseUtil.XyzR(val,out bool relativeq);
+        float[] xyz=ParseUtil.PositionR(val,out bool relativeq);
         if(xyz==null) return sh.io.Error(ParseUtil.error);
         var p=new Vector3(xyz[0],xyz[1],xyz[2]);
         if(relativeq) p+=mc.GetPos();
