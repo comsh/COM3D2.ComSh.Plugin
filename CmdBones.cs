@@ -139,6 +139,8 @@ public static class BoneUtil{
         if(type==""){
             if(id=="camera") return GameMain.Instance.MainCamera.camera.transform;
             else if(id=="bg"){
+                var mgr=GameMain.Instance.BgMgr;
+                if(mgr==null||mgr.BgObject==null) return null;
                 Transform tr=GameMain.Instance.BgMgr.BgObject.transform;
                 if(tr==null) return null;
                 if(bone==""||bone=="/") return tr;

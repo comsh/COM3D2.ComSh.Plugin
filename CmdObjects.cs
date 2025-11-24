@@ -2653,26 +2653,50 @@ public static class CmdObjects {
         sh.io.PrintJoin(sh.ofs,sh.fmt.FPos(bounds.min),sh.fmt.FPos(bounds.max));
         return 0;
     }
-    public static Bounds ObjBBox(Transform tr){
+    public static Bounds ObjBBox(Transform tr,bool detailq=true){
         Renderer[] r;
         var oi=ObjInfo.GetObjInfo(tr);
         if(oi==null) r=tr.GetComponentsInChildren<Renderer>();
         else r=(oi.data.FindComponents<Renderer>()).ToArray();
         if(r==null||r.Length==0) return new Bounds(Vector3.zero,Vector3.zero);
-        var bounds=getBounds(r[0]);
-        for(int i=1; i<r.Length; i++) bounds.Encapsulate(getBounds(r[i]));
+        var bounds=getBounds(r[0],detailq);
+        for(int i=1; i<r.Length; i++) bounds.Encapsulate(getBounds(r[i],detailq));
         return bounds;
     }
-    private static Bounds getBounds(Renderer r){
+    private static Bounds getBounds(Renderer r,bool detailq){
+        Bounds ret;
         if(r.GetType()==typeof(SkinnedMeshRenderer)){
             SkinnedMeshRenderer smr=(SkinnedMeshRenderer)r;
             var mesh=new Mesh();
             smr.BakeMesh(mesh);
-            mesh.RecalculateBounds();
-            smr.localBounds=mesh.bounds;
+            if(!detailq){
+                mesh.RecalculateBounds(); //カリング用なのでやや大きくなりがち
+                ret=BoundsL2W(smr.transform,mesh.bounds);
+            }else{
+                float x0=float.MaxValue,y0=float.MaxValue,z0=float.MaxValue;
+                float x1=float.MinValue,y1=float.MinValue,z1=float.MinValue;
+                var va=mesh.vertices;
+                for(int i=0; i<va.Length; i++){
+                    x0=Mathf.Min(va[i].x,x0); y0=Mathf.Min(va[i].y,y0); z0=Mathf.Min(va[i].z,z0);
+                    x1=Mathf.Max(va[i].x,x1); y1=Mathf.Max(va[i].y,y1); z1=Mathf.Max(va[i].z,z1);
+                }
+                ret=BoundsL2W(smr.transform,new Vector3(x0,y0,z0),new Vector3(x1,y1,z1));
+            }
             GameObject.Destroy(mesh);
-        }
-        return r.bounds;
+        }else ret=r.bounds;
+        return ret;
+    }
+    private static Bounds BoundsL2W(Transform tr,Bounds b){ return BoundsL2W(tr,b.min,b.max); }
+    private static Bounds BoundsL2W(Transform tr,Vector3 min,Vector3 max){
+        Bounds ret=new Bounds(tr.TransformPoint(min),Vector3.zero);
+        ret.Encapsulate(tr.TransformPoint(min.x,min.y,max.z));
+        ret.Encapsulate(tr.TransformPoint(min.x,max.y,min.z));
+        ret.Encapsulate(tr.TransformPoint(min.x,max.y,max.z));
+        ret.Encapsulate(tr.TransformPoint(max.x,min.y,min.z));
+        ret.Encapsulate(tr.TransformPoint(max.x,min.y,max.z));
+        ret.Encapsulate(tr.TransformPoint(max.x,max.y,min.z));
+        ret.Encapsulate(tr.TransformPoint(max));
+        return ret;
     }
 }
 public static class ObjUtil {
@@ -2727,7 +2751,11 @@ public static class ObjUtil {
             if(sa[0]=="light") return LightUtil.FindLight(sh,sa[1]);
             if(sa[0]==""){
                 if(sa[1]=="camera") return GameMain.Instance.MainCamera.camera.transform;
-                if(sa[1]=="bg") return GameMain.Instance.BgMgr.BgObject.transform;
+                if(sa[1]=="bg"){
+                    var mgr=GameMain.Instance.BgMgr;
+                    if(mgr==null||mgr.BgObject==null) return null;
+                    return mgr.BgObject.transform;
+                }
             }
         }
 
