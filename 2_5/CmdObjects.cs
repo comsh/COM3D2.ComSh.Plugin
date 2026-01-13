@@ -825,15 +825,19 @@ public static class CmdObjects {
             break;
         case "png":
             string file="";
-            if(v!="" && v.IndexOf('\\')<0){
+            if(v!=""){
                 if(v[0]=='*'){
-                    var tf=DataFiles.CreateTempFile(v.Substring(1),"");
+                    string name=v.Substring(1);
+                    if(!UTIL.ValidName(name)) return sh.io.Error("ファイル名が不正です");
+                    var tf=DataFiles.CreateTempFile(name,"");
                     file=tf.filename;
-                }else if(UTIL.CheckFileName(v)>=0){
-                    file=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+UTIL.Suffix(v,".png");
+                    if(file=="") return sh.io.Error("ファイル名が不正です");
+                }else{
+                    file=UTIL.GetFullPath(UTIL.Suffix(v,".png"),ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\");
+                    if(file=="") return sh.io.Error("ファイル名が不正です");
+                    try{Directory.CreateDirectory(Path.GetDirectoryName(file));}catch{}
                 }
             }
-            if(file=="") return sh.io.Error("ファイル名が不正です");
             var tex=par.render.sharedMaterial.GetTexture("_MainTex");
             if(tex!=null){
                 int ret=CmdMeshes.MeshParamPNGSub2(sh,tex,file);
@@ -2962,11 +2966,17 @@ public static class ObjUtil {
         return 0;
     }
     public class MenuObj {
+        public class Tex {
+            public string prop;
+            public string name;
+            public string col;
+        }
         public class Material{
             public int no;
             public string name;
             public string shader;
             public string slot;
+            public List<Tex> texchg;
         }
         public class Anm{
             public string name;
@@ -2987,24 +2997,31 @@ public static class ObjUtil {
         public Material AddMaterial(string slot,int no,string name){
             Material m=FindMaterial(slot,no);
             if(m==null){
-                List<Material> mlist;
-                if(!material.TryGetValue(slot,out mlist)){
-                    mlist=new List<Material>();
-                    material.Add(slot,mlist);
-                }
-                m=new Material();
-                m.slot=slot; m.no=no; m.name=name;
-                mlist.Add(m);
-                return m;
+                return NewMaterial(slot,no,name);
             }else{
                 m.name=name;
                 return m;
             }
         }
+        public Material NewMaterial(string slot,int no,string name){
+            if(!material.TryGetValue(slot,out List<Material> mlist)){
+                mlist=new List<Material>();
+                material.Add(slot,mlist);
+            }
+            Material m=new Material(){slot=slot, no=no, name=name};
+            mlist.Add(m);
+            return m;
+        }
         public void ChgShader(string slot,int no,string shader){
             Material m=FindMaterial(slot,no);
-            if(m==null) m=AddMaterial(slot,no,"");
+            if(m==null) m=NewMaterial(slot,no,"");
             m.shader=shader;
+        }
+        public void TexChg(string slot,int no,string prop,string file,string col=null){
+            Material m=FindMaterial(slot,no);
+            if(m==null) m=NewMaterial(slot,no,"");
+            if(m.texchg==null) m.texchg=new List<Tex>();
+            m.texchg.Add(new Tex(){prop=prop,name=file,col=col});
         }
 
         public static List<GameObject> ToObject(MenuObj mo,List<TMorph> morph){
@@ -3044,10 +3061,18 @@ public static class ObjUtil {
             UnityEngine.Material[] ma=smr.sharedMaterials;
             try{
                 foreach(var m in mlist) if(m.no<ma.Length){
-                    ImportCM.LoadMaterial(UTIL.Suffix(m.name,".mate"),null,ma[m.no]);
+                    if(!string.IsNullOrEmpty(m.name)){
+                        ImportCM.LoadMaterial(UTIL.Suffix(m.name,".mate"),null,ma[m.no]);
+                    }
                     if(m.shader!=null){
                         Shader sh=Shader.Find(m.shader);
                         if(sh!=null) ma[m.no].shader=sh;
+                    }
+                    if(m.texchg!=null&&m.texchg.Count>0){
+                        foreach(var tx in m.texchg){
+                            Texture img=TextureUtil.ReadTexture(tx.name);
+                            if(img!=null) ma[m.no].SetTexture(tx.prop,img);
+                        }
                     }
                 }
                 smr.sharedMaterials=ma;
@@ -3097,6 +3122,10 @@ public static class ObjUtil {
                         if(args.Count>=2) slot=args[1].ToLower();
                         if(args.Count>=3){ ret.anmFile[slot]=new MenuObj.Anm(UTIL.Suffix(args[2],".anm")); }
                         if(args.Count>=4 && args[3]=="loop") ret.anmFile[slot].loopq=true;
+                    }else if(cmd=="tex"||cmd=="テクスチャ変更"){
+                        string col=null;
+                        if(args.Count>=6) col=args[5]; // 対応してないけど
+                        if(args.Count>=5) ret.TexChg(args[1].ToLower(),int.Parse(args[2]),args[3],args[4],col);
                     }
                 }
             }

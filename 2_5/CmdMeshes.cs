@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text.RegularExpressions;
 using UnityEngine;
 using static COM3D2.ComSh.Plugin.Command;
@@ -864,11 +865,15 @@ public static class CmdMeshes {
                     mate.SetTexture(prop,cm);
                     texiid.Add(cm);
                 }else{
-                    Texture2D tex=TextureUtil.CloneTexture((Texture2D)tex0);
+                    Texture2D tex=(Texture2D)tex0;
+                    if(!tex.isReadable){
+                        tex=new Texture2D(tex.width,tex.height,tex.format,tex.mipmapCount>1);
+                        Graphics.CopyTexture(tex0,tex);
+                    }
                     tex.wrapMode=(wrap==1)?TextureWrapMode.Repeat:TextureWrapMode.Clamp;
+                    if(mode==1) tex.Compress(true);
                     var old=mate.GetTexture(prop);
                     if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
-                    if(mode==1) tex.Compress(true);
                     mate.SetTexture(prop,tex);
                     texiid.Add(tex);
                 }
@@ -1202,6 +1207,7 @@ public static class CmdMeshes {
                     int alv=(t.anisoLevel==0)?1:t.anisoLevel;
                     FilterMode fm=(t.filterMode==FilterMode.Point)?FilterMode.Bilinear:t.filterMode; 
                     t2=TextureUtil.CloneTexture(t,alv,mmb,fm,true);
+                    if(t.format==TextureFormat.DXT1 || t.format==TextureFormat.DXT5) t2.Compress(true);
                     t2.name=t.name;
                     texiid.Add(t2);
                 }
@@ -1228,9 +1234,16 @@ public static class CmdMeshes {
         return 1;
     }
     private static int MeshParamTexWrap(ComShInterpreter sh,SingleMesh sm,string val){
-        if(val==null) return 0;
         Material mate;
         Texture tex;
+        if(val==null){
+            mate=sm.mi.material[sm.submeshno];
+            tex=mate.GetTexture("_MainTex");
+            if(tex==null) return 0;
+            var wrap=tex.wrapMode;
+            sh.io.Print((wrap==TextureWrapMode.Clamp)?"0":"1");
+            return 0;
+        }
         string ts,prop="_MainTex";
         var sa=ParseUtil.LeftAndRight2(val,':');
         if(sa[0]!="") prop=sa[0];
@@ -1285,8 +1298,9 @@ public static class CmdMeshes {
         string fname,prop;
         var sa=ParseUtil.LeftAndRight(val,':');
         if(sa[1]==""){ fname=sa[0]; prop="_MainTex";} else { fname=sa[1]; prop=sa[0];}
-        if(fname=="" || fname.IndexOf('\\')>=0 || UTIL.CheckFileName(fname)<0) return sh.io.Error("ファイル名が不正です");
-        fname=ComShInterpreter.homeDir+@"ScreenShot\\"+UTIL.Suffix(fname,".png");
+        fname=UTIL.GetFullPath(UTIL.Suffix(fname,".png"),ComShInterpreter.homeDir+"ScreenShort\\");
+        if(fname=="") return sh.io.Error("ファイル名が不正です");
+        try{ Directory.CreateDirectory(Path.GetDirectoryName(fname));}catch{};
         int ret=MeshParamPNGSub(sh,sm,fname,prop);
         Resources.UnloadUnusedAssets();
         System.GC.Collect();
@@ -2042,7 +2056,7 @@ public static class TextureUtil {
         ret.mipMapBias=mmb;
         ret.filterMode=flt;
         ret.ReadPixels(new Rect(0,0,w,h),0,0,false);
-        ret.Apply();
+        ret.Apply(useMipMap);
         RenderTexture.active=bak;
         RenderTexture.ReleaseTemporary(rt);
         return ret;
@@ -2075,7 +2089,8 @@ public static class TextureUtil {
         for(int i=0; i<ids.Length; i++){
             var src=m.GetTexture(ids[i]);
             if(src==null) continue;
-            var dst=CloneTexture(src);
+            Texture2D dst=new Texture2D(src.width,src.height,((Texture2D)src).format,((Texture2D)src).mipmapCount>1);
+            Graphics.CopyTexture(src,dst);
             m.SetTexture(ids[i],dst);
             ret.Add(dst);
         }
@@ -2084,7 +2099,7 @@ public static class TextureUtil {
     public static Texture ReadTexture(string name){
         Texture tex0=Resources.Load<Texture>("SceneCreativeRoom/Debug/Textures/"+name);
         if(tex0==null) tex0=Resources.Load<Texture>("Texture/"+name);
-        if(tex0!=null) return CloneTexture((Texture2D)tex0);
+        if(tex0!=null) return tex0;
         try{
             string fname="";
             if(name.Length>0 && name[0]=='*'){
@@ -2113,7 +2128,7 @@ public static class TextureUtil {
 
     public static Cubemap CloneCubemap(Cubemap src){
         int h=src.height;
-        var ret=new Cubemap(h,TextureFormat.ARGB32,src.mipmapCount>0);
+        var ret=new Cubemap(h,TextureFormat.ARGB32,src.mipmapCount>1);
         ret.name=src.name;
         ret.wrapMode=src.wrapMode;
         ret.anisoLevel=src.anisoLevel;
@@ -2147,7 +2162,7 @@ public static class TextureUtil {
     public static Texture2D BlitCubemap(Cubemap cube){
         int d=cube.height;
         Texture2D result=new Texture2D(d*6,d,TextureFormat.RGBA32,false);
-        Texture2D faceT2D=new Texture2D(d,d,cube.format,cube.mipmapCount>0);
+        Texture2D faceT2D=new Texture2D(d,d,cube.format,cube.mipmapCount>1);
         RenderTexture tempRT=RenderTexture.GetTemporary(d,d,0,RenderTextureFormat.ARGB32);
         var bak=RenderTexture.active;
         for(int i=0; i<6; i++){

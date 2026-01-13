@@ -321,7 +321,7 @@ public static class CmdLights {
                 Transform tr=LightUtil.FindLight(sh,args[i]);
                 if(tr!=null){
                     LightUtil.lightDic.Remove(tr.name);
-                    UnityEngine.Object.Destroy(tr.gameObject);
+                    UnityEngine.Object.DestroyImmediate(tr.gameObject);
                 }
             }
             return 0;
@@ -370,7 +370,7 @@ public static class CmdLights {
     }
 
     private static int LightParamDel(ComShInterpreter sh,Transform tr,string val){
-        UnityEngine.Object.Destroy(tr.gameObject);
+        UnityEngine.Object.DestroyImmediate(tr.gameObject);
         LightUtil.lightDic.Remove(tr.name);
         return 0;
     }

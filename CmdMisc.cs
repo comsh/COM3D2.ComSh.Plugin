@@ -342,18 +342,18 @@ public static class CmdMisc {
             if(args[cmdidx]=="export"){
                 if((args.Count!=3&&args.Count!=4)||id=="") return sh.io.Error("使い方: tmpfile 識別名 export [出力ファイル名]");
                 string name=(args.Count==4)?args[3]:id;
-                if(UTIL.CheckFileName(name)<0) return sh.io.Error("出力ファイル名が不正です");
                 int ret=DataFiles.ExportTmpFile(id,name,ComShInterpreter.scriptFolder+"export\\");
                 if(ret==-1) return sh.io.Error("未登録です");
                 else if(ret==-2) return sh.io.Error("ファイルの書き込みに失敗しました");
+                else if(ret==-3) return sh.io.Error("出力ファイル名が不正です");
             }else if(args[cmdidx]=="mypose"){
                 if((args.Count!=3&&args.Count!=4)||id=="") return sh.io.Error("使い方: tmpfile 識別名 mypose [出力ファイル名]");
                 string name=(args.Count==4)?args[3]:id;
-                if(UTIL.CheckFileName(name)<0) return sh.io.Error("出力ファイル名が不正です");
                 name=UTIL.Suffix(name,".anm");
                 int ret=DataFiles.ExportTmpFile(id,name,ComShInterpreter.myposeDir);
                 if(ret==-1) return sh.io.Error("未登録です");
                 else if(ret==-2) return sh.io.Error("ファイルの書き込みに失敗しました");
+                else if(ret==-3) return sh.io.Error("出力ファイル名が不正です");
             }else if(args[cmdidx]=="append"){
                 if(args.Count!=4||id=="") return sh.io.Error("使い方: tmpfile 識別名 append 文字列");
                 int ret=DataFiles.AppendTmpFile(id,args[3]);

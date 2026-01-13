@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 using static COM3D2.ComSh.Plugin.Command;
 
@@ -306,8 +307,9 @@ public static class CmdSubCamera {
     }
     private static int SubCamParamScreenShot(ComShInterpreter sh,Camera cam,string val){
         if(val==null) return 0;
-        if(val=="" || val.IndexOf('\\')>=0 || UTIL.CheckFileName(val)<0) return sh.io.Error("ファイル名が不正です");
-        string fname=ComShInterpreter.homeDir+@"ScreenShot\\"+UTIL.Suffix(val,".png");
+        string fname=UTIL.GetFullPath(UTIL.Suffix(val,".png"),ComShInterpreter.homeDir+@"ScreenShot\\");
+        if(fname=="") return sh.io.Error("ファイル名が不正です");
+        try{Directory.CreateDirectory(Path.GetDirectoryName(fname));}catch{}
         if(TextureUtil.Rt2Png(cam.targetTexture,fname)<0) return sh.io.Error("書き込みに失敗しました");
         return 1;
     }
@@ -317,13 +319,17 @@ public static class CmdSubCamera {
         string file="";
         if(val!="" && val.IndexOf('\\')<0){
             if(val[0]=='*'){
-                var tf=DataFiles.CreateTempFile(val.Substring(1),"");
+                string name=val.Substring(1);
+                if(!UTIL.ValidName(name)) return sh.io.Error("ファイル名が不正です");
+                var tf=DataFiles.CreateTempFile(name,"");
                 file=tf.filename;
-            }else if(UTIL.CheckFileName(val)>=0){
-                file=ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\"+UTIL.Suffix(val,".png");
+                if(file=="") return sh.io.Error("ファイル名が不正です");
+            }else{
+                file=UTIL.GetFullPath(UTIL.Suffix(val,".png"),ComShInterpreter.homeDir+@"PhotoModeData\\Texture\\");
+                if(file=="") return sh.io.Error("ファイル名が不正です");
+                try{Directory.CreateDirectory(Path.GetDirectoryName(file));}catch{}
             }
         }
-        if(file=="") return sh.io.Error("ファイル名が不正です");
         if(TextureUtil.Rt2Png(cam.targetTexture,file)<0) return sh.io.Error("書き込みに失敗しました");
         return 1;
     }

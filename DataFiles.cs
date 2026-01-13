@@ -78,7 +78,8 @@ public static class DataFiles {
     }
     public static int ExportTmpFile(string id,string name,string path){
         if(!tmpfiledic.TryGetValue(id,out TmpFile tf)) return -1;
-        string dst=path+name;
+        string dst=UTIL.GetFullPath(name,path);
+        if(dst=="") return -3;
         try{
             if(File.Exists(tf.filename)) File.Copy(tf.filename,dst,true);
         }catch{

@@ -89,6 +89,7 @@ public partial class ComShInterpreter {
         Command.Cmd cmd;
         currentSh=this;
         io.PrintStart(prevEoL);
+
         // コマンド先頭が'?'だったらエラー無視
         io.suppressError=false;
         if(tokens[0].Length>0 && tokens[0][0]=='?'){
@@ -102,12 +103,12 @@ public partial class ComShInterpreter {
             }else if(cd.num==3 || cd.path!=""){
                 ret=CmdObjects.CmdObjectSub(this,cd,tokens,1);
             }else {
-                switch(cd.type){
-                case "maid": ret=CmdMaidMan.CmdMaidSub(this,cd.id,tokens,1); break;
-                case "man": ret=CmdMaidMan.CmdManSub(this,cd.id,tokens,1); break;
-                case "": 
-                case "obj": ret=CmdObjects.CmdObjectSub(this,cd,tokens,1); break;
-                case "light": ret=CmdLights.CmdLightSub(this,cd.id,tokens,1); break;
+                switch(cd.type_c){
+                case 'f': ret=CmdMaidMan.CmdMaidSub(this,cd.id,tokens,1); break;
+                case 'm': ret=CmdMaidMan.CmdManSub(this,cd.id,tokens,1); break;
+                case ' ': 
+                case 'o': ret=CmdObjects.CmdObjectSub(this,cd,tokens,1); break;
+                case 'l': ret=CmdLights.CmdLightSub(this,cd.id,tokens,1); break;
                 default: ret=io.Error("コマンドが存在しません"); break;
                 }
             }
@@ -416,6 +417,7 @@ public partial class ComShInterpreter {
             printSb.Append(s1).Append(s2).Append('\n'); // lfのみ
             return this;
         }
+
         public IO PrintJoin(string fs,params string[] str){
             if(str.Length!=0) _PrintJoin(fs,str);
             return this;
@@ -426,6 +428,24 @@ public partial class ComShInterpreter {
         }
         public IO PrintJoinLn(string fs,params string[] str){
             if(str.Length!=0){ _PrintJoin(fs,str); printSb.Append("\n"); }
+            return this;
+        }
+        public IO Print(StrSegment seg){ printSb.Append(seg.str,seg.head,seg.Length); return this;}
+        public IO PrintLn(StrSegment seg){ printSb.Append(seg.str,seg.head,seg.Length).Append('\n'); return this;}
+        public IO PrintLn2(StrSegment s1,StrSegment s2){
+            printSb.Append(s1.str,s1.head,s1.Length).Append(s2.str,s2.head,s2.Length).Append('\n');
+            return this;
+        }
+        public IO PrintJoin(StrSegment fs,List<StrSegment> segs){
+            if(segs.Count!=0) _PrintJoin(fs,segs);
+            return this;
+        }
+        private void _PrintJoin(StrSegment fs,List<StrSegment> segs){
+            printSb.Append(segs[0].str,segs[0].head,segs[0].Length);
+            for(int i=1; i<segs.Count; i++) printSb.Append(fs.str,fs.head,fs.Length).Append(segs[i].str,segs[i].head,segs[i].Length);
+        }
+        public IO PrintJoinLn(StrSegment fs,List<StrSegment> segs){
+            if(segs.Count!=0){ _PrintJoin(fs,segs); printSb.Append("\n"); }
             return this;
         }
         public void PrintEnd(char eol){

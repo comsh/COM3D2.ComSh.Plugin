@@ -55,6 +55,7 @@ public static class CmdMaidMan {
         maidParamDic.Add("motion.layerdel",new CmdParam<Maid>(MaidParamMotionLayerDel));
         maidParamDic.Add("motion.length",new CmdParam<Maid>(MaidParamMotionLength));
         maidParamDic.Add("motion.weight",new CmdParam<Maid>(MaidParamMotionWeight));
+        maidParamDic.Add("motion.event",new CmdParam<Maid>(MaidParamMotionEvent));
         maidParamDic.Add("lookat",new CmdParam<Maid>(MaidParamLookAt));
         maidParamDic.Add("iid",new CmdParam<Maid>(MaidParamIid));
         maidParamDic.Add("attach",new CmdParam<Maid>(MaidParamAttach));
@@ -213,8 +214,8 @@ public static class CmdMaidMan {
                 sh.io.PrintLn($"{i} {slist[i].status.fullNameJpStyle.Trim()} %{slist[i].GetInstanceID().ToString()}");
             return 0;
         }else{
-            string[] sa=args[1].Split(ParseUtil.colon);
-            if(sa.Length>1 && sa[0]=="maid") return CmdMaidSub(sh,sa[1],args,2);
+            ParseUtil.ColonDesc cd=new ParseUtil.ColonDesc(args[1]);
+            if(cd.num==2 && cd.type_c=='f') return CmdMaidSub(sh,cd.id,args,2);
             return CmdMaidSub(sh,args[1],args,2);
         }
     }
@@ -275,8 +276,8 @@ public static class CmdMaidMan {
             }
             return 0;
         }
-        string[] sa=args[1].Split(ParseUtil.colon);
-        if(sa.Length>1 && sa[0]=="man") return CmdMaidSub(sh,sa[1],args,2);
+        ParseUtil.ColonDesc cd=new ParseUtil.ColonDesc(args[1]);
+        if(cd.num==2 && cd.type_c=='m') return CmdMaidSub(sh,cd.id,args,2); 
         return CmdManSub(sh,args[1],args,2);
     }
 	public static int CmdManSub(ComShInterpreter sh,string id, List<string> args,int prmstart) {
@@ -2749,6 +2750,8 @@ public static class CmdMaidMan {
         "ManBip R Finger3", "ManBip R Finger31", "ManBip R Finger32",
         "ManBip R Finger4", "ManBip R Finger41", "ManBip R Finger42"
     };
+    private const int BONEROT_CAP=6*10;
+    private static List<float> bonerot_buf=null;
     private static int MaidParamFinger(ComShInterpreter sh,Maid m,string val){
         var fingerbones=(m.body0.trBip.name=="ManBip")?fingerbones_m:fingerbones_f;
         if(val==null){
@@ -2763,9 +2766,10 @@ public static class CmdMaidMan {
             }
             return 0;
         }
-        var fa=ParseUtil.FloatArr2(val,ParseUtil.commaslashlf);
-        if(fa==null||fa.Length%6!=0) return sh.io.Error("書式が不正です");
-        for(int i=0; i<fa.Length; i+=6){
+        if(bonerot_buf==null) bonerot_buf=new List<float>(BONEROT_CAP);
+        var fa=ParseUtil.FloatList(val,ParseUtil.commaslashlf,bonerot_buf);
+        if(fa==null||fa.Count%6!=0) return sh.io.Error("書式が不正です");
+        for(int i=0; i<fa.Count; i+=6){
             int fn=(int)fa[i];
             if(!Mathf.Approximately(fa[i],fn)||fn<0||fn>9) return sh.io.Error("数値が不正です");
             if(m.body0.m_dicTrans.TryGetValue(fingerbones[fn*3],out Transform f0)
@@ -2775,6 +2779,48 @@ public static class CmdMaidMan {
                 f1.localRotation=Quaternion.Euler(0,0,fa[i+4]);
                 f2.localRotation=Quaternion.Euler(0,0,fa[i+5]);
             }
+        }
+        return 1;
+    }
+    private class ComShEventPublisher:MonoBehaviour { private void ComShClipEvent(string name){ DoPublish(name,""); } }
+    private static int MaidParamMotionEvent(ComShInterpreter sh,Maid m,string val){
+        if(val==null){
+            foreach (AnimationState state in m.GetAnimation()) if(state.layer==0){
+                var eva=state.clip.events;
+                for(int i=0; i<eva.Length; i++) sh.io.PrintLn(eva[i].functionName);
+                break;
+            }
+            return 0;
+        }
+        if(val==""){
+            foreach (AnimationState state in m.GetAnimation()) if(state.layer==0){
+                var eva=state.clip.events;
+                var evl=new List<AnimationEvent>(eva.Length);
+                for(int i=0; i<eva.Length; i++) if(eva[i].functionName=="ComShClipEvent") evl.Add(eva[i]);
+                state.clip.events=evl.ToArray();
+                break;
+            }
+        }
+        var fa=ParseUtil.FloatArr(val);
+        if(fa==null||fa.Length==0) return sh.io.Error("書式が不正です");
+
+        string iid=m.GetInstanceID().ToString();
+        Animation a=m.GetAnimation();
+        a.transform.GetOrAddComponent<ComShEventPublisher>();
+        foreach (AnimationState state in a) if(state.layer==0){
+            var eva=state.clip.events;
+            var evl=new List<AnimationEvent>(eva.Length);
+            for(int i=0; i<eva.Length; i++) if(eva[i].functionName=="ComShClipEvent") evl.Add(eva[i]);
+            for(int i=0; i<fa.Length; i++){
+                evl.Add(new AnimationEvent{
+                    functionName="ComShClipEvent",
+                    messageOptions=SendMessageOptions.DontRequireReceiver,
+                    stringParameter=$"AnmEvent{iid}_{i}",
+                    time=state.clip.length*fa[i]
+                });
+            }
+            state.clip.events=evl.ToArray();
+            break;
         }
         return 1;
     }

@@ -16,6 +16,7 @@
     <WarningLevel>3</WarningLevel>
     <IsPublishable>False</IsPublishable>
     <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+    <DefineConstants>$(DefineConstants);COM3D2_5</DefineConstants>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
@@ -23,6 +24,7 @@
     <WarningLevel>3</WarningLevel>
     <IsPublishable>False</IsPublishable>
     <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+    <DefineConstants>$(DefineConstants);COM3D2_5</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -33,6 +35,7 @@
     <Compile Include="..\CmdLights.cs" Link="CmdLights.cs" />
     <Compile Include="..\CmdMisc.cs" Link="CmdMisc.cs" />
     <Compile Include="..\CmdSubCamera.cs" Link="CmdSubCamera.cs" />
+    <Compile Include="..\Command.cs" Link="Command.cs" />
     <Compile Include="..\ComShBg.cs" Link="ComShBg.cs" />
     <Compile Include="..\ComShHandle.cs" Link="ComShHandle.cs" />
     <Compile Include="..\DataFiles.cs" Link="DataFiles.cs" />
