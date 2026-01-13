@@ -475,13 +475,12 @@ public static class ParseUtil {
     }
     public static Dictionary<string,float> GetKVFloat(string str){
         Dictionary<string,float> ret=new Dictionary<string,float>();
-        string[] kva=str.Split(comma);        // valueが数値固定なのでsplitで充分
-        for(int i=0; i<kva.Length; i++){
+        var kva=StrSegment.Split(str,comma);
+        for(int i=0; i<kva.Count; i++){
             int eqpos=kva[i].IndexOf('=');
             if(eqpos<=0) { error="値をkey=valueの形式で指定してください"; return null; }
-            string key=kva[i].Substring(0,eqpos);
-            float v=ParseFloat(kva[i].Substring(eqpos+1));
-            if(float.IsNaN(v)){ error="数値が不正です"; return null; }
+            string key=kva[i].Substr(0,eqpos);
+            if(!TryParseFloat(kva[i].Slice(eqpos+1),out float v)){ error="数値が不正です"; return null; }
             ret[key]=v;
         }
         return ret;
@@ -529,123 +528,127 @@ public static class ParseUtil {
         }
         return 0;
     }
-    public static float[] MinMax(string str){
-        if(str==null||str.Length==0) return null;
-        float[] ret=xyzbuf;
-        int n=XyzSub(str,ret);
-        if(n==2){
-            if(ret[0]>ret[1]){ float t=ret[0]; ret[0]=ret[1]; ret[1]=t; }
-            return ret;
-        }else if(n==1){ ret[1]=ret[0]; return ret; }
-        else { error="数値が不正です"; return null; }
+    public struct Arr2<T>{
+        public bool ok;
+        public bool ng {get=>!ok;}
+        public T x,y;
+        public T this[int idx]{ get{ return (idx==0)?x:y;}}
+        public Arr2(T a,T b){x=a; y=b; ok=true;}
     }
-    public static double[] MinMaxW(string str){
-        if(str==null||str.Length==0) return null;
-        double[] ret=xyz_w_buf;
-        int n=XyzSubW(str,ret);
+    public struct Arr3<T>{
+        public bool ok;
+        public bool ng {get=>!ok;}
+        public T x,y,z;
+        public T this[int idx]{ get{ return idx==0?x:(idx==1?y:z);}}
+        public Arr3(T a,T b,T c){x=a; y=b; z=c; ok=true;}
+    }
+    public struct Arr4<T>{
+        public bool ok;
+        public bool ng {get=>!ok;}
+        public T x,y,z,w;
+        public T this[int idx]{ get{ return idx<=1?(idx==0?x:y):(idx==2?z:w);}}
+        public Arr4(T a,T b,T c,T d){x=a; y=b; z=c; w=d; ok=true;}
+    }
+    public static Arr2<float> MinMax(string str){
+        if(str==null||str.Length==0) return default;
+        int n=XyzSub(str,xyzbuf,2);
         if(n==2){
-            if(ret[0]>ret[1]){ double t=ret[0]; ret[0]=ret[1]; ret[1]=t; }
-            return ret;
-        }else if(n==1){ ret[1]=ret[0]; return ret; }
-        else { error="数値が不正です"; return null; }
+            if(xyzbuf[0]>xyzbuf[1]) return new Arr2<float>(xyzbuf[1],xyzbuf[0]);
+            return new Arr2<float>(xyzbuf[0],xyzbuf[1]);
+        }else if(n==1) return new Arr2<float>(xyzbuf[0],xyzbuf[0]);
+        else { error="数値が不正です"; return default; }
+    }
+    public static Arr2<double> MinMaxW(string str){
+        if(str==null||str.Length==0) return default;
+        int n=XyzSubW(str,xyz_w_buf,2);
+        if(n==2){
+            if(xyz_w_buf[0]>xyz_w_buf[1]) return new Arr2<double>(xyz_w_buf[1],xyz_w_buf[0]);
+            return new Arr2<double>(xyz_w_buf[0],xyz_w_buf[1]);
+        }else if(n==1) return new Arr2<double>(xyz_w_buf[0],xyz_w_buf[0]);
+        else { error="数値が不正です"; return default; }
     }
 
-    public static float[] Xy(string str){
-        if(str==null||str.Length==0) return null;
-        float[] ret=new float[2];
-        int n=XyzSub(str,ret);
-        if(n==2) return ret;
-        else { error="座標が不正です"; return null; }
+    public static Arr2<float> Xy(string str){
+        if(str==null||str.Length==0) return default;
+        float[] ret=xyzbuf;
+        int n=XyzSub(str,ret,2);
+        if(n==2) return new Arr2<float>(xyzbuf[0],xyzbuf[1]);
+        else { error="座標が不正です"; return default; }
     }
-    public static float[] Xy1(string str){
-        if(str==null||str.Length==0) return null;
-        int n=XyzSub(str,xyzbuf);
-        if(n==2) return xyzbuf;
-        else { error="座標が不正です"; return null; }
-    }
-    public static float[] XyzR(string str,out bool relativeq){
-        relativeq=(str!=null && str.Length>0 && str[0]=='+');
-        float[] ret=new float[3];
-        int n=XyzSub(new StrSegment(str,relativeq?1:0),ret);
-        if(n==3) return ret;
-        else { error="座標が不正です"; return null; }
-    }
-    public static float[] XyzR1(string str,out bool relativeq){
+    public static Arr3<float> XyzR(string str,out bool relativeq){
         relativeq=(str!=null && str.Length>0 && str[0]=='+');
         float[] ret=xyzbuf;
-        int n=XyzSub(new StrSegment(str,relativeq?1:0),ret);
-        if(n==3) return ret;
-        else { error="座標が不正です"; return null; }
+        int n=XyzSub(new StrSegment(str,relativeq?1:0),ret,3);
+        if(n==3) return new Arr3<float>(xyzbuf[0],xyzbuf[1],xyzbuf[2]);
+        else { error="座標が不正です"; return default; }
     }
-    public static float[] Xyz(string str){ return Xyz(new StrSegment(str)); }
-    public static float[] Xyz(StrSegment seg){
-        float[] ret=new float[3];
-        int n=XyzSub(seg,ret);
-        if(n==3) return ret;
-        else { error="座標が不正です"; return null; }
+    public static Arr3<float> Xyz(string str){ return Xyz(new StrSegment(str)); }
+    public static Arr3<float> Xyz(StrSegment seg){
+        float[] ret=xyzbuf;
+        int n=XyzSub(seg,ret,3);
+        if(n==3) return new Arr3<float>(ret[0],ret[1],ret[2]);
+        else { error="座標が不正です"; return default; }
     }
-    private static float[] xyzbuf=new float[4]; // すぐvector3にするならXyz()はXyz1()でOK
-    public static float[] Xyz1(string str){ return Xyz1(new StrSegment(str)); }
-    public static float[] Xyz1(StrSegment seg){
-        int n=XyzSub(seg,xyzbuf);
-        if(n==3) return xyzbuf;
-        else { error="座標が不正です"; return null; }
+    public static Arr3<float> Xyz(string[] sa){
+        if(!float.TryParse(sa[0],out float x)
+         ||!float.TryParse(sa[1],out float y)
+         ||!float.TryParse(sa[2],out float z)){error="座標が不正です"; return default; }
+        return new Arr3<float>(x,y,z);
     }
-    public static float[] Xyz(string[] sa){
-        float[] ret=new float[3];
-        for(int i=0; i<ret.Length; i++){
-            ret[i]=ParseFloat(sa[i]);
-            if(float.IsNaN(ret[i])){ error="座標が不正です"; return null; }
-        }
-        return ret;
-    }
-    public static int XyzSub(string str,float[] ret){ return XyzSub(new StrSegment(str),ret); }
-    public static int XyzSub(StrSegment seg,float[] ret){
-        if(seg.str==null||seg.str.Length==0) return 0;
+    private static float[] xyzbuf=new float[4];
+    public static int XyzSub(string str,float[] ret,int max=int.MaxValue){ return XyzSub(new StrSegment(str),ret,max); }
+    public static int XyzSub(StrSegment seg,float[] ret,int max=int.MaxValue){
+        if(seg.Length==0) return 0;
+        if(ret==null) ret=xyzbuf;
+        int n=Math.Min(ret.Length,max);
         var cnxt=new CutNextText(seg);
         int i=0;
-        for(; i<ret.Length; i++){
+        for(; i<n; i++){
             if(CutNext(ref cnxt,',')<0) break;
             if(!TryParseFloat(cnxt.txt.SliceLen(cnxt.head,cnxt.len),out ret[i])) return -1;
         }
+        if(i==n-1 && cnxt.next>=0) return -1;
         return i;
     }
-    public static int XyzSubW(string str,double[] ret){return XyzSubW(new StrSegment(str),ret);}
-    public static int XyzSubW(StrSegment seg,double[] ret){
+    private static double[] xyz_w_buf=new double[4];
+    public static int XyzSubW(string str,double[] ret,int max=int.MaxValue){return XyzSubW(new StrSegment(str),ret,max);}
+    public static int XyzSubW(StrSegment seg,double[] ret,int max=int.MaxValue){
         if(seg.Length==0) return 0;
+        if(ret==null) ret=xyz_w_buf;
+        int n=Math.Min(ret.Length,max);
         var cnxt=new CutNextText(seg);
         int i=0;
-        for(; i<ret.Length; i++){
+        for(; i<n; i++){
             if(CutNext(ref cnxt,',')<0) break;
             if(!TryParseDouble(cnxt.txt.SliceLen(cnxt.head,cnxt.len),out ret[i])) return -1;
         }
+        if(cnxt.next>=0) return -1;
         return i;
     }
-    public static float[] Xyz2(string str){
-        float[] ret=new float[3];
-        int n=XyzSub(str,ret);
-        if(n==3) return ret;
-        else if(n==1){ ret[1]=ret[2]=ret[0]; return ret; }
-        else { error="座標が不正です"; return null; }
+    public static Arr3<float> Xyz2(string str){
+        float[] ret=xyzbuf;
+        int n=XyzSub(str,ret,3);
+        if(n==3) return new Arr3<float>(ret[0],ret[1],ret[2]);
+        else if(n==1){ return new Arr3<float>(ret[0],ret[0],ret[0]);}
+        else { error="座標が不正です"; return default; }
     }
-    public static float[] Quat(string str){ return Quat(new StrSegment(str)); }
-    public static float[] Quat(StrSegment seg){
+    public static Arr4<float> Quat(string str){ return Quat(new StrSegment(str)); }
+    public static Arr4<float> Quat(StrSegment seg){
         var s0=seg;
-        if(s0.Length==0) return null;
+        if(s0.Length==0) return default;
         int i;
         for(i=0; i<s0.Length; i++) if(s0[i]!='~') break;
         bool invq=(i%2)==1;
         if(i>0) s0.SliceSelf(i,-1);
         float[] ret=xyzbuf;
-        int n=XyzSub(seg,ret);
+        int n=XyzSub(seg,ret,4);
         if(n!=4){
             error="四元数が不正です";
-            return null; 
+            return default; 
         }
         if(invq){ ret[0]*=-1; ret[1]*=-1; ret[2]*=-1; }
-        return ret;
+        return new Arr4<float>(ret[0],ret[1],ret[2],ret[3]);
     }
-    private static double[] xyz_w_buf=new double[4];
     public static double[] QuatW(string str){
         if(str==null||str.Length==0) return null;
         int i;
@@ -658,9 +661,9 @@ public static class ParseUtil {
         if(invq){ ret[0]*=-1; ret[1]*=-1; ret[2]*=-1; }
         return ret;
     }
-    public static float[] QuatR(string str,out byte relative){
+    public static Arr4<float> QuatR(string str,out byte relative){
         relative=0;
-        if(str==null||str.Length==0) return null;
+        if(str==null||str.Length==0) return default;
         if(str[0]=='+'||str[0]=='L'||str[0]=='l'){
             relative=1;
             return Quat(new StrSegment(str,1));
@@ -670,9 +673,9 @@ public static class ParseUtil {
         }
         return Quat(str);
     }
-    public static float[] RotR(string str,out byte relative){
+    public static Arr3<float> RotR(string str,out byte relative){
         relative=0;
-        if(str==null||str.Length==0) return null;
+        if(str==null||str.Length==0) return default;
         if(str[0]=='+'||str[0]=='L'||str[0]=='l'){
             relative=1;
             return Xyz(new StrSegment(str,1));
@@ -682,43 +685,46 @@ public static class ParseUtil {
         }
         return Xyz(str);
     }
-    public static float[] WRotR(string str,out byte relative){return WRotR(new StrSegment(str),out relative);}
-    public static float[] WRotR(StrSegment str,out byte relative){
+    public static Arr3<float> WRotR(string str,out byte relative){return WRotR(new StrSegment(str),out relative);}
+    public static Arr3<float> WRotR(StrSegment str,out byte relative){
         relative=0;
-        if(str.Length==0) return null;
+        if(str.Length==0) return default;
         if(str[0]=='+'||str[0]=='L'||str[0]=='l') relative=1;
         else if(str[0]=='R'||str[0]=='r') relative=2;
 
         if(relative==0){
             var cd=new ColonDesc(str);
-            if(cd.num==0) return Xyz1(str);
+            if(cd.num==0) return Xyz(str);
             var tr=ObjUtil.FindObj(ComShInterpreter.currentSh,cd);
-            if(tr==null) return null;
-            var rot=tr.rotation.eulerAngles;
-            xyzbuf[0]=rot.x; xyzbuf[1]=rot.y; xyzbuf[2]=rot.z;
-            return xyzbuf;
-        }else return Xyz1(str.Slice(1));
+            if(tr==null) return default;
+            var ea=tr.rotation.eulerAngles;
+            return new Arr3<float>(ea.x,ea.y,ea.z);
+        }else return Xyz(str.Slice(1));
     }
 
-    public static float[] PositionR(string str,out bool relativeq){return PositionR(new StrSegment(str),out relativeq);}
-    public static float[] PositionR(StrSegment str,out bool relativeq){
+    public static Arr3<float> PositionR(string str,out bool relativeq){return PositionR(new StrSegment(str),out relativeq);}
+    public static Arr3<float> PositionR(StrSegment str,out bool relativeq){
         relativeq=(str.Length>0 && str[0]=='+');
-        return relativeq?Xyz1(str.Slice(1)):Position(str);
+        return relativeq?Xyz(str.Slice(1)):Position(str);
+    }
+    public static Arr3<float> Position(string str){return Position(new StrSegment(str));}
+    public static Arr3<float> Position(StrSegment str){
+        var cd=new ColonDesc(str);
+        if(cd.num==0) return Xyz(str);
+        var tr=ObjUtil.FindObj(ComShInterpreter.currentSh,cd);
+        if(tr==null) return default;
+        var p=tr.position;
+        return new Arr3<float>(p.x,p.y,p.z);
     }
     public static int PositionR(string str,float[] ret,out bool relativeq){return PositionR(new StrSegment(str),ret,out relativeq);}
     public static int PositionR(StrSegment str,float[] ret,out bool relativeq){
+        if(ret==null) ret=xyzbuf;
         relativeq=(str.Length>0 && str[0]=='+');
         return relativeq?XyzSub(str.Slice(1),ret):Position(str,ret);
     }
-    public static float[] Position(string str){return Position(new StrSegment(str));}
-    public static float[] Position(StrSegment str){
-        if(str.IndexOf(',')>=0) return Xyz1(str);
-        int n=Position(str,xyzbuf);
-        if(n==3) return xyzbuf;
-        else { error="座標が不正です"; return null; }
-    }
     public static int Position(string str,float[] ret){return Position(new StrSegment(str),ret);}
     public static int Position(StrSegment str,float[] ret){
+        if(ret==null) ret=xyzbuf;
         var cd=new ColonDesc(str);
         if(cd.num==0) return XyzSub(str,ret);
         var tr=ObjUtil.FindObj(ComShInterpreter.currentSh,cd);
@@ -752,7 +758,7 @@ public static class ParseUtil {
     public static float[] FloatArr(string str){ return FloatArr2(str,',');}
     public static double[] DoubleArr(string str){
         if(str==null||str.Length==0) return new double[0];
-        int n=CountC(str,',');
+        int n=CountC(str,',')+1;
         var cnxt=new CutNextText(str);
         double[] ret= new double[n];
         int i=0;
@@ -767,7 +773,7 @@ public static class ParseUtil {
     }
     public static int[] IntArr(string str){
         if(str==null||str.Length==0) return new int[0];
-        int n=CountC(str,',');
+        int n=CountC(str,',')+1;
         var cnxt=new CutNextText(str);
         int[] ret= new int[n];
         int i=0;
@@ -782,7 +788,7 @@ public static class ParseUtil {
     }
     public static List<int> IntList(string str){
         if(str==null||str.Length==0) return new List<int>(0);
-        int n=CountC(str,',');
+        int n=CountC(str,',')+1;
         var cnxt=new CutNextText(str);
         var ret= new List<int>(n);
         int i=0;
@@ -799,7 +805,7 @@ public static class ParseUtil {
     public static float[] FloatArr2(string str,char dlmt,int max=int.MaxValue){ dlmt_once[0]=dlmt; return FloatArr2(str,dlmt_once,max); }
     public static float[] FloatArr2(string str,char[] dlmt,int max=int.MaxValue){
         if(str==null||str.Length==0) return new float[0];
-        int n=CountC(str,dlmt);
+        int n=CountC(str,dlmt)+1;
         n=(n>max)?max:n;
         float[] ret=new float[n];
         var cnxt=new CutNextText(str);
@@ -828,50 +834,46 @@ public static class ParseUtil {
         }
         return ret;
     }
-    public static float[] Rgb(string str){
+    public static Arr4<float> Rgb(string str){
         if(str.IndexOf(',')>=0) return Rgb2(str);
-        float[] ret=new float[3];
+        float[] ret=xyzbuf;
         if(!int.TryParse(str,System.Globalization.NumberStyles.HexNumber,null,out int rgb)){
             if(float.TryParse(str,out float f)&&f<=1&&f>=0){
-                ret[0]=ret[1]=ret[2]=f;
-                return ret;
+                return new Arr4<float>(f,f,f,1);
             }
             error="色指定が不正です";
-            return null;
+            return default;
         }
-        ret[0]=(rgb>>16)/255f;
-        ret[1]=((rgb>>8)&255)/255f;
-        ret[2]=(rgb&255)/255f;
-        return ret;
+        return new Arr4<float>(((rgb>>16)&255)/255f,((rgb>>8)&255)/255f,(rgb&255)/255f,1f);
     }
-    public static float[] Rgb2(string str){
-        float[] ret=new float[3];
-        int n=XyzSub(str,ret);
-        if(n!=3){ error="色指定が不正です"; return null; }
+    public static Arr4<float> Rgb2(string str){
+        float[] ret=xyzbuf;
+        int n=XyzSub(str,ret,3);
+        if(n!=3){ error="色指定が不正です"; return default; }
         if(ret[0]<0||ret[0]>1||ret[1]<0||ret[1]>1||ret[2]<0||ret[2]>1){
             error="r,g,bの値は0.0～1.0の範囲で指定してください";
-            return null;
+            return default;
         }
-        return ret;
+        return new Arr4<float>(ret[0],ret[1],ret[2],1f);
     }
-    public static float[] Rgba(string str){
-        float[] ret=new float[4];
-        int n=XyzSub(str,ret);
-        if(n!=3&&n!=4){ error="色指定が不正です"; return null; }
+    public static Arr4<float> Rgba(string str){
+        float[] ret=xyzbuf;
+        int n=XyzSub(str,ret,4);
+        if(n!=3&&n!=4){ error="色指定が不正です"; return default; }
         if(n==3) ret[3]=1.0f;
         if(ret[0]<0||ret[0]>1||ret[1]<0||ret[1]>1||ret[2]<0||ret[2]>1||ret[3]<0||ret[3]>1){
             error="r,g,b,aの値は0.0～1.0の範囲で指定してください";
-            return null;
+            return default;
         }
-        return ret;
+        return new Arr4<float>(ret[0],ret[1],ret[2],ret[3]);
     }
-    public static float[] RgbaLenient(string str){
-        float[] ret=new float[4];
-        int n=XyzSub(str,ret);
-        if(n!=3&&n!=4){ error="色指定が不正です"; return null; }
+    public static Arr4<float> RgbaLenient(string str){
+        float[] ret=xyzbuf;
+        int n=XyzSub(str,ret,4);
+        if(n!=3&&n!=4){ error="色指定が不正です"; return default; }
         if(n==3) ret[3]=1.0f;
         // 範囲チェックしない
-        return ret;
+        return new Arr4<float>(ret[0],ret[1],ret[2],ret[3]);
     }
     public static int OnOff(string str){
         if(str=="on") return 1;
@@ -990,33 +992,34 @@ public static class ParseUtil {
         if(idx<0) return txt;
         return txt.Substring(idx+1);
     }
-    public static string[] LeftAndRight(string txt,char dlm){
-        int idx=txt.IndexOf(dlm);
-        if(idx<0) return new string[]{ txt,"" };
-        return new string[]{ txt.Substring(0,idx),txt.Substring(idx+1) };
+
+    public static Arr2<StrSegment> LeftAndRight(StrSegment seg,char dlm=',',StrSegment[] buf=null){dlmt_once[0]=dlm; return LeftAndRight(seg,dlmt_once,buf);}
+    public static Arr2<StrSegment> LeftAndRight(StrSegment seg,char[] dlm,StrSegment[] buf=null){
+        int idx=seg.IndexOf(dlm);
+        return (idx<0)?
+            new Arr2<StrSegment>(seg,StrSegment.empty):
+            new Arr2<StrSegment>(seg.Slice(0,idx-1),seg.Slice(idx+1));
     }
-    public static string[] LeftAndRight(string txt,char[] dlm){
-        int idx=-1;
-        for(int i=0; i<dlm.Length; i++){
-            idx=txt.IndexOf(dlm[i]);
-            if(idx>=0) break;
-        }
-        if(idx<0) return new string[]{txt,""};
-        return new string[]{ txt.Substring(0,idx),txt.Substring(idx+1) };
+    public static Arr2<StrSegment> LeftAndRight2(StrSegment seg,char dlm=','){dlmt_once[0]=dlm; return LeftAndRight2(seg,dlmt_once);}
+    public static Arr2<StrSegment> LeftAndRight2(StrSegment seg,char[] dlm){
+        int idx=seg.IndexOf(dlm);
+        return (idx<0)?
+            new Arr2<StrSegment>(StrSegment.empty,seg):
+            new Arr2<StrSegment>(seg.Slice(0,idx-1),seg.Slice(idx+1));
     }
-    public static string[] LeftAndRight2(string txt,char dlm){
-        int idx=txt.IndexOf(dlm);
-        if(idx<0) return new string[]{ "",txt };
-        return new string[]{ txt.Substring(0,idx),txt.Substring(idx+1) };
+    public static Arr2<string> LeftAndRight(string txt,char dlm){dlmt_once[0]=dlm;return LeftAndRight(txt,dlmt_once);}
+    public static Arr2<string> LeftAndRight(string txt,char[] dlm){
+        int idx=txt.IndexOfAny(dlm);
+        return (idx<0)?
+            new Arr2<string>(txt,""):
+            new Arr2<string>(txt.Substring(0,idx),txt.Substring(idx+1));
     }
-    public static string[] LeftAndRight2(string txt,char[] dlm){
-        int idx=-1;
-        for(int i=0; i<dlm.Length; i++){
-            idx=txt.IndexOf(dlm[i]);
-            if(idx>=0) break;
-        }
-        if(idx<0) return new string[]{"",txt};
-        return new string[]{ txt.Substring(0,idx),txt.Substring(idx+1) };
+    public static Arr2<string> LeftAndRight2(string txt,char dlm){dlmt_once[0]=dlm;return LeftAndRight2(txt,dlmt_once);}
+    public static Arr2<string> LeftAndRight2(string txt,char[] dlm){
+        int idx=txt.IndexOfAny(dlm);
+        return (idx<0)?
+            new Arr2<string>("",txt):
+            new Arr2<string>(txt.Substring(0,idx),txt.Substring(idx+1));
     }
     public static int CountChar(string txt,char c){
         int ret=0;
@@ -1133,39 +1136,17 @@ public static class ParseUtil {
         f=sign*(n+s/k);
         return true;
     }
-
     public static float ParseFloat(string str,float dflt=float.NaN){
-        if(string.IsNullOrEmpty(str)) return dflt;
-        int i;
-        string s=str;
-        for(i=0; i<s.Length; i++) if(s[i]!='-') break;
-        bool minus=(i%2)==1;
-        if(i>0) s=s.Substring(i);
-        bool ok=float.TryParse(s,out float ret);
-        if(minus) ret*=-1;
-        return ok?ret:dflt;
+        if(!TryParseFloat(new StrSegment(str),out float ret)) return dflt;
+        return ret;
     }
     public static double ParseDouble(string str,double dflt=double.NaN){
-        if(string.IsNullOrEmpty(str)) return dflt;
-        int i;
-        string s=str;
-        for(i=0; i<s.Length; i++) if(s[i]!='-') break;
-        bool minus=(i%2)==1;
-        if(i>0) s=s.Substring(i);
-        bool ok=double.TryParse(s,out double ret);
-        if(minus) ret*=-1;
-        return ok?ret:dflt;
+        if(!TryParseDouble(new StrSegment(str),out double ret)) return dflt;
+        return ret;
     }
     public static int ParseInt(string str,int dflt=int.MinValue){
-        if(string.IsNullOrEmpty(str)) return dflt;
-        int i;
-        string s=str;
-        for(i=0; i<s.Length; i++) if(s[i]!='-') break;
-        bool minus=(i%2)==1;
-        if(i>0) s=s.Substring(i);
-        bool ok=int.TryParse(s,out int ret);
-        if(minus) ret*=-1;
-        return ok?ret:dflt;
+        if(!TryParseInt(new StrSegment(str),out int ret)) return dflt;
+        return ret;
     }
     public static string Chomp(string s,bool crq=false){
         int l=s.Length;

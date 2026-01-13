@@ -775,16 +775,16 @@ public static class CmdMisc {
                 sh.io.Print(sh.fmt.RGBA(proj.material.GetColor("_Color")));
                 return 0;
             }
-            float[] fa=ParseUtil.RgbaLenient(val);
-            if(fa==null) return sh.io.Error(ParseUtil.error);
+            var fa=ParseUtil.RgbaLenient(val);
+            if(fa.ng) return sh.io.Error(ParseUtil.error);
             proj.material.SetColor("_Color",new Color(fa[0],fa[1],fa[2],fa[3]));
         }else if(cmd=="bgcolor"){
             if(val==null){
                 sh.io.Print(sh.fmt.RGBA(proj.material.GetColor("_BgColor")));
                 return 0;
             }
-            float[] fa=ParseUtil.Rgba(val);
-            if(fa==null) return sh.io.Error(ParseUtil.error);
+            var fa=ParseUtil.Rgba(val);
+            if(fa.ng) return sh.io.Error(ParseUtil.error);
             proj.material.SetColor("_BgColor",new Color(fa[0],fa[1],fa[2],fa[3]));
         }else if(cmd=="video"){
             if(val==null){ sh.io.Print(Video.CurrentVideoName(proj.transform)); return 0;}
@@ -970,8 +970,8 @@ public static class CmdMisc {
                 sh.io.Print(sh.fmt.FXY(rp.nearClipPlane,rp.farClipPlane));
                 return 0;
             }
-            float[] fa=ParseUtil.Xy(val);
-            if(fa==null) return sh.io.Error(ParseUtil.error);
+            var fa=ParseUtil.Xy(val);
+            if(fa.ng) return sh.io.Error(ParseUtil.error);
             rp.nearClipPlane=fa[0];
             rp.farClipPlane=fa[1];
         }else if(cmd=="power"){
@@ -993,16 +993,16 @@ public static class CmdMisc {
                 sh.io.Print(sh.fmt.FPos(rp.center));
                 return 0;
             }
-            float[] fa=ParseUtil.Xyz(val);
-            if(fa==null) return sh.io.Error(ParseUtil.error);
+            var fa=ParseUtil.Xyz(val);
+            if(fa.ng) return sh.io.Error(ParseUtil.error);
             rp.center=new Vector3(fa[0],fa[1],fa[2]);
         }else if(cmd=="size"){
             if(val==null){
                 sh.io.Print(sh.fmt.FPos(rp.size));
                 return 0;
             }
-            float[] fa=ParseUtil.Xyz(val);
-            if(fa==null) return sh.io.Error(ParseUtil.error);
+            var fa=ParseUtil.Xyz(val);
+            if(fa.ng) return sh.io.Error(ParseUtil.error);
             rp.size=new Vector3(fa[0],fa[1],fa[2]);
         }else if(cmd=="clrflg"){
             if(val==null){
@@ -1017,8 +1017,8 @@ public static class CmdMisc {
                 sh.io.Print(sh.fmt.RGBA(rp.backgroundColor));
                 return 0;
             }
-            float[] fa=ParseUtil.RgbaLenient(val);
-            if(fa==null) return sh.io.Error(ParseUtil.error);
+            var fa=ParseUtil.RgbaLenient(val);
+            if(fa.ng) return sh.io.Error(ParseUtil.error);
             rp.backgroundColor=new Color(fa[0],fa[1],fa[2],fa[3]);
         }else if(cmd=="mask"){
             if(val==null){

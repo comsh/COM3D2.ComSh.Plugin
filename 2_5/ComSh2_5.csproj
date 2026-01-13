@@ -36,14 +36,17 @@
     <Compile Include="..\CmdMisc.cs" Link="CmdMisc.cs" />
     <Compile Include="..\CmdSubCamera.cs" Link="CmdSubCamera.cs" />
     <Compile Include="..\Command.cs" Link="Command.cs" />
+    <Compile Include="..\ComSh.cs" Link="ComSh.cs" />
     <Compile Include="..\ComShBg.cs" Link="ComShBg.cs" />
     <Compile Include="..\ComShHandle.cs" Link="ComShHandle.cs" />
     <Compile Include="..\DataFiles.cs" Link="DataFiles.cs" />
     <Compile Include="..\Interpreter.cs" Link="Interpreter.cs" />
     <Compile Include="..\MiniSed.cs" Link="MiniSed.cs" />
+    <Compile Include="..\ObjInfo.cs" Link="ObjInfo.cs" />
     <Compile Include="..\Panel.cs" Link="Panel.cs" />
     <Compile Include="..\Parser.cs" Link="Parser.cs" />
     <Compile Include="..\StrSegment.cs" Link="StrSegment.cs" />
+    <Compile Include="..\StudioMode.cs" Link="StudioMode.cs" />
     <Compile Include="..\Variables.cs" Link="Variables.cs" />
     <Compile Include="..\Video.cs" Link="Video.cs" />
   </ItemGroup>

@@ -3,7 +3,6 @@ using UnityEngine;
 using System.Collections.Generic;
 using static System.StringComparison;
 using System.Reflection;
-using System.IO;
 using System.Text;
 
 namespace COM3D2.ComSh.Plugin {
@@ -125,6 +124,69 @@ public static class StudioMode {
         }
         return 0;
     }
+#if COM3D2_5
+    public static int ManBodyChange(Maid man,out Maid pairman){
+        pairman=null;
+        var pl=GetWindow<PlacementWindow>(PhotoWindowManager.WindowType.Placement);
+        if(pl==null) return 0;
+        var paneltype=typeof(PlacementWindow).GetNestedType("PlateData",BindingFlags.NonPublic);
+        if(paneltype==null) return -1;
+        var fi_panelmaid=paneltype.GetField("maid",BindingFlags.Instance|BindingFlags.Public);
+        if(fi_panelmaid==null) return -1;
+        var maidslottype=typeof(PlacementWindow).GetNestedType("MaidSlotData",BindingFlags.NonPublic);
+        if(maidslottype==null) return -1;
+        var fi_slotmaid=maidslottype.GetField("maid",BindingFlags.Instance|BindingFlags.Public);
+        if(fi_slotmaid==null) return -1;
+        var fi_maidlist=typeof(PlacementWindow).GetField("maid_data_list_",BindingFlags.Instance|BindingFlags.NonPublic);
+        if(fi_maidlist==null) return -1;
+        var fi_activelist=typeof(PlacementWindow).GetField("active_maid_list_",BindingFlags.Instance|BindingFlags.NonPublic);
+        if(fi_activelist==null) return -1;
+        var fi_transdic=typeof(PlacementWindow).GetField("transtarget_maid_dic_",BindingFlags.Instance|BindingFlags.NonPublic);
+        if(fi_transdic==null) return -1;
+        var mi_select=typeof(PlacementWindow).GetMethod("SetSelectMaid",BindingFlags.Instance|BindingFlags.NonPublic);
+        if(mi_select==null) return -1;
+
+        if(man.pairMan==null) return -1;
+
+        CharacterMgr cm=GameMain.Instance.CharacterMgr;
+
+        var selected=pl.mgr.select_maid;
+        mi_select.Invoke(pl,new object[]{man});
+        pl.DeActiveMaid(man,false);
+
+        // body入れ替え
+        cm.SetActiveMan(man,man.ActiveSlotNo);
+        pairman=(man.IsCrcBody)?cm.SwapNewManBody(man.ActiveSlotNo,false):cm.ToNewRealMan(man.ActiveSlotNo,man.HasNewRealMan);
+
+        // UIが持ってるmanを差し換え
+        var list=(System.Collections.IList)fi_maidlist.GetValue(pl);
+        for(int i=0; i<list.Count; i++){
+            var m=(Maid)fi_panelmaid.GetValue(list[i]);
+            if(m==man){ fi_panelmaid.SetValue(list[i],pairman); break;}
+        }
+        list=(System.Collections.IList)fi_activelist.GetValue(pl);
+        for(int i=0; i<list.Count; i++){
+            var m=(Maid)fi_slotmaid.GetValue(list[i]);
+            if(m==man){ fi_slotmaid.SetValue(list[i],pairman); break;}
+        }
+        var dic=(Dictionary<Maid,PhotoTransTargetObject>)fi_transdic.GetValue(pl);
+        if(dic.ContainsKey(man)) dic.Remove(man);
+
+        // 新bodyで再配置
+        cm.SetActiveMan(pairman,pairman.ActiveSlotNo);
+        pairman.Visible=true;
+        if(pairman.boAllProcPropBUSY){
+            pairman.boAllProcPropBUSY=false;
+            pairman.AllProcProp();
+        }
+
+        pl.mgr.OnMaidAddEvent(pairman,false);
+
+        if(selected==man) selected=pairman;
+        mi_select.Invoke(pl,new object[]{selected});
+        return 1;
+    }
+#endif
 
     private static void OnPeOffOkClick(){
         Maid m=pwm.select_maid;
@@ -262,8 +324,8 @@ public static class StudioMode {
                         kuchiptn[i]=Encoding.UTF8.GetString(buf); // base64なのでUTF8でもOK
                     }
                 }
-            }catch{};
-            return -1;  // 1回限り
+            }catch{}
+            return -1; // 1回限り
         });
     }
 }

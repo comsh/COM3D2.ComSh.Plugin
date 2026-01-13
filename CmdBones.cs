@@ -131,7 +131,7 @@ public static class BoneUtil{
         return FindBone(sh,cd.type,cd.id,cd.slot,cd.bone);
     }
     public static Transform FindBone(ComShInterpreter sh,string s1,string s2,string s3){
-        string[] lr=ParseUtil.LeftAndRight(s2,'.');
+        var lr=ParseUtil.LeftAndRight(s2,'.');
         return FindBone(sh,s1,lr[0],lr[1],s3);
     }
     public static Transform FindBone(ComShInterpreter sh,string type,string id,string slot,string bone){

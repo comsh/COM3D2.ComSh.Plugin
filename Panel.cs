@@ -600,7 +600,7 @@ public class ListBoxItems {
             labels=new string[items.Length];
             values=new string[items.Length];
             for(int i=0; i<items.Length; i++){
-                string[] sa=ParseUtil.LeftAndRight(items[i],dlmt);
+                var sa=ParseUtil.LeftAndRight(items[i],dlmt);
                 labels[i]=sa[0]; values[i]=sa[1];
             }
         }
@@ -767,8 +767,9 @@ public static class PanelStyleCache {
     }
     private static Texture2D bgTex;
     public static Color bgColor=Color.clear;
-    public static void SetBgColor(float[] col){
-        bgColor=new Color(col[0],col[1],col[2],col[3]);
+    public static void SetBgColor(float[] col){SetBgColor(new Color(col[0],col[1],col[2],col[3]));}
+    public static void SetBgColor(Color col){
+        bgColor=col;
         if(winStyle!=null) winStyle.UpdateBgColor(bgColor);
         UpdTex(bgColor);
         foreach(var s in styledic.Values) s.UpdateBgTex(bgTex);
@@ -787,8 +788,9 @@ public static class PanelStyleCache {
         bgTex.Apply();
     }
     public static Color textColor=Color.white;
-    public static void SetTextColor(float[] col){
-        textColor=new Color(col[0],col[1],col[2],col[3]);
+    public static void SetTextColor(float[] col){SetTextColor(new Color(col[0],col[1],col[2],col[3]));}
+    public static void SetTextColor(Color col){
+        textColor=col;
         if(winStyle!=null) winStyle.UpdateTextColor();
         foreach(var s in styledic.Values) s.UpdateTextColor();
         updDate=ComShWM.updateTime;

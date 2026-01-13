@@ -647,14 +647,14 @@ public static class Command {
     private static int CmdWinColor(ComShInterpreter sh,List<string> args){
         if(!sh.interactiveq) return 0;
         if(args.Count>3||args.Count<2) return sh.io.Error("使い方: wincolor 背景色 [文字色]");
-        float[] bcol=ParseUtil.Rgba(args[1]);
-        if(bcol==null) return sh.io.Error(ParseUtil.error);
+        var bcol=ParseUtil.Rgba(args[1]);
+        if(bcol.ng) return sh.io.Error(ParseUtil.error);
         if(args.Count==3){
-            float[] fcol=ParseUtil.Rgba(args[2]);
-            if(fcol==null) return sh.io.Error(ParseUtil.error);
-            PanelStyleCache.SetTextColor(fcol);
+            var fcol=ParseUtil.Rgba(args[2]);
+            if(fcol.ng) return sh.io.Error(ParseUtil.error);
+            PanelStyleCache.SetTextColor(new Color(fcol[0],fcol[1],fcol[2],fcol[3]));
         }
-        PanelStyleCache.SetBgColor(bcol);
+        PanelStyleCache.SetBgColor(new Color(bcol[0],bcol[1],bcol[2],bcol[3]));
         return 0;
     }
     private static int CmdFps(ComShInterpreter sh, List<string> args){
@@ -1019,8 +1019,8 @@ public static class Command {
     private static int DoCmp(string val1,string op,string val2){
         double f1=ParseUtil.ParseDouble(val1);
         if(op=="between"){
-            double[] fa=ParseUtil.MinMaxW(val2);
-            if(double.IsNaN(f1) || fa==null) return -2;
+            var fa=ParseUtil.MinMaxW(val2);
+            if(double.IsNaN(f1) || fa.ng) return -2;
             return (fa[0]<=f1 && f1<=fa[1])?1:0;
         }
         double f2=ParseUtil.ParseDouble(val2);
@@ -1658,17 +1658,17 @@ public static class Command {
         const string usage="使い方: perlinnoise x y [半径 角度]";
         if(args.Count<2) return sh.io.Error(usage);
         int p=args[1].IndexOf(',');
-        float[] xy;
+        float x,y;
         if(p>=0){
             if(args.Count!=2 && args.Count!=4) return sh.io.Error(usage);
-            xy=ParseUtil.Xy(args[1]);
-            if(xy==null) return sh.io.Error(ParseUtil.error);
+            var xy=ParseUtil.Xy(args[1]);
+            if(xy.ng) return sh.io.Error(ParseUtil.error);
+            x=xy.x; y=xy.y;
             p=2;
         }else{
             if(args.Count!=3 && args.Count!=5) return sh.io.Error(usage);
-            xy=new float[2];
-            if(!float.TryParse(args[1],out xy[0])) return sh.io.Error("数値の指定が不正です");
-            if(!float.TryParse(args[2],out xy[1])) return sh.io.Error("数値の指定が不正です");
+            if(!float.TryParse(args[1],out x)) return sh.io.Error("数値の指定が不正です");
+            if(!float.TryParse(args[2],out y)) return sh.io.Error("数値の指定が不正です");
             p=3;
         }
 
@@ -1676,10 +1676,10 @@ public static class Command {
             if(!float.TryParse(args[p],out float r)||r<=0) return sh.io.Error("数値の指定が不正です");
             if(!float.TryParse(args[p+1],out float d)) return sh.io.Error("数値の指定が不正です");
             float rad=d*Mathf.Deg2Rad;
-            xy[0]+=r*Mathf.Cos(rad);
-            xy[1]+=r*Mathf.Sin(rad);
+            x+=r*Mathf.Cos(rad);
+            y+=r*Mathf.Sin(rad);
         }
-        sh.io.Print(sh.fmt.FVal(Mathf.PerlinNoise(xy[0],xy[1])));
+        sh.io.Print(sh.fmt.FVal(Mathf.PerlinNoise(x,y)));
         return 0;
     }
     private static int CmdFbmNoise(ComShInterpreter sh,List<string> args){
@@ -1742,37 +1742,37 @@ public static class Command {
                           +"使い方4: quat 中心点 始点 終点\n"
                           +"使い方5: quat 向き1 向き2 補間率";
         if(args.Count==2){
-            float[] eu=ParseUtil.Xyz1(args[1]);
-            if(eu==null) return sh.io.Error(ParseUtil.error);
+            var eu=ParseUtil.Xyz(args[1]);
+            if(eu.ng) return sh.io.Error(ParseUtil.error);
             sh.io.Print(sh.fmt.FQuat(Quaternion.Euler(new Vector3(eu[0],eu[1],eu[2]))));
         }else if(args.Count==3){
             if(args[2].IndexOf(',')<0){
-                float[] vec=ParseUtil.Xyz(args[1]);
-                if(vec==null) return sh.io.Error(ParseUtil.error);
+                var vec=ParseUtil.Xyz(args[1]);
+                if(vec.ng) return sh.io.Error(ParseUtil.error);
                 float deg=ParseUtil.ParseFloat(args[2]);
                 if(float.IsNaN(deg)) return sh.io.Error("数値が不正です");
                 float rad=deg/2*Mathf.Deg2Rad;
                 float s=Mathf.Sin(rad),c=Mathf.Cos(rad);
                 sh.io.PrintJoinLn(",",sh.fmt.FVal(vec[0]*s),sh.fmt.FVal(vec[1]*s),sh.fmt.FVal(vec[2]*s),sh.fmt.FVal(c));
             }else{
-                float[] v0=ParseUtil.Xyz(args[1]);
-                if(v0==null) return sh.io.Error(ParseUtil.error);
-                float[] v1=ParseUtil.Xyz(args[2]);
-                if(v1==null) return sh.io.Error(ParseUtil.error);
+                var v0=ParseUtil.Xyz(args[1]);
+                if(v0.ng) return sh.io.Error(ParseUtil.error);
+                var v1=ParseUtil.Xyz(args[2]);
+                if(v1.ng) return sh.io.Error(ParseUtil.error);
                 sh.io.Print(sh.fmt.FQuat(Quaternion.FromToRotation(new Vector3(v0[0],v0[1],v0[2]),new Vector3(v1[0],v1[1],v1[2]))));
             }
         }else if(args.Count==4){
             if(args[3].IndexOf(',')<0){
-                float[] q=ParseUtil.Quat(args[1]); if(q==null) return sh.io.Error(ParseUtil.error);
+                var q=ParseUtil.Quat(args[1]); if(q.ng) return sh.io.Error(ParseUtil.error);
                 Quaternion qt0=new Quaternion(q[0],q[1],q[2],q[3]);
-                q=ParseUtil.Quat(args[2]); if(q==null) return sh.io.Error(ParseUtil.error);
+                q=ParseUtil.Quat(args[2]); if(q.ng) return sh.io.Error(ParseUtil.error);
                 Quaternion qt1=new Quaternion(q[0],q[1],q[2],q[3]);
                 if(!float.TryParse(args[3],out float t)||t<0||t>1) return sh.io.Error("数値が不正です");
                 sh.io.Print(sh.fmt.FQuat(Quaternion.Slerp(qt0,qt1,t)));
             }else{
-                float[] p0=ParseUtil.Xyz(args[1]); if(p0==null) return sh.io.Error(ParseUtil.error);
-                float[] p1=ParseUtil.Xyz(args[2]); if(p1==null) return sh.io.Error(ParseUtil.error);
-                float[] p2=ParseUtil.Xyz(args[3]); if(p2==null) return sh.io.Error(ParseUtil.error);
+                var p0=ParseUtil.Xyz(args[1]); if(p0.ng) return sh.io.Error(ParseUtil.error);
+                var p1=ParseUtil.Xyz(args[2]); if(p1.ng) return sh.io.Error(ParseUtil.error);
+                var p2=ParseUtil.Xyz(args[3]); if(p2.ng) return sh.io.Error(ParseUtil.error);
                 Vector3 v1=new Vector3(p1[0]-p0[0],p1[1]-p0[1],p1[2]-p0[2]),v2=new Vector3(p2[0]-p0[0],p2[1]-p0[1],p2[2]-p0[2]);
                 sh.io.Print(sh.fmt.FQuat(Quaternion.FromToRotation(v1,v2)));
             }
@@ -1781,7 +1781,8 @@ public static class Command {
     }
     private static int CmdEuler(ComShInterpreter sh,List<string> args){
         if(args.Count!=2) return sh.io.Error("使い方: euler 四元数");
-        float[] q=ParseUtil.Quat(args[1]);
+        var q=ParseUtil.Quat(args[1]);
+        if(q.ng) return sh.io.Error(ParseUtil.error);
         var eu=(new Quaternion(q[0],q[1],q[2],q[3])).eulerAngles;
         sh.io.Print(sh.fmt.FPos(eu.x,eu.y,eu.z));
         return 0;
@@ -2202,10 +2203,12 @@ public static class Command {
         var subout=new ComShInterpreter.SubShOutput();
         sh.io.output=new ComShInterpreter.Output(subout.Output);
         int ret=0;
+        string[] varnames=new string[na.Length-1];
+        for(int i=0; i<na.Length-1; i++) varnames[i]="_"+(i+1).ToString();
         sh.StartLoop();
         for(int i=0; i<na[0]; i++){
             for(int p=0; p<na.Length-1; p++)
-                sh.env["_"+(p+1).ToString()]=((i%na[p])/na[p+1]+ia[p]).ToString();
+                sh.env[varnames[p]]=((i%na[p])/na[p+1]+ia[p]).ToString();
             psr.Reset();
             ret=sh.InterpretParser(psr);
             if(ret<0 || sh.exitq){ ret=sh.io.exitStatus; sh.exitq=false; break; }
@@ -2435,8 +2438,8 @@ public static class Command {
                 });
                 s=new ReferredVal.GetValue((string v0,out string v1)=>{
                     v1=v0; if(tr==null) return -1;
-                    float[] xyz=ParseUtil.Xyz1(v0);
-                    if(xyz==null) return 1;
+                    var xyz=ParseUtil.Xyz(v0);
+                    if(xyz.ng) return 1;
                     tr.position=new Vector3(xyz[0],xyz[1],xyz[2]);
                     return 0;
                 });
@@ -2487,8 +2490,8 @@ public static class Command {
                 });
                 s=new ReferredVal.GetValue((string v0,out string v1)=>{
                     v1=v0; if(tr==null) return -1;
-                    float[] xyz=ParseUtil.Xyz1(v0);
-                    if(xyz==null) return 1;
+                    var xyz=ParseUtil.Xyz(v0);
+                    if(xyz.ng) return 1;
                     tr.rotation=Quaternion.Euler(xyz[0],xyz[1],xyz[2]);
                     return 0;
                 });
@@ -2554,8 +2557,8 @@ public static class Command {
                 });
                 s=new ReferredVal.GetValue((string v0,out string v1)=>{
                     v1=v0; if(tr==null) return -1;
-                    float[] xyz=ParseUtil.Xyz1(v0);
-                    if(xyz==null) return 1;
+                    var xyz=ParseUtil.Xyz(v0);
+                    if(xyz.ng) return 1;
                     tr.localPosition=new Vector3(xyz[0],xyz[1],xyz[2]);
                     return 0;
                 });
@@ -2606,8 +2609,8 @@ public static class Command {
                 });
                 s=new ReferredVal.GetValue((string v0,out string v1)=>{
                     v1=v0; if(tr==null) return -1;
-                    float[] xyz=ParseUtil.Xyz1(v0);
-                    if(xyz==null) return 1;
+                    var xyz=ParseUtil.Xyz(v0);
+                    if(xyz.ng) return 1;
                     tr.localRotation=Quaternion.Euler(xyz[0],xyz[1],xyz[2]);
                     return 0;
                 });
@@ -2657,8 +2660,8 @@ public static class Command {
             });
             s=new ReferredVal.GetValue((string v0,out string v1)=>{
                 v1=v0; if(tr==null) return -1;
-                float[] xyz=ParseUtil.Xyz1(v0);
-                if(xyz==null) return 1;
+                var xyz=ParseUtil.Xyz(v0);
+                if(xyz.ng) return 1;
                 tr.localScale=new Vector3(xyz[0],xyz[1],xyz[2]);
                 return 0;
             });
@@ -2726,16 +2729,16 @@ public static class Command {
     }
     private static int CmdRgb2Hsv(ComShInterpreter sh,List<string> args){
         if(args.Count!=2) return sh.io.Error("使い方: rgb2hsv r,g,b");
-        float[] col=ParseUtil.Rgb(args[1]);
-        if(col==null) return sh.io.Error(ParseUtil.error);
+        var col=ParseUtil.Rgb(args[1]);
+        if(col.ng) return sh.io.Error(ParseUtil.error);
         Color.RGBToHSV(new Color(col[0],col[1],col[2]),out float h,out float s,out float v);
         sh.io.PrintJoin(",",sh.fmt.F0to1(h),sh.fmt.F0to1(s),sh.fmt.F0to1(v));
         return 0;
     }
     private static int CmdHsv2Rgb(ComShInterpreter sh,List<string> args){
         if(args.Count!=2) return sh.io.Error("使い方: hsv2rgb h,s,v");
-        float[] col=ParseUtil.Rgb(args[1]);
-        if(col==null) return sh.io.Error(ParseUtil.error);
+        var col=ParseUtil.Rgb(args[1]);
+        if(col.ng) return sh.io.Error(ParseUtil.error);
         Color rgb=Color.HSVToRGB(col[0],col[1],col[2]);
         sh.io.PrintJoin(",",sh.fmt.F0to1(rgb.r),sh.fmt.F0to1(rgb.g),sh.fmt.F0to1(rgb.b));
         return 0;
@@ -2847,14 +2850,14 @@ public static class Command {
             var ret=Mathf.SmoothDamp(fa[0],fa2[0],ref speed,period,maxspd,delta);
             sh.io.PrintJoin(sh.ofs,sh.fmt.FVal(ret),sh.fmt.FVal(speed));
         }else if(n==2){
-            float[] xy=ParseUtil.Xy(args[3]);
-            if(xy==null) return sh.io.Error(ParseUtil.error);
+            var xy=ParseUtil.Xy(args[3]);
+            if(xy.ng) return sh.io.Error(ParseUtil.error);
             Vector2 speed2=new Vector2(xy[0],xy[1]);
             var ret=Vector2.SmoothDamp(new Vector2(fa[0],fa[1]),new Vector2(fa2[0],fa2[1]),ref speed2,period,maxspd,delta);
             sh.io.PrintJoin(sh.ofs,sh.fmt.FXY(ret),sh.fmt.FXY(speed2));
         }else if(n==3){
-            float[] xyz=ParseUtil.Xyz1(args[3]);
-            if(xyz==null) return sh.io.Error(ParseUtil.error);
+            var xyz=ParseUtil.Xyz(args[3]);
+            if(xyz.ng) return sh.io.Error(ParseUtil.error);
             Vector3 speed3=new Vector3(xyz[0],xyz[1],xyz[2]);
             var ret=Vector3.SmoothDamp(new Vector3(fa[0],fa[1],fa[2]),new Vector3(fa2[0],fa2[1],fa2[2]),ref speed3,period,maxspd,delta);
             sh.io.PrintJoin(sh.ofs,sh.fmt.FPos(ret),sh.fmt.FPos(speed3));
@@ -2886,29 +2889,28 @@ public static class Command {
         for(int i=1; i<args.Count; i++){
             var lr=ParseUtil.LeftAndRight(args[i],'=');
             float f;
-            float[] fa;
             switch(lr[0]){
             case "gravity":
-                fa=ParseUtil.Xyz1(lr[1]);
-                if(fa==null) return sh.io.Error("ベクトルが不正です");
+                {var fa=ParseUtil.Xyz(lr[1]);
+                if(fa.ng) return sh.io.Error("ベクトルが不正です");
                 Physics.gravity=new Vector3(fa[0],fa[1],fa[2]);
-                break;
+                }break;
             case "hitmargin":
                 if(!float.TryParse(lr[1],out f)||f<=0) return sh.io.Error("数値が不正です");
                 Physics.defaultContactOffset=f;
                 break;
             case "accuracy":
-                fa=ParseUtil.FloatArr(lr[1]);
+                {var fa=ParseUtil.FloatArr(lr[1]);
                 if(fa==null||fa.Length!=2||(int)fa[0]<=0) return sh.io.Error("書式が不正です");
                 Physics.defaultSolverIterations=(int)fa[0];
                 Physics.defaultSolverVelocityIterations=(int)(fa[1]/6);
-                break;
+                }break;
             case "deltatime":
-                fa=ParseUtil.FloatArr(lr[1]);
+                {var fa=ParseUtil.FloatArr(lr[1]);
                 if(fa==null||fa.Length!=2||fa[0]<=0||fa[1]<=0) return sh.io.Error("書式が不正です");
                 Time.fixedDeltaTime=fa[0];
                 Time.maximumDeltaTime=fa[1];
-                break;
+                }break;
             default:
                 return sh.io.Error("プロパティ名が不正です");
             }
@@ -2918,10 +2920,10 @@ public static class Command {
     private static int CmdFindCollider(ComShInterpreter sh,List<string> args){
         const string usage="使い方: findcollider 中心 サイズ [回転] [レイヤマスク]";
         if(args.Count!=3&&args.Count!=4&&args.Count!=5) return sh.io.Error(usage);
-        float[] fa=ParseUtil.Xyz1(args[1]);
-        if(fa==null) return sh.io.Error(ParseUtil.error);
-        Vector3 center=new Vector3(fa[0],fa[1],fa[2]);
-        fa=ParseUtil.FloatArr(args[2]);
+        var xyz=ParseUtil.Xyz(args[1]);
+        if(xyz.ng) return sh.io.Error(ParseUtil.error);
+        Vector3 center=new Vector3(xyz[0],xyz[1],xyz[2]);
+        var fa=ParseUtil.FloatArr(args[2]);
         if(fa==null) return sh.io.Error(ParseUtil.error);
         int n=fa.Length;
         Vector3 boxsize=Vector3.zero;
@@ -2933,9 +2935,9 @@ public static class Command {
         int bits=-1;
         Quaternion q=Quaternion.identity;
         if(args.Count>=4){
-            fa=ParseUtil.Xyz1(args[3]);
-            if(fa==null) return sh.io.Error(ParseUtil.error);
-            q=Quaternion.Euler(fa[0],fa[1],fa[2]);
+            xyz=ParseUtil.Xyz(args[3]);
+            if(xyz.ng) return sh.io.Error(ParseUtil.error);
+            q=Quaternion.Euler(xyz[0],xyz[1],xyz[2]);
             if(args.Count==5){
                 if(!int.TryParse(args[4],System.Globalization.NumberStyles.HexNumber,null,out bits)) return sh.io.Error("レイヤマスクが不正です");
             }
@@ -2982,8 +2984,7 @@ public static class Command {
             return 0;
         }
         string file=args[1];
-        string[] lr=ParseUtil.LeftAndRight2(file,':');
-        if(lr==null) return sh.io.Error("書式が不正です");
+        var lr=ParseUtil.LeftAndRight2(file,':');
         string texab=lr[0];
         file=lr[1];
         if(file==""){
@@ -3039,7 +3040,7 @@ public static class Command {
             return 0;
         }else if(args.Count>2) return sh.io.Error("引数が多すぎます");
         var col=ParseUtil.Rgba(args[1]);
-        if(col==null) return sh.io.Error(ParseUtil.error);
+        if(col.ng) return sh.io.Error(ParseUtil.error);
         sb.SetColor("_Tint",new Color(col[0],col[1],col[2],col[3]));
         return 0;
     }
@@ -3163,8 +3164,8 @@ public static class Command {
             return 0;
         }
         bool rq=(val[0]=='+');
-        float[] xyz=ParseUtil.Position(new StrSegment(val,rq?1:0));
-        if(xyz==null) return sh.io.Error(ParseUtil.error);
+        var xyz=ParseUtil.Position(new StrSegment(val,rq?1:0));
+        if(xyz.ng) return sh.io.Error(ParseUtil.error);
         if(rq) tr.position=tr.position+(new Vector3(xyz[0],xyz[1],xyz[2]));
         else tr.position=new Vector3(xyz[0],xyz[1],xyz[2]);
         return 1;
@@ -3198,8 +3199,8 @@ public static class Command {
             sh.io.Print(sh.fmt.FPos(tr.localPosition));
             return 0;
         }
-        float[] xyz=ParseUtil.XyzR(val,out bool rq);
-        if(xyz==null) return sh.io.Error(ParseUtil.error);
+        var xyz=ParseUtil.XyzR(val,out bool rq);
+        if(xyz.ng) return sh.io.Error(ParseUtil.error);
         if(rq) tr.localPosition=tr.localPosition+(new Vector3(xyz[0],xyz[1],xyz[2]));
         else tr.localPosition=new Vector3(xyz[0],xyz[1],xyz[2]);
         return 1;
@@ -3260,8 +3261,8 @@ public static class Command {
             sh.io.Print(sh.fmt.FEuler(tr.rotation.eulerAngles));
             return 0;
         }
-        float[] xyz=ParseUtil.WRotR(val,out byte rq);
-        if(xyz==null) return sh.io.Error(ParseUtil.error);
+        var xyz=ParseUtil.WRotR(val,out byte rq);
+        if(xyz.ng) return sh.io.Error(ParseUtil.error);
         if(rq==1) tr.rotation=Quaternion.Euler(xyz[0],xyz[1],xyz[2])*tr.rotation;
         else if(rq==2) tr.rotation=tr.rotation*Quaternion.Euler(xyz[0],xyz[1],xyz[2]);
         else tr.rotation=Quaternion.Euler(xyz[0],xyz[1],xyz[2]);
@@ -3296,8 +3297,8 @@ public static class Command {
             sh.io.Print(sh.fmt.FEuler(tr.localRotation.eulerAngles));
             return 0;
         }
-        float[] xyz=ParseUtil.RotR(val,out byte rq);
-        if(xyz==null) return sh.io.Error(ParseUtil.error);
+        var xyz=ParseUtil.RotR(val,out byte rq);
+        if(xyz.ng) return sh.io.Error(ParseUtil.error);
         if(rq==1) tr.localRotation=Quaternion.Euler(xyz[0],xyz[1],xyz[2])*tr.localRotation;
         else if(rq==2) tr.localRotation=tr.localRotation*Quaternion.Euler(xyz[0],xyz[1],xyz[2]);
         else tr.localRotation=Quaternion.Euler(xyz[0],xyz[1],xyz[2]);
@@ -3329,15 +3330,15 @@ public static class Command {
     }
     public static int _CmdParamOPos(ComShInterpreter sh,Transform tr,string val){
         if(val==null) return 0;
-        float[] xyz=ParseUtil.Xyz1(val);
-        if(xyz==null) return sh.io.Error(ParseUtil.error);
+        var xyz=ParseUtil.Xyz(val);
+        if(xyz.ng) return sh.io.Error(ParseUtil.error);
         tr.Translate(xyz[0],xyz[1],xyz[2],Space.Self);
         return 1;
     }
     public static int _CmdParamORot(ComShInterpreter sh,Transform tr,string val){
         if(val==null) return 0;
-        float[] xyz=ParseUtil.Xyz1(val);
-        if(xyz==null) return sh.io.Error(ParseUtil.error);
+        var xyz=ParseUtil.Xyz(val);
+        if(xyz.ng) return sh.io.Error(ParseUtil.error);
         tr.Rotate(xyz[0],xyz[1],xyz[2],Space.Self);
         return 1;
     }
@@ -3346,8 +3347,8 @@ public static class Command {
             sh.io.Print(sh.fmt.FMul(tr.localScale));
             return 0;
         }
-        float[] xyz=ParseUtil.Xyz2(val);
-        if(xyz==null) return sh.io.Error(ParseUtil.error);
+        var xyz=ParseUtil.Xyz2(val);
+        if(xyz.ng) return sh.io.Error(ParseUtil.error);
         tr.localScale=new Vector3(xyz[0],xyz[1],xyz[2]);
         return 1;
     }
@@ -3377,8 +3378,8 @@ public static class Command {
             sh.io.Print(sh.fmt.FQuat(tr.localRotation));
             return 0;
         }
-        float[] quat=ParseUtil.QuatR(val,out byte rq);
-        if(quat==null) return sh.io.Error(ParseUtil.error);
+        var quat=ParseUtil.QuatR(val,out byte rq);
+        if(quat.ng) return sh.io.Error(ParseUtil.error);
         if(rq==1) tr.localRotation=new Quaternion(quat[0],quat[1],quat[2],quat[3])*tr.localRotation;
         else if(rq==2) tr.localRotation=tr.localRotation*(new Quaternion(quat[0],quat[1],quat[2],quat[3]));
         else tr.localRotation=new Quaternion(quat[0],quat[1],quat[2],quat[3]);
@@ -3389,8 +3390,8 @@ public static class Command {
             sh.io.Print(sh.fmt.FQuat(tr.rotation));
             return 0;
         }
-        float[] quat=ParseUtil.QuatR(val,out byte rq);
-        if(quat==null) return sh.io.Error(ParseUtil.error);
+        var quat=ParseUtil.QuatR(val,out byte rq);
+        if(quat.ng) return sh.io.Error(ParseUtil.error);
         if(rq==1) tr.rotation=(new Quaternion(quat[0],quat[1],quat[2],quat[3]))*tr.rotation;
         else if(rq==2) tr.rotation=tr.rotation*(new Quaternion(quat[0],quat[1],quat[2],quat[3]));
         else tr.rotation=new Quaternion(quat[0],quat[1],quat[2],quat[3]);
@@ -3411,8 +3412,8 @@ public static class Command {
     }
     public static int _CmdParamL2W(ComShInterpreter sh,Transform tr,string val){
         if(val==null){ sh.io.Print(tr.localToWorldMatrix.ToString()); return 0; }
-        float[] xyz= ParseUtil.Xyz1(val);
-        if(xyz==null) return sh.io.Error(ParseUtil.error);
+        var xyz= ParseUtil.Xyz(val);
+        if(xyz.ng) return sh.io.Error(ParseUtil.error);
         sh.io.Print(sh.fmt.FPos(
             tr.localToWorldMatrix.MultiplyPoint3x4(new Vector3(xyz[0],xyz[1],xyz[2]))
         ));
@@ -3420,8 +3421,8 @@ public static class Command {
     }
     public static int _CmdParamW2L(ComShInterpreter sh,Transform tr,string val){
         if(val==null){ sh.io.Print(tr.worldToLocalMatrix.ToString()); return 0; }
-        float[] xyz= ParseUtil.Position(val);
-        if(xyz==null) return sh.io.Error(ParseUtil.error);
+        var xyz= ParseUtil.Position(val);
+        if(xyz.ng) return sh.io.Error(ParseUtil.error);
         sh.io.Print(sh.fmt.FPos(
             tr.worldToLocalMatrix.MultiplyPoint3x4(new Vector3(xyz[0],xyz[1],xyz[2]))
         ));

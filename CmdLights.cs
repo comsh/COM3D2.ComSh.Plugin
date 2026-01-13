@@ -76,8 +76,8 @@ public static class CmdLights {
                 sh.io.PrintLn(sh.fmt.FEA2(lm.gameObject.transform.rotation.eulerAngles));
                 return 0;
             }
-            float[] rot;
-            if((rot=ParseUtil.Xy(val))==null) return sh.io.Error(ParseUtil.error);
+            var rot=ParseUtil.Xy(val);
+            if(rot.ng) return sh.io.Error(ParseUtil.error);
             lm.SetRotation(new Vector3(rot[0],rot[1],0));
             return 1;
         }else if(cmd=="power"){
@@ -93,8 +93,8 @@ public static class CmdLights {
                 sh.io.PrintLn(sh.fmt.RGB2(lm.GetColor()));
                 return 0;
             }
-            float[] rgb;
-            if((rgb=ParseUtil.Rgb(val))==null) return sh.io.Error(ParseUtil.error);
+            var rgb=ParseUtil.Rgb(val);
+            if(rgb.ng) return sh.io.Error(ParseUtil.error);
             lm.SetColor(new Color(rgb[0],rgb[1],rgb[2]));
             return 1;
         }else if(cmd=="shadow"){
@@ -163,8 +163,8 @@ public static class CmdLights {
                     sh.io.PrintLn(sh.fmt.RGB(RenderSettings.ambientLight));
                 return 0;
             }
-            float[] c=ParseUtil.Rgb(val);
-            if(c==null) return sh.io.Error(ParseUtil.error);
+            var c=ParseUtil.Rgb(val);
+            if(c.ng) return sh.io.Error(ParseUtil.error);
             var old=RenderSettings.ambientMode;
             RenderSettings.ambientMode=(UnityEngine.Rendering.AmbientMode)AmbMode(cmd);
             RenderSettings.ambientLight=new Color(c[0],c[1],c[2]);
@@ -184,12 +184,12 @@ public static class CmdLights {
             }
             string[] sa=val.Split(ParseUtil.colon);
             if(sa.Length!=3) return sh.io.Error("上・側面・下の３つの色を指定してください");
-            float[] cup=ParseUtil.Rgb(sa[0]);
-            if(cup==null) return sh.io.Error(ParseUtil.error);
-            float[] csd=ParseUtil.Rgb(sa[1]);
-            if(csd==null) return sh.io.Error(ParseUtil.error);
-            float[] cdn=ParseUtil.Rgb(sa[2]);
-            if(cdn==null) return sh.io.Error(ParseUtil.error);
+            var cup=ParseUtil.Rgb(sa[0]);
+            if(cup.ng) return sh.io.Error(ParseUtil.error);
+            var csd=ParseUtil.Rgb(sa[1]);
+            if(csd.ng) return sh.io.Error(ParseUtil.error);
+            var cdn=ParseUtil.Rgb(sa[2]);
+            if(cdn.ng) return sh.io.Error(ParseUtil.error);
             var old=RenderSettings.ambientMode;
             RenderSettings.ambientMode=(UnityEngine.Rendering.AmbientMode)AmbMode(cmd);
             RenderSettings.ambientSkyColor=new Color(cup[0],cup[1],cup[2]);
@@ -291,22 +291,24 @@ public static class CmdLights {
             if(!UTIL.ValidName(pa[1])) return sh.io.Error("その名前は使用できません");
             if(ObjUtil.FindObj(sh,pa[1])!=null||LightUtil.FindLight(sh,pa[1])!=null) return sh.io.Error("その名前は既に使われています"); 
             if((pftr=LightUtil.GetLightObjectTr(sh))==null) return sh.io.Error("ライト作成に失敗しました"); // 想定外
-            float[] pos,col;
-            if((col=ParseUtil.Rgb(pa[2]))==null) return sh.io.Error(ParseUtil.error);
+            var col=ParseUtil.Rgb(pa[2]);
+            if(col.ng) return sh.io.Error(ParseUtil.error);
             if(!float.TryParse(pa[3],out float it)) return sh.io.Error("数値の形式が不正です");
             if(pa[0]=="dir"){
-                if((pos=ParseUtil.Xyz(pa[4]))==null) return sh.io.Error(ParseUtil.error);
+                var pos=ParseUtil.Xyz(pa[4]);
+                if(pos.ng) return sh.io.Error(ParseUtil.error);
                 var go=LightUtil.AddDirectionalLight(pa[1],pftr,new Vector3(pos[0],pos[1],pos[2]),it,new Color(col[0],col[1],col[2]));
                 LightUtil.lightDic.Add(pa[1],go.transform);
             }else{
                 if(!float.TryParse(pa[4],out float r)) return sh.io.Error("数値の形式が不正です");
-                if((pos=ParseUtil.Xyz(pa[5]))==null) return sh.io.Error(ParseUtil.error);
+                var pos=ParseUtil.Xyz(pa[5]);
+                if(pos.ng) return sh.io.Error(ParseUtil.error);
                 if(pa[0]=="point"){
                     var go=LightUtil.AddPointLight(pa[1],pftr,new Vector3(pos[0],pos[1],pos[2]),it,r,new Color(col[0],col[1],col[2]));
                     LightUtil.lightDic.Add(pa[1],go.transform);
                 }else if(pa[0]=="spot"){
-                    float[] dst;
-                    if((dst=ParseUtil.Xyz(pa[6]))==null) return sh.io.Error(ParseUtil.error);
+                    var dst=ParseUtil.Xyz(pa[6]);
+                    if(dst.ng) return sh.io.Error(ParseUtil.error);
                     Vector3 dir=new Vector3(dst[0]-pos[0],dst[1]-pos[1],dst[2]-pos[2]);
                     if(!float.TryParse(pa[7],out float ang)) return sh.io.Error("数値の形式が不正です");
                     var go=LightUtil.AddSpotLight(pa[1],pftr,new Vector3(pos[0],pos[1],pos[2]),dir,r,it,ang,new Color(col[0],col[1],col[2]));
@@ -403,8 +405,8 @@ public static class CmdLights {
             sh.io.PrintLn(sh.fmt.RGB2(lt.color));
             return 0;
         }
-        float[] rgb;
-        if((rgb=ParseUtil.Rgb(val))==null) return sh.io.Error(ParseUtil.error);
+        var rgb=ParseUtil.Rgb(val);
+        if(rgb.ng) return sh.io.Error(ParseUtil.error);
         lt.color=new Color(rgb[0],rgb[1],rgb[2]);
         return 1;
     }
@@ -433,8 +435,8 @@ public static class CmdLights {
             sh.io.PrintLn(sh.fmt.FPos(tr.rotation*Vector3.forward + tr.position));
             return 0;
         }
-        float[] xyz;
-        if((xyz=ParseUtil.Xyz(val))==null) return sh.io.Error(ParseUtil.error);
+        var xyz=ParseUtil.Xyz(val);
+        if(xyz.ng) return sh.io.Error(ParseUtil.error);
         Vector3 dir=new Vector3(xyz[0]-tr.position.x,xyz[1]-tr.position.y,xyz[2]-tr.position.z);
         tr.rotation=Quaternion.FromToRotation(Vector3.forward,dir);
         return 1;

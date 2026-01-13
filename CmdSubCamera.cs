@@ -82,8 +82,8 @@ public static class CmdSubCamera {
                     camera0=share.GetComponent<Camera>();
                     if(camera0==null) return sh.io.Error("Cameraがありません");
                 }else{
-                    float[] xy=ParseUtil.Xy(args[3]);
-                    if(xy==null) return sh.io.Error("数値が不正です");
+                    var xy=ParseUtil.Xy(args[3]);
+                    if(xy.ng) return sh.io.Error("数値が不正です");
                     if((w=(int)xy[0])<=0 || (h=(int)xy[1])<=0) return sh.io.Error("数値が不正です");
                 }
             }else return sh.io.Error("引数が多すぎます");
@@ -235,14 +235,14 @@ public static class CmdSubCamera {
     public static int SubCamParamBgColor(ComShInterpreter sh,Camera cam,string val){
         if(val==null) return 0;
         var c=ParseUtil.Rgba(val);
-        if(c==null) return sh.io.Error(ParseUtil.error);
+        if(c.ng) return sh.io.Error(ParseUtil.error);
         cam.backgroundColor=new Color(c[0],c[1],c[2],c[3]);
         return 1;
     }
     private static int SubCamParamW2S(ComShInterpreter sh,Camera cam,string val){
         if(val==null) return 0;
-        float[] xyz=ParseUtil.Xyz(val);
-        if(xyz==null) return sh.io.Error(ParseUtil.error);
+        var xyz=ParseUtil.Xyz(val);
+        if(xyz.ng) return sh.io.Error(ParseUtil.error);
         Vector3 xy=cam.WorldToScreenPoint(new Vector3(xyz[0],xyz[1],xyz[2]));
         // このxyは左下を0,0とする系。左上起点になおして表示
         sh.io.PrintLn($"{(long)xy[0]},{(long)Mathf.Round(cam.pixelHeight-1-xy[1])}");
@@ -250,8 +250,8 @@ public static class CmdSubCamera {
     }
     private static int SubCamParamS2W(ComShInterpreter sh,Camera cam,string val){
         if(val==null) return 0;
-        float[] xyz=ParseUtil.Xyz(val);
-        if(xyz==null) return sh.io.Error(ParseUtil.error);
+        var xyz=ParseUtil.Xyz(val);
+        if(xyz.ng) return sh.io.Error(ParseUtil.error);
         Vector3 pos=cam.ScreenToWorldPoint(new Vector3(xyz[0],cam.pixelHeight-1-xyz[1],xyz[2]));
         sh.io.Print(sh.fmt.FPos(pos));
         return 0;
@@ -262,8 +262,8 @@ public static class CmdSubCamera {
             return 0;
         }
         if(cam.targetTexture==null) return 1;
-        float[] xy=ParseUtil.Xy(val);
-        if(xy==null) return sh.io.Error(ParseUtil.error);
+        var xy=ParseUtil.Xy(val);
+        if(xy.ng) return sh.io.Error(ParseUtil.error);
         RecreateRt(cam,(int)xy[0],(int)xy[1]);
         return 1;
     }
@@ -379,8 +379,7 @@ public static class CmdSubCamera {
         if(skybox==null) skybox=cam.gameObject.AddComponent<Skybox>();
         if(skybox==null) return sh.io.Error("失敗しました");
 
-        string[] lr=ParseUtil.LeftAndRight2(val,':');
-        if(lr==null) return sh.io.Error("書式が不正です");
+        var lr=ParseUtil.LeftAndRight2(val,':');
         string texab=lr[0];
         string file=lr[1];
         if(file==""){
@@ -424,8 +423,7 @@ public static class CmdSubCamera {
         if((idx=val.IndexOf(':'))>=0){
             ab=val.Substring(0,idx); file=val.Substring(idx+1);
         }
-        string[] lr=ParseUtil.LeftAndRight(file,',');
-        if(lr==null) return sh.io.Error("書式が不正です");
+        var lr=ParseUtil.LeftAndRight(file,',');
         file=lr[0]; string mode=lr[1];
         if(file==""){
             if(ab==""){
@@ -468,7 +466,6 @@ public static class CmdSubCamera {
         if(pea==null||pea.Length==0) return sh.io.Error("post processは設定されていません");
         if(val==null) return 0;
         var lr=ParseUtil.LeftAndRight2(val,':');
-        if(lr==null) return sh.io.Error("書式が不正です");
         int n=0;
         if(lr[0]!=""){
             if(!int.TryParse(lr[0],out n)||n<0||n>=pea.Length) return sh.io.Error("値が不正です");

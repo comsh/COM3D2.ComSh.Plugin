@@ -1131,7 +1131,7 @@ public static class CmdMaidMan {
             bool dirty=false;
             foreach(string dk in kvs.Keys){
                 var lr=ParseUtil.LeftAndRight2(dk,'.');
-                if(lr[0]!="" && skin.Category.ToLower()!=lr[0]) continue;
+                if(lr[0]!="" && string.Compare(skin.Category,lr[0],OrdinalIgnoreCase)!=0) continue;
                 if(skin.morph.hash.ContainsKey(lr[1])){
                     skin.morph.SetBlendValues((int)skin.morph.hash[lr[1]],kvs[dk]);
                     dirty=true;
@@ -1313,12 +1313,13 @@ public static class CmdMaidMan {
         }
         Dictionary<string,float> kvs=ParseUtil.GetKVFloat(val);
         if(kvs==null) return sh.io.Error(ParseUtil.error);
+        var names=MaidUtil.GetMpnNames();
         foreach(string k in kvs.Keys){
-            string lk=k.ToLower();
-            int i; for(i=0; i<MaidUtil.mpnBody.Length; i++) if(lk==MaidUtil.mpnBody[i].ToString().ToLower()) break;
-            if(i==MaidUtil.mpnBody.Length) return sh.io.Error("MPNが不正です");
+            int i; for(i=0; i<names.Length; i++)
+                if(string.Compare(k,names[i],OrdinalIgnoreCase)==0) break;
+            if(i==names.Length) return sh.io.Error("MPNが不正です");
             if(tmpq) MaidUtil.SetPropTemp(m,MaidUtil.mpnBody[i],(int)kvs[k]);
-            else  MaidUtil.SetProp(m,MaidUtil.mpnBody[i],(int)kvs[k]);
+            else MaidUtil.SetProp(m,MaidUtil.mpnBody[i],(int)kvs[k]);
         }
         m.AllProcProp();
         return 1;
@@ -1387,8 +1388,8 @@ public static class CmdMaidMan {
             MaidUtil.LookAtCron(m,tr);
         }else{                      // 座標を見る
             m.LockHeadAndEye(false);
-            float[] xyz=ParseUtil.Xyz1(te[0]);
-            if(xyz==null) return sh.io.Error("注視座標が不正です");
+            var xyz=ParseUtil.Xyz(te[0]);
+            if(xyz.ng) return sh.io.Error("注視座標が不正です");
             MaidUtil.LookAtCron(m,new Vector3(xyz[0],xyz[1],xyz[2]));
         }
         return 1;
@@ -1488,7 +1489,7 @@ public static class CmdMaidMan {
             if(t.Length==0) continue;
             var p=t.Substring(t.Length-1,1);
             if(p!="+" && p!="-"){ p="+"; } else t=t.Substring(0,t.Length-1);
-            string[] lr=ParseUtil.LeftAndRight(t,'.');
+            var lr=ParseUtil.LeftAndRight(t,'.');
             if(lr[1]=="") m.body0.SetVisibleNodeSlot("body",p[0]=='+',lr[0]);
             else{
                 if(!m.body0.IsSlotNo(lr[0])) return sh.io.Error("スロット名が不正です");
@@ -1543,7 +1544,7 @@ public static class CmdMaidMan {
             if(t.Length==0) continue;
             var p=t.Substring(t.Length-1,1);
             if(p!="+" && p!="-"){ p="+"; } else t=t.Substring(0,t.Length-1);
-            string[] lr=ParseUtil.LeftAndRight(t,'.');
+            var lr=ParseUtil.LeftAndRight(t,'.');
             if(!m.body0.IsSlotNo(lr[0])||!m.body0.IsSlotNo(lr[1])) return sh.io.Error("スロット名が不正です");
 
             var skin=m.body0.GetSlot(lr[0]);
@@ -2108,7 +2109,7 @@ public static class CmdMaidMan {
             .PrintLn(sh.fmt.FVal(dsb.m_aryHard[3]));
     }
     private static int SkirtParamSet(ComShInterpreter sh,DynamicSkirtBone dsb,string key,string value){
-        float f; float[] fa;
+        float f;
         switch(key){
         case "radius":
             if(!float.TryParse(value,out f)||f<=0) return sh.io.Error("数値が不正です");
@@ -2127,10 +2128,10 @@ public static class CmdMaidMan {
             dsb.m_fPanierStressForce=f;
             return 1;
         case "stressdegree":
-            fa=ParseUtil.FloatArr(value);
+            {var fa=ParseUtil.FloatArr(value);
             if(fa==null||fa.Length!=2||fa[0]<0||fa[1]<0) return sh.io.Error("数値が不正です");
             dsb.m_fStressDgreeMin=fa[0]; dsb.m_fStressDgreeMax=fa[1];
-            return 1;
+            }return 1;
         case "stressscale":
             if(!float.TryParse(value,out f)) return sh.io.Error("数値が不正です");
             dsb.m_fStressMinScale=f;
@@ -2148,15 +2149,15 @@ public static class CmdMaidMan {
             dsb.m_fVelocityForceRate=f;
             return 1;
         case "gravity":
-            fa=ParseUtil.Xyz1(value);
-            if(fa==null) return sh.io.Error("座標が不正です");
+            {var fa=ParseUtil.Xyz(value);
+            if(fa.ng) return sh.io.Error("座標が不正です");
             dsb.m_vGravity=new Vector3(fa[0],fa[1],fa[2]);
-            return 1;
+            }return 1;
         case "spring":
-            fa=ParseUtil.FloatArr(value);
+            {var fa=ParseUtil.FloatArr(value);
             if(fa==null||fa.Length!=4) return sh.io.Error("数値が不正です");
             for(int i=0; i<4; i++) dsb.m_aryHard[i]=fa[i];
-            return 1;
+            }return 1;
         default:
             if(key.Contains("_A_yure_skirt_") && CMT.SearchObjName(dsb.transform,key,false)!=null){
                 DynamicSkirtBone.PanierRadiusGroup grp;
@@ -2579,8 +2580,8 @@ public static class CmdMaidMan {
             if(sa.Length<3) return "座標の指定が不正です";
             if(sa.Length==4&&(!float.TryParse(sa[3],out force)||force<0))
                 return "強さの指定が不正です";
-            float[] xyz=ParseUtil.Xyz(sa);
-            if(xyz==null) return "座標の指定が不正です";
+            var xyz=ParseUtil.Xyz(sa);
+            if(xyz.ng) return "座標の指定が不正です";
             GravityTransformControl gtc=MaidUtil.GetGravity(m,cate);
             if(gtc==null) return "変更できません";
             gtc.forceRate=force;
@@ -2679,7 +2680,7 @@ public static class CmdMaidMan {
                 sh.io.PrintLn(files[i].Substring(fingerDir.Length,files[i].Length-fingerDir.Length-4).Replace('\\','/'));
             return 0;
         }
-        string[] sa=ParseUtil.LeftAndRight2(val,':');
+        var sa=ParseUtil.LeftAndRight2(val,':');
         bool lq=(sa[0]==""||sa[0].IndexOf('L')>=0),rq=(sa[0]==""||sa[0].IndexOf('R')>=0);
         if(lq==false&&rq==false) return sh.io.Error("書式が不正です");
         try{
@@ -2803,6 +2804,7 @@ public static class CmdMaidMan {
         }
         var fa=ParseUtil.FloatArr(val);
         if(fa==null||fa.Length==0) return sh.io.Error("書式が不正です");
+        for(int i=0; i<fa.Length; i++) if(fa[i]<0||fa[i]>1) return sh.io.Error("0.0～1.0で指定してください");
 
         string iid=m.GetInstanceID().ToString();
         Animation a=m.GetAnimation();
@@ -2984,6 +2986,14 @@ public static class MaidUtil {
         string name=(!string.IsNullOrEmpty(mp.strTempFileName) && mp.nTempFileNameRID!=0)?mp.strTempFileName:mp.strFileName;
         if (name=="" || name.Contains("_del_") || name.EndsWith("_del.menu",Ordinal)) return string.Empty;
         return name;
+    }
+    private static string[] mpnnames=null;
+    public static string[] GetMpnNames(){
+        if(mpnnames==null){
+            mpnnames=new string[mpnBody.Length];
+            for(int i=0; i<mpnBody.Length; i++) mpnnames[i]=mpnBody[i].ToString();
+        }
+        return mpnnames;
     }
     public static MPN[] mpnBody={       // 身体系MPN
         MPN.KubiScl,MPN.UdeScl,

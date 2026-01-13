@@ -391,6 +391,42 @@ namespace COM3D2.ComSh.Plugin {
             ed.selectIndex=si;
             return old;
         }
+#if COM3D2_5
+        public void AddLog(string add){
+            int l=add.Length;
+            if(l>=15000){
+                LogText.Copy(add,l-15000,0,15000);
+            }else{
+                var log=logTe.text;
+                int len=15000-l-1;
+                if(log.Length<len) len=log.Length;
+                int start=log.Length-len;
+                LogText.Copy(log,start,0,len);
+                LogText.SetChar(len,'\n');
+                LogText.Copy(add,0,len+1,l);
+            }
+            logTe.text=LogText.GetText();
+        }
+        private static class LogText {
+            public static string text=new string(' ',15000);
+            public static int length=0;
+            public static string GetText(){
+                if(length==15000) return text;    //一旦15000まで育てば、そのまま(文字列生成せず)返せる
+                return text.Substring(0,length);  //短いうちは部分文字列生成で我慢
+            }
+            public static unsafe void SetChar(int idx,char c){
+                fixed(char *p=text){p[idx]=c;}
+                if(idx+1>length) length=idx+1;
+            }
+            public static unsafe void Copy(string src,int s0,int d0,int len){
+                fixed(char *p=text){
+                    int si=s0,di=d0;
+                    for(int i=0; i<len; i++) p[di++]=src[si++];
+                    if(di>length) length=di;
+                }
+            }
+        }
+#else
         private static char[] logchar=new char[15000];
         public void AddLog(string add){ // addの最終行は改行なしで渡してね
             int l=add.Length;
@@ -408,6 +444,7 @@ namespace COM3D2.ComSh.Plugin {
                 logTe.text=new string(logchar,0,len+1+l);
             }
         }
+#endif
         public string GetLog(){ return logTe.text; }
         public void UpdateStyle(){ styleDate=0; }
 	}

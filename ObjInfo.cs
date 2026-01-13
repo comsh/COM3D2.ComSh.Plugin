@@ -247,7 +247,16 @@ public class ObjInfoData {
     }
     private static FieldInfo meshField=null;
     public void UpdateMorph(Transform tr,Mesh oldmesh,Mesh newmesh){
+#if COM3D2_5
+        if(meshField==null) try{
+            meshField=typeof(TMorph).GetField("m_mesh",BindingFlags.Instance | BindingFlags.Public);
+            // ↑今はpublicだけど↓以前はprivateだったので一応残す
+            if(meshField==null) meshField=typeof(TMorph).GetField("m_mesh",BindingFlags.Instance | BindingFlags.NonPublic);
+        }catch{ return; }
+#else
         if(meshField==null) try{ meshField=typeof(TMorph).GetField("m_mesh",BindingFlags.Instance | BindingFlags.NonPublic); }catch{ return; }
+#endif
+
         if(this.morph!=null){
             foreach(TMorph m in this.morph){
                 var mmesh=meshField.GetValue(m);
@@ -256,11 +265,20 @@ public class ObjInfoData {
         }
         var tb=tr.GetComponentInParent<TBody>();
         if(tb==null || tb.goSlot==null) return;
+#if COM3D2_5
+        var slot=tb.goSlot;
+        for(int i=0; i<slot.Count; i++){
+            if(slot[i].morph==null) continue;
+            var mmesh=meshField.GetValue(slot[i].morph);
+            if(object.ReferenceEquals(mmesh,oldmesh)) meshField.SetValue(slot[i].morph,newmesh);
+        }
+#else
         foreach(var skin in tb.goSlot){
             if(skin.morph==null) continue;
             var mmesh=meshField.GetValue(skin.morph);
             if(object.ReferenceEquals(mmesh,oldmesh)) meshField.SetValue(skin.morph,newmesh);
         }
+#endif
     }
     public void CloneMaterial(){
         if(workMate==null) workMate=new List<Material>(originalMate!=null?originalMate.Count:8);

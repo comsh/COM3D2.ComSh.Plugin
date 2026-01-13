@@ -332,24 +332,24 @@ public static class CmdMeshes {
             if(c.vertex!=null){
                 if(c.vertex.Length==0) remove.Add(c.idx);
                 else{
-                    float[] xyz=ParseUtil.Xyz1(c.vertex);
-                    if(xyz==null){ ret=sh.io.Error($"頂点{c.idx} 座標の形式が不正です"); break; }
+                    var xyz=ParseUtil.Xyz(c.vertex);
+                    if(xyz.ng){ ret=sh.io.Error($"頂点{c.idx} 座標の形式が不正です"); break; }
                     vta[c.idx]=new Vector3(xyz[0],xyz[1],xyz[2]);
                 }
             }
             if(c.normal!=null){
-                float[] xyz=ParseUtil.Xyz1(c.normal);
-                if(xyz==null){ ret=sh.io.Error($"頂点{c.idx}: 法線ベクトルの形式が不正です"); break;}
+                var xyz=ParseUtil.Xyz(c.normal);
+                if(xyz.ng){ ret=sh.io.Error($"頂点{c.idx}: 法線ベクトルの形式が不正です"); break;}
                 nma[c.idx]=new Vector3(xyz[0],xyz[1],xyz[2]);
             }
             if(c.uv!=null){
-                float[] xy=ParseUtil.Xy1(c.uv);
-                if(xy==null){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
+                var xy=ParseUtil.Xy(c.uv);
+                if(xy.ng){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
                 uva[c.idx]=new Vector2(xy[0],xy[1]);
             }
             if(c.uv2!=null){
-                float[] xy=ParseUtil.Xy1(c.uv2);
-                if(xy==null){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
+                var xy=ParseUtil.Xy(c.uv2);
+                if(xy.ng){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
                 if(uv2a.Length<=c.idx){
                     var old=uv2a;
                     uv2a=new Vector2[vta.Length];
@@ -358,8 +358,8 @@ public static class CmdMeshes {
                 uv2a[c.idx]=new Vector2(xy[0],xy[1]);
             }
             if(c.uv3!=null){
-                float[] xy=ParseUtil.Xy1(c.uv3);
-                if(xy==null){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
+                var xy=ParseUtil.Xy(c.uv3);
+                if(xy.ng){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
                 if(uv3a.Length<=c.idx){
                     var old=uv3a;
                     uv3a=new Vector2[vta.Length];
@@ -368,8 +368,8 @@ public static class CmdMeshes {
                 uv3a[c.idx]=new Vector2(xy[0],xy[1]);
             }
             if(c.uv4!=null){
-                float[] xy=ParseUtil.Xy1(c.uv4);
-                if(xy==null){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
+                var xy=ParseUtil.Xy(c.uv4);
+                if(xy.ng){ ret=sh.io.Error($"頂点{c.idx}: UV座標の形式が不正です"); break;}
                 if(uv4a.Length<=c.idx){
                     var old=uv4a;
                     uv4a=new Vector2[vta.Length];
@@ -410,7 +410,7 @@ public static class CmdMeshes {
     }
     private static int MeshParamCut(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null) return 0;
-        string[] lr=ParseUtil.LeftAndRight(val,':');
+        var lr=ParseUtil.LeftAndRight(val,':');
         if(lr[0]==""||lr[1]=="") return sh.io.Error("書式が不正です");
         int[] lst1=ParseUtil.IntArr(lr[0]);    //そんなに多数指定しないだろうから線形で
         int[] lst2=ParseUtil.IntArr(lr[1]);
@@ -452,7 +452,7 @@ public static class CmdMeshes {
         }
         Shader shader=null;
         Material mate=null;
-        string[] lr=ParseUtil.LeftAndRight2(val,':');
+        var lr=ParseUtil.LeftAndRight2(val,':');
         if(lr[0]!=""){
             if(sh.looplv>0) ObjUtil.ABCache();
             var ma=ObjUtil.AllAsset<Material>(lr[0]);
@@ -772,7 +772,7 @@ public static class CmdMeshes {
         mate=sm.mi.material[sm.submeshno];
 
         string prop="_MainTex",right="";
-        string[] lr=ParseUtil.LeftAndRight2(val,ParseUtil.eqcln);
+        var lr=ParseUtil.LeftAndRight2(val,ParseUtil.eqcln);
         if(lr[0]!="") prop=lr[0];
         right=lr[1];
         if(!mate.HasProperty(prop)) return sh.io.Error("指定されたプロパティは現在のシェーダでは無効です");
@@ -791,7 +791,7 @@ public static class CmdMeshes {
         if(val=="") return 0;
         sm.mi.EditMaterial();
         mate=sm.mi.material[sm.submeshno];
-        string[] lr=ParseUtil.LeftAndRight(val,ParseUtil.eqcln);
+        var lr=ParseUtil.LeftAndRight(val,ParseUtil.eqcln);
         string prop=lr[0],right=lr[1];
         if(prop=="") return sh.io.Error("書式が不正です");
         if(!mate.HasProperty(prop)) return sh.io.Error("指定されたプロパティは現在のシェーダでは無効です");
@@ -851,7 +851,7 @@ public static class CmdMeshes {
             if(old!=null && old!=origtex && texiid.Remove(old)) UnityEngine.Object.Destroy(old); 
             mate.SetTexture(prop,tex);
         }else if(cube==1&&name.IndexOf(':')>=0){
-                string[] lr=ParseUtil.LeftAndRight2(name,':');
+                var lr=ParseUtil.LeftAndRight2(name,':');
                 if(lr[0]=="") return "ファイルが見つかりません";
                 Cubemap cm=ObjUtil.LoadAssetBundle<Cubemap>(lr[0],lr[1],ComShInterpreter.textureDir);
                 if(cm==null) return "ファイルが見つかりません";
@@ -888,7 +888,7 @@ public static class CmdMeshes {
         if(!m.HasProperty(key)) return "指定されたプロパティは現在のシェーダでは無効です";
         int wrap=wrap0,mode=0;
         string right=val;
-        string[] lr=ParseUtil.LeftAndRight(right,',');
+        var lr=ParseUtil.LeftAndRight(right,',');
         if(lr[1]!=""){
             right=lr[0];
             var opts=lr[1].Split(ParseUtil.comma);
@@ -907,7 +907,7 @@ public static class CmdMeshes {
         sm.mi.EditMaterial();
         Material mate=sm.mi.material[sm.submeshno];
         string prop="_MainTex",right="";
-        string[] lr=ParseUtil.LeftAndRight(val,':');
+        var lr=ParseUtil.LeftAndRight(val,':');
         if(lr[1]=="") right=lr[0]; else { prop=lr[0]; right=lr[1]; }
 
         Material orig=sm.mi.oid.originalMate[sm.submeshno];
@@ -971,7 +971,7 @@ public static class CmdMeshes {
 
         string prop,cmd;
         if(shaderpropptn.IsMatch(val)){
-            string[] lr=ParseUtil.LeftAndRight(val,':');
+            var lr=ParseUtil.LeftAndRight(val,':');
             prop=lr[0]; cmd=lr[1];
         }else{
             prop="_MainTex"; cmd=val;
@@ -1115,7 +1115,7 @@ public static class CmdMeshes {
 
         string prop,mat;
         if(shaderpropptn.IsMatch(val)){
-            string[] lr=ParseUtil.LeftAndRight(val,':');
+            var lr=ParseUtil.LeftAndRight(val,':');
             prop=lr[0]; mat=lr[1];
         }else{
             prop="_MainTex"; mat=val;
@@ -1374,7 +1374,7 @@ public static class CmdMeshes {
     private static int MeshParamGraft(ComShInterpreter sh,SingleMesh sm,string val){
         if(val==null) return sh.io.Error("オブジェクト名を指定してください");
         bool clonetexq=false;
-        string[] lr=ParseUtil.LeftAndRight(val,',');
+        var lr=ParseUtil.LeftAndRight(val,',');
         if(lr[1]!=""){
             if(lr[1]!="1"&&lr[1]!="0") return sh.io.Error("0か1を指定してください");
             clonetexq=lr[1]=="1";
@@ -1477,10 +1477,10 @@ public static class CmdMeshes {
         if(val==null) return 0;
         var sa=ParseUtil.LeftAndRight(val,',');
         
-        float[] mm;
-        if(sa[1]=="") mm=new float[]{0,1}; else{
+        ParseUtil.Arr2<float> mm;
+        if(sa[1]=="") mm=new ParseUtil.Arr2<float>(0,1); else{
             mm=ParseUtil.MinMax(sa[1]);
-            if(mm==null||mm.Length!=2||mm[0]<0||mm[1]>1) return sh.io.Error("範囲が不正です");
+            if(mm.ng||mm[0]<0||mm[1]>1) return sh.io.Error("範囲が不正です");
         }
         var tr=sm.mi.oid.FindBone(sa[0]);
         if(tr==null){
@@ -1631,10 +1631,9 @@ public static class CmdMeshes {
             return 0;
         }
         string prop="_MainTex";
-        string[] lr=ParseUtil.LeftAndRight2(val,':');
-        if(lr!=null && lr[0]!="") prop=lr[0];
+        var lr=ParseUtil.LeftAndRight2(val,':');
+        if(lr.ok && lr[0]!="") prop=lr[0];
         lr=ParseUtil.LeftAndRight(lr[1],',');
-        if(lr==null) return sh.io.Error("ファイルが見つかりません");
         int w=1024,h=1024;
         int loopq=0;
         if(lr[1]!=""){

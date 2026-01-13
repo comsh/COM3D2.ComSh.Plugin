@@ -128,10 +128,10 @@ public static class CmdObjects {
             if(!UTIL.ValidObjName(pa[1])) return sh.io.Error("その名前は使用できません");
             if((pftr=ObjUtil.GetPhotoPrefabTr(sh))==null) return sh.io.Error("オブジェクト作成に失敗しました");
             if(ObjUtil.FindObj(sh,pa[1])!=null||LightUtil.FindLight(sh,pa[1])!=null) return sh.io.Error("その名前は既に使われています");
-            float[] pos,rot,scl;
-            if((pos=ParseUtil.Xyz(pa[2]))==null) return sh.io.Error(ParseUtil.error);
-            if((rot=ParseUtil.Xyz(pa[3]))==null) return sh.io.Error(ParseUtil.error);
-            if((scl=ParseUtil.Xyz2(pa[4]))==null) return sh.io.Error(ParseUtil.error);
+            ParseUtil.Arr3<float> pos,rot,scl;
+            if((pos=ParseUtil.Xyz(pa[2])).ng) return sh.io.Error(ParseUtil.error);
+            if((rot=ParseUtil.Xyz(pa[3])).ng) return sh.io.Error(ParseUtil.error);
+            if((scl=ParseUtil.Xyz2(pa[4])).ng) return sh.io.Error(ParseUtil.error);
             GameObject go=ObjUtil.AddObject(pa[0],pa[1],pftr,
                new Vector3(pos[0],pos[1],pos[2]),new Vector3(rot[0],rot[1],rot[2]),new Vector3(scl[0],scl[1],scl[2]));
             if(go==null) return sh.io.Error("オブジェクト作成に失敗しました");
@@ -190,8 +190,8 @@ public static class CmdObjects {
             }else if(type.StartsWith("plane",Ordinal)){
                 if(type.Length==5) go=GameObject.CreatePrimitive(PrimitiveType.Plane);
                 else{
-                    float[] xy=ParseUtil.Xy(ParseUtil.RightOf(type,':'));
-                    if(xy==null) return sh.io.Error("書式が不正です");
+                    var xy=ParseUtil.Xy(ParseUtil.RightOf(type,':'));
+                    if(xy.ng) return sh.io.Error("書式が不正です");
                     if(xy[0]<=0||xy[1]<=0) return sh.io.Error("数値が不正です");
                     go=ObjUtil.CreateCustomPlane((int)xy[0],(int)xy[1]);
                 }
@@ -423,7 +423,7 @@ public static class CmdObjects {
     }
     private static int ObjParamMaterialCopy(ComShInterpreter sh,Transform tr,string val){
         if(val==null) return 0;
-        string[] lr=ParseUtil.LeftAndRight(val,':');
+        var lr=ParseUtil.LeftAndRight(val,':');
         if(lr[0]==""||lr[1]=="") return sh.io.Error("書式が不正です");
         int meshno=0;
         if(!int.TryParse(lr[0],out meshno)||meshno<0) return sh.io.Error("メッシュ番号が不正です");
@@ -568,8 +568,8 @@ public static class CmdObjects {
         }
         string[] sa=val.Split(ParseUtil.lf);
         for(int pi=0; pi<sa.Length; pi++){
-            string[] kv=ParseUtil.LeftAndRight(sa[pi],ParseUtil.eqcln2);
-            string[] np=ParseUtil.LeftAndRight(kv[0],'.');
+            var kv=ParseUtil.LeftAndRight(sa[pi],ParseUtil.eqcln2);
+            var np=ParseUtil.LeftAndRight(kv[0],'.');
             string n=np[0],p=np[1],v=kv[1];
             if(p==""){ p=n; n=""; }
             int ret;
@@ -588,7 +588,7 @@ public static class CmdObjects {
     }
 
     private static int OldParticleSub(ComShInterpreter sh,OldParticle op,string p,string v){
-        float f; float[] fa; Material mate;
+        float f; Material mate;
         if(p.Length==0) return sh.io.Error("書式が不正です");
         if(p[0]=='_'){
             if(op.render==null || op.render.sharedMaterial==null) return 0;
@@ -617,6 +617,12 @@ public static class CmdObjects {
             mate=op.EditMaterial();
             mate.shader=shader;
             break;
+        case "rq":
+            if(op.render==null) return 0;
+            if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
+            mate=op.EditMaterial();
+            mate.renderQueue=(int)f;
+            break;
         case "damping":
             if(op.anim==null) return 0;
             if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
@@ -629,8 +635,8 @@ public static class CmdObjects {
             break;
         case "color":
             if(op.anim==null) return 0;
-            float[] rgba=ParseUtil.Rgb(v);
-            if(rgba==null) return sh.io.Error(ParseUtil.error);
+            var rgba=ParseUtil.Rgb(v);
+            if(rgba.ng) return sh.io.Error(ParseUtil.error);
             Color c=new Color(rgba[0],rgba[1],rgba[2]);
             Color[] ca=op.anim.colorAnimation;
             if(ca==null){
@@ -642,16 +648,16 @@ public static class CmdObjects {
             break;
         case "lifetime":
             if(op.emit==null) return 0;
-            fa=ParseUtil.MinMax(v);
-            if(fa==null||fa[0]<0||fa[1]<0) return sh.io.Error("数値の形式が不正です");
+            {var fa=ParseUtil.MinMax(v);
+            if(fa.ng||fa[0]<0||fa[1]<0) return sh.io.Error("数値の形式が不正です");
             op.emit.minEnergy=fa[0];
             op.emit.maxEnergy=fa[1];
-            break;
+            }break;
         case "speed":
             if(op.emit==null) return 0;
-            fa=ParseUtil.MinMax(v);
-            if(fa==null) return sh.io.Error(ParseUtil.error);
-            {   Vector3 vec=op.emit.localVelocity;
+            {  var fa=ParseUtil.MinMax(v);
+               if(fa.ng) return sh.io.Error(ParseUtil.error);
+               Vector3 vec=op.emit.localVelocity;
                 float l=vec.magnitude;
                 if(!Mathf.Approximately(l,0)) op.emit.localVelocity=vec*(fa[0]/l);
                 else{
@@ -669,18 +675,18 @@ public static class CmdObjects {
             break;
         case "size":
             if(op.emit==null) return 0;
-            fa=ParseUtil.MinMax(v);
-            if(fa==null||fa[0]<0||fa[1]<0) return sh.io.Error("数値の形式が不正です");
+            {var fa=ParseUtil.MinMax(v);
+            if(fa.ng||fa[0]<0||fa[1]<0) return sh.io.Error("数値の形式が不正です");
             op.emit.minSize=fa[0];
             op.emit.maxSize=fa[1];
-            break;
+            }break;
         case "emit":
             if(op.emit==null) return 0;
-            fa=ParseUtil.MinMax(v);
-            if(fa==null||fa[0]<0||fa[1]<0) return sh.io.Error("数値の形式が不正です");
+            {var fa=ParseUtil.MinMax(v);
+            if(fa.ng||fa[0]<0||fa[1]<0) return sh.io.Error("数値の形式が不正です");
             op.emit.minEmission=fa[0];
             op.emit.maxEmission=fa[1];
-            break;
+            }break;
         case "world":
             if(op.emit==null) return 0;
             int d=ParseUtil.ParseInt(v,-1);
@@ -763,8 +769,8 @@ public static class CmdObjects {
         }
         string[] sa=val.Split(ParseUtil.lf);
         for(int pi=0; pi<sa.Length; pi++){
-            string[] kv=ParseUtil.LeftAndRight(sa[pi],ParseUtil.eqcln2);
-            string[] np=ParseUtil.LeftAndRight(kv[0],'.');
+            var kv=ParseUtil.LeftAndRight(sa[pi],ParseUtil.eqcln2);
+            var np=ParseUtil.LeftAndRight(kv[0],'.');
             string n=np[0],p=np[1],v=kv[1];
             int ret;
             if(p==""){ p=n; n=""; }
@@ -788,7 +794,7 @@ public static class CmdObjects {
         var vot=par.sys.limitVelocityOverLifetime;
         var sot=par.sys.sizeOverLifetime;
         var shape=par.sys.shape;
-        int d; float[] fa; float f; Material mate;
+        int d;  float f; Material mate;
         if(p.Length==0) return sh.io.Error("書式が不正です");
         if(p[0]=='_'){
             if(par.render==null || par.render.sharedMaterial==null) return 0;
@@ -845,21 +851,21 @@ public static class CmdObjects {
             }
             break;
         case "rot":
-            fa=ParseUtil.MinMax(v);
-            if(fa==null||fa[0]<0||fa[1]<0) return sh.io.Error("数値の形式が不正です");
+            {var fa=ParseUtil.MinMax(v);
+            if(fa.ng||fa[0]<0||fa[1]<0) return sh.io.Error("数値の形式が不正です");
             main.startRotation3D=false;
             main.startRotation=new ParticleSystem.MinMaxCurve(fa[0]*Mathf.Deg2Rad,fa[1]*Mathf.Deg2Rad);
-            break;
+            }break;
         case "lifetime":
-            fa=ParseUtil.MinMax(v);
-            if(fa==null||fa[0]<0||fa[1]<0) return sh.io.Error("数値の形式が不正です");
+            {var fa=ParseUtil.MinMax(v);
+            if(fa.ng||fa[0]<0||fa[1]<0) return sh.io.Error("数値の形式が不正です");
             main.startLifetime=new ParticleSystem.MinMaxCurve(fa[0],fa[1]);
-            break;
+            }break;
         case "speed":
-            fa=ParseUtil.MinMax(v);
-            if(fa==null) return sh.io.Error(ParseUtil.error);
+            {var fa=ParseUtil.MinMax(v);
+            if(fa.ng) return sh.io.Error(ParseUtil.error);
             main.startSpeed=new ParticleSystem.MinMaxCurve(fa[0],fa[1]);
-            break;
+            }break;
         case "speedlimit":
             if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
             vot.enabled=true;
@@ -871,23 +877,23 @@ public static class CmdObjects {
             vot.dampen=f;
             break;
         case "size":
-            fa=ParseUtil.MinMax(v);
-            if(fa==null||fa[0]<0||fa[1]<0) return sh.io.Error("数値の形式が不正です");
+            {var fa=ParseUtil.MinMax(v);
+            if(fa.ng||fa[0]<0||fa[1]<0) return sh.io.Error("数値の形式が不正です");
             main.startSize=new ParticleSystem.MinMaxCurve(fa[0],fa[1]);
-            break;
+            }break;
         case "grow":
             if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
             sot.enabled=true;
             sot.size=new ParticleSystem.MinMaxCurve(1,f);
             break;
         case "gravity":
-            fa=ParseUtil.MinMax(v);
-            if(fa==null) return sh.io.Error(ParseUtil.error);
+            {var fa=ParseUtil.MinMax(v);
+            if(fa.ng) return sh.io.Error(ParseUtil.error);
             main.gravityModifier=new ParticleSystem.MinMaxCurve(fa[0],fa[1]);
-            break;
+            }break;
         case "color":
-            float[] rgba=ParseUtil.Rgb(v);
-            if(rgba==null) return sh.io.Error(ParseUtil.error);
+            var rgba=ParseUtil.Rgb(v);
+            if(rgba.ng) return sh.io.Error(ParseUtil.error);
             if(main.startColor.mode==ParticleSystemGradientMode.Color){
                 ParticleSystem.MinMaxGradient sc=main.startColor;
                 float a=sc.color.a;
@@ -908,10 +914,10 @@ public static class CmdObjects {
             main.maxParticles=d;
             break;
         case "emit":
-            fa=ParseUtil.MinMax(v);
-            if(fa==null||fa[0]<0||fa[1]<0) return sh.io.Error("数値の形式が不正です");
+            {var fa=ParseUtil.MinMax(v);
+            if(fa.ng||fa[0]<0||fa[1]<0) return sh.io.Error("数値の形式が不正です");
             emit.rateOverTime=new ParticleSystem.MinMaxCurve(fa[0],fa[1]);
-            break;
+            } break;
         case "world":
             d=ParseUtil.ParseInt(v,-1);
             if(d==0) main.simulationSpace=ParticleSystemSimulationSpace.Local;
@@ -938,10 +944,10 @@ public static class CmdObjects {
             par.sys.Play();
             break;
         case "delay":
-            fa=ParseUtil.MinMax(v);
-            if(fa==null||fa[0]<0||fa[1]<0) return sh.io.Error("数値の形式が不正です");
+            {var fa=ParseUtil.MinMax(v);
+            if(fa.ng||fa[0]<0||fa[1]<0) return sh.io.Error("数値の形式が不正です");
             main.startDelay=new ParticleSystem.MinMaxCurve(fa[0],fa[1]);
-            break;
+            }break;
         case "simspeed":
             if(!float.TryParse(v,out f)||f<0) return sh.io.Error("数値の指定が不正です");
             main.simulationSpeed=f;
@@ -1092,11 +1098,10 @@ public static class CmdObjects {
             }
             return 0;
         }
-        string[] sa=ParseUtil.LeftAndRight(val,':');
+        var sa=ParseUtil.LeftAndRight(val,':');
         if(!int.TryParse(sa[0],out int n)||n<0||n>=mi.count) return sh.io.Error("メッシュ番号が不正です");
 
-        string[] kv=ParseUtil.LeftAndRight(sa[1],'=');
-        float[] fa;
+        var kv=ParseUtil.LeftAndRight(sa[1],'=');
         if(kv[0]=="" || kv[1]=="") return sh.io.Error("書式が不正です");
         if(kv[0][0]=='_'){
             string err;
@@ -1115,11 +1120,11 @@ public static class CmdObjects {
             }
         } else switch(kv[0]){
         case "color":
-            fa=ParseUtil.Rgba(kv[1]);
-            if(fa==null) return sh.io.Error(ParseUtil.error);
+            {var fa=ParseUtil.Rgba(kv[1]);
+            if(fa.ng) return sh.io.Error(ParseUtil.error);
             mi.EditMaterial();
             mi.material[n].color=new Color(fa[0],fa[1],fa[2],fa[3]);
-            break;
+            }break;
         case "shader":
             Shader shader=Shader.Find(kv[1]);
             if(shader==null) return sh.io.Error("指定されたシェーダは見つかりません");
@@ -1140,7 +1145,7 @@ public static class CmdObjects {
     private static int ObjParamBakeMesh(ComShInterpreter sh,Transform tr,string val){
         if(val==null) return sh.io.Error("オブジェクト名を指定してください");
         int clonetype=0;
-        string[] lr=ParseUtil.LeftAndRight(val,',');
+        var lr=ParseUtil.LeftAndRight(val,',');
         if(lr[1]!=""){
             if(lr[1]!="1"&&lr[1]!="0"&&lr[1]!="2") return sh.io.Error("0,1,2のいずれかを指定してください");
             clonetype=lr[1][0]-'0';
@@ -1244,8 +1249,8 @@ public static class CmdObjects {
     }
     private static int ObjParamLookAtLocal(ComShInterpreter sh,Transform tr,string val){
         if(val==null){ return 0; }
-        float[] xyz=ParseUtil.Xyz1(val);
-        if(xyz==null) return sh.io.Error(ParseUtil.error);
+        var xyz=ParseUtil.Xyz(val);
+        if(xyz.ng) return sh.io.Error(ParseUtil.error);
         Quaternion q=Quaternion.FromToRotation(Vector3.forward,new Vector3(xyz[0],xyz[1],xyz[2]));
         tr.transform.localRotation*=q;
         return 1;
@@ -1290,26 +1295,26 @@ public static class CmdObjects {
         if(val==null) return 0;
         Vector3 pos;
         int cn=ParseUtil.CountC(val,',');
-        float[] xyz,vec;
+        ParseUtil.Arr3<float> xyz,vec;
         if(cn==0||cn==2){  // obj:name:bone or x,y,z
             xyz=ParseUtil.Position(val);
-            if(xyz==null) return sh.io.Error("座標の指定が不正です");
+            if(xyz.ng) return sh.io.Error("座標の指定が不正です");
             pos=new Vector3(xyz[0],xyz[1],xyz[2]);
-            vec=null;
+            vec=default;
         }else if(cn==1||cn==3){    // obj:name:bone,obj:name2:bone2 or obj:name:bone,vx,vy,vz
             int idx=val.IndexOf(',');
             xyz=ParseUtil.Position(new StrSegment(val,0,idx-1));
-            if(xyz==null) return sh.io.Error("座標の指定が不正です");
+            if(xyz.ng) return sh.io.Error("座標の指定が不正です");
             pos=new Vector3(xyz[0],xyz[1],xyz[2]);
             vec=ParseUtil.Position(new StrSegment(val,idx+1));
-            if(vec==null) return sh.io.Error("座標の指定が不正です");
+            if(vec.ng) return sh.io.Error("座標の指定が不正です");
         }else if(cn==5){       // x,y,z,vx,vy,vz
             int idx=val.IndexOf(',',val.IndexOf(',',val.IndexOf(',')+1)+1);
-            xyz=ParseUtil.Xyz1(new StrSegment(val,0,idx-1));
-            if(xyz==null) return sh.io.Error("座標の指定が不正です");
+            xyz=ParseUtil.Xyz(new StrSegment(val,0,idx-1));
+            if(xyz.ng) return sh.io.Error("座標の指定が不正です");
             pos=new Vector3(xyz[0],xyz[1],xyz[2]);
-            vec=ParseUtil.Xyz1(new StrSegment(val,idx+1));
-            if(vec==null) return sh.io.Error("座標の指定が不正です");
+            vec=ParseUtil.Xyz(new StrSegment(val,idx+1));
+            if(vec.ng) return sh.io.Error("座標の指定が不正です");
         }else return sh.io.Error("書式が不正です");
 
         Transform p=tr;
@@ -1357,8 +1362,8 @@ public static class CmdObjects {
         if(ret<0) return sh.io.Error("ボーンの長さが0です");
         return 1;
     }
-    private static int LocIK(Vector3 t,Transform p0,Transform p1,Transform p2,Vector3 zaxis,float[] fe){
-        if(fe!=null){
+    private static int LocIK(Vector3 t,Transform p0,Transform p1,Transform p2,Vector3 zaxis,ParseUtil.Arr3<float> fe){
+        if(fe.ok){
             if(LocIK0(t,p0,p1,p2,zaxis)<0) return -1;
             var nv=(p2.position-p0.position).normalized;
             var v0=Vector3.ProjectOnPlane(p1.position-p0.position,nv);
@@ -1404,7 +1409,7 @@ public static class CmdObjects {
         var lpw=w2l.MultiplyPoint3x4(p2.position);
         p0.localRotation=p0.localRotation*Quaternion.FromToRotation(lpw.normalized,lpt.normalized);
         // 次いで p1,p2,p3 で２ボーンIK
-        return LocIK(t,p1,p2,p3,axis2,null);
+        return LocIK(t,p1,p2,p3,axis2,default);
     }
     private static int ObjParamIK(ComShInterpreter sh,Transform tr,string val){
         if(val==null) return 0;
@@ -1824,7 +1829,6 @@ public static class CmdObjects {
         for(int i=0; i<sa.Length; i++) if(sa[i]!=""){
             var lr=ParseUtil.LeftAndRight(sa[i],'=');
             if(lr[0]=="" || lr[1]=="") return sh.io.Error("書式が不正です");
-            float[] fa;
 
             Rigidbody tgtrb=null;
             switch(lr[0]){
@@ -1836,18 +1840,18 @@ public static class CmdObjects {
                 jt.anchor=tr.worldToLocalMatrix.MultiplyPoint3x4(tgttr.position);
                 break;
             case "anchor":
-                fa=ParseUtil.Xyz1(lr[1]);
-                if(fa==null) return sh.io.Error("座標が不正です");
+                {var fa=ParseUtil.Xyz(lr[1]);
+                if(fa.ng) return sh.io.Error("座標が不正です");
                 jt.anchor=new Vector3(fa[0],fa[1],fa[2]);
-                break;
+                }break;
             case "axis":
-                fa=ParseUtil.Xyz1(lr[1]);
-                if(fa==null) return sh.io.Error("ベクトルが不正です");
+                {var fa=ParseUtil.Xyz(lr[1]);
+                if(fa.ng) return sh.io.Error("ベクトルが不正です");
                 jt.axis=new Vector3(fa[0],fa[1],fa[2]);
-                break;
+                }break;
             case "limit":
                 if(lr[1]=="off") jt.useLimits=false; else{
-                    fa=ParseUtil.FloatArr(lr[1]);
+                    var fa=ParseUtil.FloatArr(lr[1]);
                     if(fa==null||fa.Length!=3||fa[2]<0||fa[2]>1) return sh.io.Error("数値が不正です");
                     jt.useLimits=true;
                     var jl=jt.limits;
@@ -1857,7 +1861,7 @@ public static class CmdObjects {
                 break;
             case "spring":
                 if(lr[1]=="off") jt.useSpring=false; else{
-                    fa=ParseUtil.FloatArr(lr[1]);
+                    var fa=ParseUtil.FloatArr(lr[1]);
                     if(fa==null||fa.Length!=3) return sh.io.Error("数値が不正です");
                     jt.useSpring=true;
                     var js=jt.spring;
@@ -1869,7 +1873,7 @@ public static class CmdObjects {
                 break;
             case "motor":
                 if(lr[1]=="off") jt.useMotor=false; else{
-                    fa=ParseUtil.FloatArr(lr[1]);
+                    var fa=ParseUtil.FloatArr(lr[1]);
                     if(fa==null||fa.Length!=2) return sh.io.Error("数値が不正です");
                     jt.useMotor=true;
                     var jm=jt.motor;
@@ -1878,10 +1882,10 @@ public static class CmdObjects {
                 }
                 break;
             case "break":
-                fa=ParseUtil.FloatArr(lr[1]);
+                {var fa=ParseUtil.FloatArr(lr[1]);
                 if(fa==null||fa.Length!=2) return sh.io.Error("数値が不正です");
                 jt.breakForce=fa[0]; jt.breakTorque=fa[1];
-                break;
+                }break;
             case "hit":
                 int sw=ParseUtil.OnOff(lr[1]);
                 if(sw<0) return sh.io.Error("値が不正です");
@@ -1946,7 +1950,6 @@ public static class CmdObjects {
         for(int i=0; i<sa.Length; i++) if(sa[i]!="") {
             var lr=ParseUtil.LeftAndRight(sa[i],'=');
             if(lr[0]=="" || lr[1]=="") return sh.io.Error("書式が不正です");
-            float[] fa;
 
             Rigidbody tgtrb=null;
             SoftJointLimit jl;
@@ -1962,56 +1965,56 @@ public static class CmdObjects {
                 jt.axis=v.normalized;
                 break;
             case "anchor":
-                fa=ParseUtil.Xyz1(lr[1]);
-                if(fa==null) return sh.io.Error("座標が不正です");
+                {var fa=ParseUtil.Xyz(lr[1]);
+                if(fa.ng) return sh.io.Error("座標が不正です");
                 jt.anchor=new Vector3(fa[0],fa[1],fa[2]);
-                break;
+                }break;
             case "twistaxis":
-                fa=ParseUtil.Xyz1(lr[1]);
-                if(fa==null) return sh.io.Error("ベクトルが不正です");
+                {var fa=ParseUtil.Xyz(lr[1]);
+                if(fa.ng) return sh.io.Error("ベクトルが不正です");
                 jt.axis=new Vector3(fa[0],fa[1],fa[2]);
-                break;
+                }break;
             case "swingaxis":
-                fa=ParseUtil.Xyz1(lr[1]);
-                if(fa==null) return sh.io.Error("ベクトルが不正です");
+                {var fa=ParseUtil.Xyz(lr[1]);
+                if(fa.ng) return sh.io.Error("ベクトルが不正です");
                 jt.swingAxis=new Vector3(fa[0],fa[1],fa[2]);
-                break;
+                }break;
             case "twistlimit":
-                fa=ParseUtil.FloatArr(lr[1]);
+                {var fa=ParseUtil.FloatArr(lr[1]);
                 if(fa==null||fa.Length!=3) return sh.io.Error("数値が不正です");
                 jl=jt.lowTwistLimit;
                 jl.limit=fa[0]; jl.bounciness=fa[2];
                 jt.lowTwistLimit=jl;
                 jl.limit=fa[1];
                 jt.highTwistLimit=jl;
-                break;
+                }break;
             case "twistspring":
-                fa=ParseUtil.FloatArr(lr[1]);
+                {var fa=ParseUtil.FloatArr(lr[1]);
                 if(fa==null||fa.Length!=2) return sh.io.Error("数値が不正です");
                 jls=jt.twistLimitSpring;
                 jls.spring=(fa[0]<0)?Mathf.Infinity:fa[0]; jls.damper=(fa[1]<0)?Mathf.Infinity:fa[1];
                 jt.twistLimitSpring=jls;
-                break;
+                }break;
             case "swinglimit":
-                fa=ParseUtil.FloatArr(lr[1]);
+                {var fa=ParseUtil.FloatArr(lr[1]);
                 if(fa==null||fa.Length!=2) return sh.io.Error("数値が不正です");
                 jl=jt.swing1Limit;
                 jl.limit=fa[0]; jl.bounciness=fa[1];
                 jt.swing1Limit=jl;
                 jt.swing2Limit=jl;
-                break;
+                }break;
             case "swingspring":
-                fa=ParseUtil.FloatArr(lr[1]);
+                {var fa=ParseUtil.FloatArr(lr[1]);
                 if(fa==null||fa.Length!=2) return sh.io.Error("数値が不正です");
                 jls=jt.swingLimitSpring;
                 jls.spring=(fa[0]<0)?Mathf.Infinity:fa[0]; jls.damper=(fa[1]<0)?Mathf.Infinity:fa[1];
                 jt.swingLimitSpring=jls;
-                break;
+                }break;
             case "break":
-                fa=ParseUtil.FloatArr(lr[1]);
+                {var fa=ParseUtil.FloatArr(lr[1]);
                 if(fa==null||fa.Length!=2) return sh.io.Error("数値が不正です");
                 jt.breakForce=fa[0]; jt.breakTorque=fa[1];
-                break;
+                }break;
             case "hit":
                 int sw=ParseUtil.OnOff(lr[1]);
                 if(sw<0) return sh.io.Error("値が不正です");
@@ -2071,7 +2074,6 @@ public static class CmdObjects {
         for(int i=0; i<sa.Length; i++) if(sa[i]!="") {
             var lr=ParseUtil.LeftAndRight(sa[i],'=');
             if(lr[0]=="" || lr[1]=="") return sh.io.Error("書式が不正です");
-            float[] fa;
 
             Rigidbody tgtrb=null;
             switch(lr[0]){
@@ -2084,33 +2086,33 @@ public static class CmdObjects {
                 jt.anchor=v;
                 break;
             case "anchor":
-                fa=ParseUtil.Xyz1(lr[1]);
-                if(fa==null) return sh.io.Error("座標が不正です");
+                {var fa=ParseUtil.Xyz(lr[1]);
+                if(fa.ng) return sh.io.Error("座標が不正です");
                 jt.anchor=new Vector3(fa[0],fa[1],fa[2]);
-                break;
+                }break;
             case "axis":
-                fa=ParseUtil.Xyz1(lr[1]);
-                if(fa==null) return sh.io.Error("ベクトルが不正です");
+                {var fa=ParseUtil.Xyz(lr[1]);
+                if(fa.ng) return sh.io.Error("ベクトルが不正です");
                 jt.axis=new Vector3(fa[0],fa[1],fa[2]);
-                break;
+                }break;
             case "limit":
-                fa=ParseUtil.FloatArr(lr[1]);
+                {var fa=ParseUtil.FloatArr(lr[1]);
                 if(fa==null||fa.Length!=2) return sh.io.Error("数値が不正です");
                 jt.minDistance=fa[0];
                 jt.maxDistance=fa[1];
                 jt.tolerance=fa[0]*0.1f;
-                break;
+                }break;
             case "spring":
-                fa=ParseUtil.FloatArr(lr[1]);
+                {var fa=ParseUtil.FloatArr(lr[1]);
                 if(fa==null||fa.Length!=2) return sh.io.Error("数値が不正です");
                 jt.spring=(fa[0]<0)?Mathf.Infinity:fa[0];
                 jt.damper=(fa[1]<0)?Mathf.Infinity:fa[1];
-                break;
+                }break;
             case "break":
-                fa=ParseUtil.FloatArr(lr[1]);
+                {var fa=ParseUtil.FloatArr(lr[1]);
                 if(fa==null||fa.Length!=2) return sh.io.Error("数値が不正です");
                 jt.breakForce=fa[0]; jt.breakTorque=fa[1];
-                break;
+                }break;
             case "hit":
                 int sw=ParseUtil.OnOff(lr[1]);
                 if(sw<0) return sh.io.Error("値が不正です");
@@ -2166,7 +2168,6 @@ public static class CmdObjects {
         for(int i=0; i<sa.Length; i++) if(sa[i]!="") {
             var lr=ParseUtil.LeftAndRight(sa[i],'=');
             if(lr[0]=="" || lr[1]=="") return sh.io.Error("書式が不正です");
-            float[] fa;
 
             Rigidbody tgtrb=null;
             switch(lr[0]){
@@ -2179,20 +2180,20 @@ public static class CmdObjects {
                 jt.anchor=v;
                 break;
             case "anchor":
-                fa=ParseUtil.Xyz1(lr[1]);
-                if(fa==null) return sh.io.Error("座標が不正です");
+                {var fa=ParseUtil.Xyz(lr[1]);
+                if(fa.ng) return sh.io.Error("座標が不正です");
                 jt.anchor=new Vector3(fa[0],fa[1],fa[2]);
-                break;
+                }break;
             case "axis":
-                fa=ParseUtil.Xyz1(lr[1]);
-                if(fa==null) return sh.io.Error("ベクトルが不正です");
+                {var fa=ParseUtil.Xyz(lr[1]);
+                if(fa.ng) return sh.io.Error("ベクトルが不正です");
                 jt.axis=new Vector3(fa[0],fa[1],fa[2]);
-                break;
+                }break;
             case "break":
-                fa=ParseUtil.FloatArr(lr[1]);
+                {var fa=ParseUtil.FloatArr(lr[1]);
                 if(fa==null||fa.Length!=2) return sh.io.Error("数値が不正です");
                 jt.breakForce=fa[0]; jt.breakTorque=fa[1];
-                break;
+                }break;
             case "hit":
                 int sw=ParseUtil.OnOff(lr[1]);
                 if(sw<0) return sh.io.Error("値が不正です");
@@ -2426,7 +2427,6 @@ public static class CmdObjects {
         }
 
         var sa=val.Split('\n');
-        float[] fa;
         float f;
         int sw;
         for(int i=0; i<sa.Length; i++) if(sa[i]!="") {
@@ -2434,26 +2434,26 @@ public static class CmdObjects {
             if(lr[0]=="" || lr[1]=="") return sh.io.Error("書式が不正です");
             switch(lr[0]){
             case "stiff":
-                fa=ParseUtil.FloatArr(lr[1]);
+                {var fa=ParseUtil.FloatArr(lr[1]);
                 if(fa==null||fa.Length!=2 || fa[0]<0 || fa[0]>1 || fa[1]<0 || fa[1]>1) return sh.io.Error("数値が不正です");
                 cl.bendingStiffness=fa[0];
                 cl.stretchingStiffness=fa[1];
-                break;
+                }break;
             case "gravity":
                 sw=ParseUtil.OnOff(lr[1]);
                 if(sw<0) return sh.io.Error(ParseUtil.error);
                 cl.useGravity=(sw==1);
                 break;
             case "force":
-                fa=ParseUtil.Xyz1(lr[1]);
-                if(fa==null) return sh.io.Error(ParseUtil.error);
+                {var fa=ParseUtil.Xyz(lr[1]);
+                if(fa.ng) return sh.io.Error(ParseUtil.error);
                 cl.externalAcceleration=new Vector3(fa[0],fa[1],fa[2]);
-                break;
+                }break;
             case "randomforce":
-                fa=ParseUtil.Xyz1(lr[1]);
-                if(fa==null) return sh.io.Error(ParseUtil.error);
+                {var fa=ParseUtil.Xyz(lr[1]);
+                if(fa.ng) return sh.io.Error(ParseUtil.error);
                 cl.randomAcceleration=new Vector3(fa[0],fa[1],fa[2]);
-                break;
+                }break;
             case "damping":
                 if(!float.TryParse(lr[1],out f)||f<0||f>1) return sh.io.Error("数値が不正です");
                 cl.damping=f;
@@ -2479,22 +2479,22 @@ public static class CmdObjects {
                 break;
             case "limit":
                 f=0;
-                fa=ParseUtil.FloatArr(lr[1]);
+                {var fa=ParseUtil.FloatArr(lr[1]);
                 if(fa==null) return sh.io.Error(ParseUtil.error);
                 if(fa.Length==2) f=fa[1];
                 if((fa.Length!=1 && fa.Length!=2)||fa[0]<=0.001||((int)f!=0&&(int)f!=1)) return sh.io.Error("数値が不正です");
                 SetCoeff(cl,null,fa[0],(int)f);
-                break;
+                }break;
             case "pin":
                 var il=ParseUtil.IntList(lr[1]);
                 if(il==null||il.Count==0||SetCoeff(cl,il,-1,-1)<0) return sh.io.Error("頂点番号が不正です");
                 break;
             case "wave":
-                fa=ParseUtil.FloatArr(lr[1]);
+                {var fa=ParseUtil.FloatArr(lr[1]);
                 if(fa==null||fa.Length!=2||fa[0]<0||fa[1]<0) return sh.io.Error("数値が不正です");
                 cl.worldVelocityScale=fa[0];
                 cl.worldAccelerationScale=fa[1];
-                break;
+                }break;
             default:
                 return sh.io.Error("プロパティ名が不正です");
             }
@@ -2580,7 +2580,7 @@ public static class CmdObjects {
     }
     private static int ObjParamAddBone(ComShInterpreter sh,Transform tr,string val){
         if(val==null) return 0;
-        string[] sa=ParseUtil.LeftAndRight(val,ParseUtil.period);
+        var sa=ParseUtil.LeftAndRight(val,ParseUtil.period);
         if(sa[0]==""||sa[1]=="") return sh.io.Error("書式が不正です");
         if(!UTIL.ValidObjName(sa[1])) return sh.io.Error("オブジェクト名が不正です");
         Renderer r;
@@ -2732,7 +2732,7 @@ public static class ObjUtil {
             return tr;
         }
 
-        string[] sa=ParseUtil.LeftAndRight(name,'/');
+        var sa=ParseUtil.LeftAndRight(name,'/');
         if(objDic.ContainsKey(sa[0])){  // objコマンドで作ったオブジェクト
             tr=objDic[sa[0]];
             if(tr==null){ objDic.Remove(sa[0]); return null; }
@@ -2777,7 +2777,7 @@ public static class ObjUtil {
             }
         }
 
-        string[] lr=ParseUtil.LeftAndRight(sa[sa.Length-1],'/');
+        var lr=ParseUtil.LeftAndRight(sa[sa.Length-1],'/');
         if(sa.Length==4){
             tr=BoneUtil.FindBone(sh,sa[0],sa[1],sa[2],(lr[0]=="")?"/":lr[0]);
         }else if(sa.Length==3){
