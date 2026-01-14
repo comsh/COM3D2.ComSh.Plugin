@@ -2788,7 +2788,7 @@ public static class CmdMaidMan {
         if(val==null){
             foreach (AnimationState state in m.GetAnimation()) if(state.layer==0){
                 var eva=state.clip.events;
-                for(int i=0; i<eva.Length; i++) sh.io.PrintLn(eva[i].functionName);
+                for(int i=0; i<eva.Length; i++) sh.io.PrintLn(eva[i].stringParameter);
                 break;
             }
             return 0;
@@ -2797,10 +2797,11 @@ public static class CmdMaidMan {
             foreach (AnimationState state in m.GetAnimation()) if(state.layer==0){
                 var eva=state.clip.events;
                 var evl=new List<AnimationEvent>(eva.Length);
-                for(int i=0; i<eva.Length; i++) if(eva[i].functionName=="ComShClipEvent") evl.Add(eva[i]);
+                for(int i=0; i<eva.Length; i++) if(eva[i].functionName!="ComShClipEvent") evl.Add(eva[i]);
                 state.clip.events=evl.ToArray();
                 break;
             }
+            return 1;
         }
         var fa=ParseUtil.FloatArr(val);
         if(fa==null||fa.Length==0) return sh.io.Error("書式が不正です");
@@ -2812,7 +2813,7 @@ public static class CmdMaidMan {
         foreach (AnimationState state in a) if(state.layer==0){
             var eva=state.clip.events;
             var evl=new List<AnimationEvent>(eva.Length);
-            for(int i=0; i<eva.Length; i++) if(eva[i].functionName=="ComShClipEvent") evl.Add(eva[i]);
+            for(int i=0; i<eva.Length; i++) if(eva[i].functionName!="ComShClipEvent") evl.Add(eva[i]);
             for(int i=0; i<fa.Length; i++){
                 evl.Add(new AnimationEvent{
                     functionName="ComShClipEvent",

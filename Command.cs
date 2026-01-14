@@ -133,6 +133,7 @@ public static class Command {
         cmdTbl.Add("namespace.clear", new Cmd(CmdNameSpaceClear));
         cmdTbl.Add("date", new Cmd(CmdDate));
         cmdTbl.Add("publish", new Cmd(CmdPublish));
+        cmdTbl.Add("publish.log", new Cmd(CmdPublishLog));
         cmdTbl.Add("subscribe", new Cmd(CmdSubscribe));
         cmdTbl.Add("subscribe.list", new Cmd(CmdSubscribeList));
         cmdTbl.Add("unsubscribe", new Cmd(CmdUnSubscribe));
@@ -2330,7 +2331,14 @@ public static class Command {
         DoPublish(key,msg);
         return 0;
     }
+    private static int CmdPublishLog(ComShInterpreter sh,List<string> args){
+        if(args.Count==1){ sh.io.Print(publish_log?"on":"off"); return 0; }
+        if(args.Count!=2) return sh.io.Error("使い方: publishlog {on|off}");
+        publish_log=(args[1]=="on"); return 0;
+    }
+    private static bool publish_log=false;
     public static void DoPublish(string key,string msg){
+        if(publish_log) Debug.Log($"publish topic='{key}' message='{msg}'");
         if(!pubsubdic.TryGetValue(key,out LinkedList<PubSubEntry> lst)) return;
         var node=lst.First;
         while(node!=null){
