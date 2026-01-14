@@ -141,7 +141,7 @@ public static class CmdMaidMan {
         "position","rotation","scale","pos","rot",
         "motion","shape","iid","list","motion.time","motion.speed","motion.layer","motion.length",
         "motion.weight","motion.timep","motion.timel","motion.timelp","motion.frame","motion.pause",
-        "motion.cache","motion.cachedel","motion.layerdel",
+        "motion.cache","motion.cachedel","motion.layerdel","motion.event",
         "attach","detach","lookat","ik","cloth","style","shape.verlist","face","faceset",
         "wpos","wrot","lpos","lrot","opos","orot","lquat","wquat","wposrot","lposrot","component",
         "position.x","position.y","position.z", "pos.x","pos.y","pos.z",
