@@ -1013,8 +1013,8 @@ public static class CmdMeshes {
             int x=r.x+dx,y=r.y+dy;
             int i=dy*r.w+dx;
             if(sm.ApplyTexFilter(x,y)==0) continue;
-            sh.env["_1"]=sh.fmt.FVal((float)x/width);
-            sh.env["_2"]=sh.fmt.FVal((float)y/height);
+            sh.env["_1"]=sh.fmt.FVal((float)x/(width-1));
+            sh.env["_2"]=sh.fmt.FVal((float)y/(height-1));
             sh.env["_3"]=width.ToString();
             sh.env["_4"]=height.ToString();
             sh.env["_5"]=x.ToString();
@@ -1049,8 +1049,8 @@ public static class CmdMeshes {
             if(sm.ApplyTexFilter(x,y)==0) continue;
             float h,s,v,a=ca[i].a;
             Color.RGBToHSV(ca[i],out h,out s,out v);
-            sh.env["_1"]=sh.fmt.FVal((float)x/width);
-            sh.env["_2"]=sh.fmt.FVal((float)y/height);
+            sh.env["_1"]=sh.fmt.FVal((float)x/(width-1));
+            sh.env["_2"]=sh.fmt.FVal((float)y/(height-1));
             sh.env["_3"]=width.ToString();
             sh.env["_4"]=height.ToString();
             sh.env["_5"]=x.ToString();
