@@ -51,7 +51,7 @@ public struct StrSegment {
         return new StrSegment(str,h);
     }
     public StrSegment TrimEnd(char c){
-        int t; for(t=this.tail; t>=this.tail; t--) if(str[t]!=c) break;
+        int t; for(t=this.tail; t>=this.head; t--) if(str[t]!=c) break;
         return new StrSegment(str,this.head,t);
     }
     public StrSegment Slice(int h){
@@ -130,7 +130,7 @@ public struct StrSegment {
                 ret.Add(this.Slice(pos));
                 break;
             }else{
-                ret.Add(this.Slice(pos,idx-1));
+                if(idx==0) ret.Add(StrSegment.empty); else ret.Add(this.Slice(pos,idx-1));
                 pos=idx+1;
             }
         }
@@ -145,7 +145,7 @@ public struct StrSegment {
                 ret.Add(this.Slice(pos));
                 break;
             }else{
-                ret.Add(this.Slice(pos,idx-1));
+                if(idx==0) ret.Add(StrSegment.empty); else ret.Add(this.Slice(pos,idx-1));
                 pos=idx+dlmt.Length;
             }
         }
