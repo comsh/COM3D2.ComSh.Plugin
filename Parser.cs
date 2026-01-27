@@ -639,7 +639,7 @@ public static class ParseUtil {
         int i;
         for(i=0; i<s0.Length; i++) if(s0[i]!='~') break;
         bool invq=(i%2)==1;
-        if(i>0) s0.SliceSelf(i,-1);
+        if(i>0) s0.SliceSelf(i);
         float[] ret=xyzbuf;
         int n=XyzSub(seg,ret,4);
         if(n!=4){
@@ -1176,12 +1176,12 @@ public static class ParseUtil {
 
             int p,li,n;
             if((p=seg.IndexOf(':'))>=0){
-                var typ=seg.Slice(0,p-1);
+                var typ=seg.SliceLen(0,p);
                 for(int i=0; i<types.Length; i++) if(typ.eq(types[i])){
                     type=types[i]; // typ.Substr()だと新たに文字列作っちゃう
                     type_c=type_cs[i];
                 }
-                seg.SliceSelf(p+1,-1);
+                seg.SliceSelf(p+1);
             }else{
                 p=FindMeshno(seg);  // mesh objectname#0 の形があり得る
                 if(p>=0 && ParseUtil.TryParseInt(seg.Slice(p+1),out n) && n>=0){

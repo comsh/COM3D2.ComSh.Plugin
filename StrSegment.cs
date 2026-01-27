@@ -10,8 +10,8 @@ public struct StrSegment {
     public char this[int idx]{ get{ return str[head+idx]; } }
     public int Length { get{ return (tail<head)?0:tail-head+1; } }
     public StrSegment(string s){str=s; int len=(str==null)?0:str.Length; head=0;tail=len-1;}
-    public StrSegment(string s,int h){str=s; int len=(str==null)?0:str.Length; head=(h<0)?len+h:h;tail=len-1;}
-    public StrSegment(string s,int h,int t){str=s; int len=(str==null)?0:str.Length; head=(h<0)?len+h:h;tail=(t<0)?len+t:t;}
+    public StrSegment(string s,int h):this(s) { Slice0(ref this,h,this.tail); }
+    public StrSegment(string s,int h,int t):this(s){ int t2=(t<0)?s.Length+t:t; Slice0(ref this,h,t); }
     public override string ToString(){
         if(tail<head) return "";
         if(head==0&&tail==str.Length-1) return str; //複製しない
@@ -54,23 +54,31 @@ public struct StrSegment {
         int t; for(t=this.tail; t>=this.head; t--) if(str[t]!=c) break;
         return new StrSegment(str,this.head,t);
     }
+    private static void Slice0(ref StrSegment seg,int h,int t){
+        int h2=(h<0)?seg.tail+1+h:seg.head+h,t2=seg.head+t;
+        if(h2<seg.head) h2=seg.head;
+        if(h2>seg.tail) h2=seg.tail+1;
+        if(t2>seg.tail) t2=seg.tail;
+        if(t2<h2) t2=h2-1;
+        seg.head=h2; seg.tail=t2;
+    }
     public StrSegment Slice(int h){
-        int h2=(h<0)?tail+1+h:head+h;
-        return new StrSegment(str,(h2<head)?head:h2,tail);
+        var seg=this;
+        Slice0(ref seg,h,seg.tail);
+        return seg;
     }
     public StrSegment Slice(int h,int t){
-        int h2=(h<0)?tail+1+h:head+h,t2=(t<0)?tail+1+t:head+t;
-        return new StrSegment(str,(h2<head)?head:h2,(t2>tail)?tail:t2);
+        var seg=this;
+        Slice0(ref seg,h,t);
+        return seg;
     }
     public StrSegment SliceLen(int h,int l){
-        int h2=(h<0)?tail+1+h:head+h,t2=h2+l-1;
-        return new StrSegment(str,(h2<head)?head:h2,(t2>tail)?tail:t2);
+        var seg=Slice(h);
+        Slice0(ref seg,0,l-1);
+        return seg;
     }
-    public void SliceSelf(int h,int t){
-        int h2=(h<0)?tail+1+h:head+h,t2=(t<0)?tail+1+t:head+t;
-        head=(h2<head)?head:h2;
-        tail=(t2>tail)?tail:t2;
-    }
+    public void SliceSelf(int h){ Slice0(ref this,h,this.tail); }
+    public void SliceSelf(int h,int t){ Slice0(ref this,h,t); }
     public string Substr(int h){return Slice(h).ToString();}
     public string Substr(int h,int len){return (len<=0)?"":Slice(h,h+len-1).ToString();}
     public int IndexOf(char c){return this.IndexOf(c,0);}
@@ -130,7 +138,7 @@ public struct StrSegment {
                 ret.Add(this.Slice(pos));
                 break;
             }else{
-                if(idx==0) ret.Add(StrSegment.empty); else ret.Add(this.Slice(pos,idx-1));
+                ret.Add(this.Slice(pos,idx-1));
                 pos=idx+1;
             }
         }
@@ -145,7 +153,7 @@ public struct StrSegment {
                 ret.Add(this.Slice(pos));
                 break;
             }else{
-                if(idx==0) ret.Add(StrSegment.empty); else ret.Add(this.Slice(pos,idx-1));
+                ret.Add(this.Slice(pos,idx-1));
                 pos=idx+dlmt.Length;
             }
         }
