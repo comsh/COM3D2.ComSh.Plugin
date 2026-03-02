@@ -3121,7 +3121,7 @@ public static class Command {
     private static int CmdLoadText(ComShInterpreter sh,List<string> args){
         if(args.Count!=3) return sh.io.Error("使い方: loadtext ファイル 変数名");
         try{
-            if(!UTIL.ValidName(args[1])) return sh.io.Error("変数名が不正です");
+            if(!UTIL.ValidName(args[2])) return sh.io.Error("変数名が不正です");
             string fn=UTIL.GetFullPath(args[1],ComShInterpreter.scriptFolder);
             if(fn==""||fn.StartsWith(ComShInterpreter.scriptFolder+"bin\\")) return sh.io.Error("ファイル名が不正です");
 
