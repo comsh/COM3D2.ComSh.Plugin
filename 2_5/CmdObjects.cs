@@ -3252,7 +3252,7 @@ public static class ObjUtil {
         try{
             if(File.Exists(myposefile)) af=new AnmFile(myposefile);
             else{ var arr=UTIL.AReadAll(file); if(arr!=null) af=new AnmFile(arr); }
-            if(af==null||af.IsEmpty()) return -1;
+            if(af==null||af.IsEmptyObj()) return -1;
             int gender=ChkBoneGender(a.gameObject.transform);
             if(gender==0 && af.gender==1) af.ChgGender();
         }catch{ return -1; }

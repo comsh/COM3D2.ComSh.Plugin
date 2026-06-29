@@ -27,6 +27,7 @@ namespace COM3D2.ComSh.Plugin {
             using (var r=new BinaryReader(ms)) { Read(r); }
         }
         public bool IsEmpty(){ return (bones==null||bones.Count==0||gender<0||maxTime<=minTime); }
+        public bool IsEmptyObj(){ return (bones==null||bones.Count==0||maxTime<=minTime); }
         private void Read(BinaryReader r){
             r.ReadBytes(11);
             format=r.ReadInt32();
