@@ -253,6 +253,7 @@ public static class CmdMaidMan {
             for(int i=2; i<args.Count; i++){
                 Maid m=MaidUtil.FindMan(args[i]);
                 if(m==null) return sh.io.Error("指定された男性は存在しません");
+                if(m.Visible) continue;
                 PlacementWindow pw=StudioMode.GetPlacementWindow();
                 if(pw==null || m.ActiveSlotNo==6){
     			    CharacterMgr cm=GameMain.Instance.CharacterMgr;
@@ -272,7 +273,7 @@ public static class CmdMaidMan {
             List<Maid> del=new List<Maid>(args.Count-2);
             for(int i=2; i<args.Count; i++){
                 Maid m=MaidUtil.FindMan(args[i]);
-                if(m!=null) del.Add(m);
+                if(m!=null && m.Visible) del.Add(m);
             }
             foreach(Maid dm in del){
                 if(pw==null || dm.ActiveSlotNo==6) dm.Visible=false;
@@ -1534,7 +1535,9 @@ public static class CmdMaidMan {
             if(f=='-'||f=='+'){
                 string sltnm=lk[i].Substring(0,lk[i].Length-1);
                 if(!m.body0.IsSlotNo(sltnm)) return sh.io.Error("スロット名が不正です");
-                m.body0.SetMask((TBody.SlotID)m.body0.GetSlotNo(sltnm),f=='+');
+                TBody.SlotID sid=(TBody.SlotID)m.body0.GetSlotNo(sltnm);
+                bool onq=m.body0.GetMask(sid);
+                if(onq!=(f=='+')) m.body0.SetMask(sid,!onq);
             }else{
                 if(!m.body0.IsSlotNo(lk[i])) return sh.io.Error("スロット名が不正です");
                 TBody.SlotID sid=(TBody.SlotID)m.body0.GetSlotNo(lk[i]);
